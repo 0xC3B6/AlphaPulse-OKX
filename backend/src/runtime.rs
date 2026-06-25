@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use std::time::Duration;
 
 use chrono::Utc;
+use futures_util::{stream, StreamExt};
 use tokio::{sync::mpsc, time};
 
 use crate::{
@@ -67,11 +68,11 @@ async fn scan_once(
     rest: &OkxRestClient,
 ) -> anyhow::Result<()> {
     let tickers = rest.fetch_swap_tickers().await?;
-    let ticker_map: HashMap<String, TickerRow> = tickers
+    let ticker_map: Arc<HashMap<String, TickerRow>> = Arc::new(tickers
         .into_iter()
         .filter(|ticker| ticker.inst_id.ends_with("-USDT-SWAP"))
         .map(|ticker| (ticker.inst_id.clone(), ticker))
-        .collect();
+        .collect());
 
     let seed_activity: Vec<MarketActivity> = ticker_map
         .values()
@@ -83,10 +84,21 @@ async fn scan_once(
         config.dynamic_pool_size,
     );
 
-    for symbol in universe {
-        match build_symbol_snapshot(&symbol, &ticker_map, rest).await {
+    let mut snapshots = stream::iter(universe.into_iter().map(|symbol| {
+        let ticker_map = Arc::clone(&ticker_map);
+        let rest = rest.clone();
+        async move {
+            let inst_id = symbol.inst_id.clone();
+            let result = build_symbol_snapshot(&symbol, &ticker_map, &rest).await;
+            (inst_id, result)
+        }
+    }))
+    .buffer_unordered(8);
+
+    while let Some((inst_id, result)) = snapshots.next().await {
+        match result {
             Ok(snapshot) => state.upsert_symbol(snapshot).await,
-            Err(error) => tracing::debug!(inst_id = %symbol.inst_id, ?error, "symbol scan failed"),
+            Err(error) => tracing::debug!(%inst_id, ?error, "symbol scan failed"),
         }
     }
 
