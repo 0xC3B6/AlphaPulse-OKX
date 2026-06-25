@@ -17,7 +17,27 @@ export interface SymbolSnapshot {
   pool_tags: string[];
   trigger_reason: string;
   funding_rate: number | null;
+  fvgs: FvgZone[];
+  levels: LevelZone[];
   updated_at_ms: number;
+}
+
+export interface FvgZone {
+  timeframe: "m5" | "m15" | "h1";
+  direction: Direction;
+  lower: number;
+  upper: number;
+  gap_pct: number;
+  distance_pct: number;
+  filled: boolean;
+}
+
+export interface LevelZone {
+  kind: "support" | "resistance";
+  lower: number;
+  upper: number;
+  touches: number;
+  distance_pct: number;
 }
 
 export interface DashboardSnapshot {

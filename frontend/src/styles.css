@@ -47,9 +47,9 @@ h1 {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(104px, 1fr));
   gap: 12px;
-  min-width: 420px;
+  min-width: 620px;
 }
 
 .status-grid div {
@@ -87,6 +87,135 @@ h1 {
   color: #647089;
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+button {
+  border: 1px solid #cad2df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+button.active {
+  border-color: #1f6feb;
+  background: #1f6feb;
+  color: #ffffff;
+}
+
+.radar-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.table-panel,
+.detail-panel {
+  border: 1px solid #d9dfeb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.table-panel {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  border-bottom: 1px solid #edf1f6;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: #647089;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+td span {
+  display: block;
+  margin-top: 3px;
+  color: #647089;
+  font-size: 12px;
+}
+
+tr {
+  cursor: pointer;
+}
+
+tr.selected {
+  background: #eef5ff;
+}
+
+.detail-panel {
+  padding: 18px;
+}
+
+.detail-panel header {
+  border-bottom: 1px solid #edf1f6;
+  padding-bottom: 14px;
+}
+
+.detail-panel h2 {
+  font-size: 18px;
+}
+
+.detail-panel h3 {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+.detail-panel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detail-panel li,
+.detail-panel p {
+  color: #48546a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.detail-list dt {
+  color: #647089;
+  font-size: 12px;
+}
+
+.detail-list dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.muted {
+  color: #647089;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 16px;
@@ -100,5 +229,9 @@ h1 {
     grid-template-columns: 1fr;
     min-width: 0;
     width: 100%;
+  }
+
+  .radar-grid {
+    grid-template-columns: 1fr;
   }
 }
