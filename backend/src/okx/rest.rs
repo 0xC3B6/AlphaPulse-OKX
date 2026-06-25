@@ -1,5 +1,6 @@
 use crate::domain::{Candle, Timeframe};
 use serde::Deserialize;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TickerRow {
@@ -67,7 +68,10 @@ pub struct OkxRestClient {
 impl OkxRestClient {
     pub fn new() -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(3))
+                .build()
+                .expect("OKX REST client configuration should be valid"),
             base_url: "https://www.okx.com".to_string(),
         }
     }
