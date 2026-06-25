@@ -60,6 +60,32 @@ Core components:
 - HTTP/WebSocket API.
 - Web dashboard.
 
+## Technology Stack
+
+Use Rust for the local backend and TypeScript for the frontend.
+
+Backend:
+
+- Rust async runtime: `tokio`.
+- HTTP server and WebSocket API: `axum`.
+- OKX REST client: `reqwest`.
+- OKX WebSocket client: `tokio-tungstenite`.
+- Serialization and typed DTOs: `serde`.
+- Logging and diagnostics: `tracing`.
+- Initial state storage: in-memory caches plus local configuration files.
+
+Frontend:
+
+- TypeScript.
+- Vite.
+- React.
+- Browser Notification API.
+- Native WebSocket client for real-time backend updates.
+
+The backend should expose a small local API boundary instead of leaking exchange-specific payloads to the frontend. OKX raw responses are normalized into internal market, candle, funding, score, and alert types before they leave the backend.
+
+This stack is chosen for low-latency stream handling, strong typing around trading state, and a maintainable path toward future backtesting, account-read integration, and risk controls.
+
 ## Data Flow
 
 Public OKX APIs are the only external data source in Version 1.
@@ -265,13 +291,14 @@ The UI should show degraded states rather than silently failing. If WebSocket di
 
 Version 1 should include focused tests for:
 
-- Symbol universe merge and deduplication.
-- Dynamic pool ranking.
-- Trend score explanation generation.
-- Range score explanation generation.
-- Simplified FVG detection.
-- Support/resistance clustering.
-- Alert deduplication and re-alert rules.
+- Rust unit tests for symbol universe merge and deduplication.
+- Rust unit tests for dynamic pool ranking.
+- Rust unit tests for trend score explanation generation.
+- Rust unit tests for range score explanation generation.
+- Rust unit tests for simplified FVG detection.
+- Rust unit tests for support/resistance clustering.
+- Rust unit tests for alert deduplication and re-alert rules.
+- TypeScript tests for table filtering, score display, stale-state display, and notification trigger state.
 
 Manual verification should cover:
 
@@ -293,4 +320,3 @@ Likely next steps after Version 1:
 - Add Binance as a secondary data source.
 - Add OKX App hot-ranking adapter if a stable source is found.
 - Add semi-automated order templates only after the signal and review workflow has proven reliable.
-
