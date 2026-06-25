@@ -60,6 +60,25 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::SymbolUpdated { data: symbol });
     }
 
+    pub async fn update_symbol_price(
+        &self,
+        inst_id: &str,
+        price: f64,
+        updated_at_ms: i64,
+    ) -> Option<SymbolSnapshot> {
+        let updated = {
+            let mut inner = self.inner.write().await;
+            let symbol = inner.symbols.get_mut(inst_id)?;
+            symbol.price = price;
+            symbol.updated_at_ms = updated_at_ms;
+            symbol.clone()
+        };
+        let _ = self.events.send(BackendEvent::SymbolUpdated {
+            data: updated.clone(),
+        });
+        Some(updated)
+    }
+
     pub async fn mark_scan(&self, ts_ms: i64) {
         let mut inner = self.inner.write().await;
         inner.last_scan_at_ms = Some(ts_ms);

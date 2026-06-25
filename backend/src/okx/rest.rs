@@ -1,4 +1,4 @@
-use crate::domain::Candle;
+use crate::domain::{Candle, Timeframe};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +82,29 @@ impl OkxRestClient {
             .error_for_status()?
             .text()
             .await?)
+    }
+
+    pub async fn fetch_swap_tickers(&self) -> anyhow::Result<Vec<TickerRow>> {
+        let json = self
+            .get_json("/api/v5/market/tickers?instType=SWAP")
+            .await?;
+        parse_tickers(&json)
+    }
+
+    pub async fn fetch_candles(
+        &self,
+        inst_id: &str,
+        timeframe: Timeframe,
+        limit: usize,
+    ) -> anyhow::Result<Vec<Candle>> {
+        let path = format!(
+            "/api/v5/market/candles?instId={inst_id}&bar={}&limit={limit}",
+            timeframe.okx_bar()
+        );
+        let json = self.get_json(&path).await?;
+        let mut candles = parse_candles(&json)?;
+        candles.sort_by_key(|candle| candle.ts_ms);
+        Ok(candles)
     }
 }
 

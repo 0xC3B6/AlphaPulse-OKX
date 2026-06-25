@@ -13,6 +13,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
     config::AppConfig,
+    runtime,
     state::{BackendEvent, RadarState},
 };
 
@@ -34,6 +35,14 @@ pub fn build_router(_config: AppConfig, state: RadarState) -> Router {
 
 pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
     let state = RadarState::default();
+    let scanner_config = config.clone();
+    let scanner_state = state.clone();
+    tokio::spawn(async move {
+        if let Err(error) = runtime::run_scanner(scanner_config, scanner_state).await {
+            tracing::error!(?error, "scanner task exited");
+        }
+    });
+
     let app = build_router(config.clone(), state);
     let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
