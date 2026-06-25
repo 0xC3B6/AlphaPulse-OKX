@@ -26,6 +26,10 @@ pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result
     let (ticker_tx, mut ticker_rx) = mpsc::channel::<TickerEvent>(1024);
     spawn_fixed_ticker_stream(config.fixed_watchlist.clone(), ticker_tx, state.clone());
 
+    if let Err(error) = scan_once(&config, &state, &rest).await {
+        tracing::warn!(?error, "initial OKX scan failed");
+    }
+
     let mut interval = time::interval(Duration::from_secs(config.scan_interval_secs));
     interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
