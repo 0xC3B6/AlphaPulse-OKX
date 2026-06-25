@@ -53,10 +53,12 @@ fn spawn_fixed_ticker_stream(
     tokio::spawn(async move {
         loop {
             state.set_websocket_connected(false).await;
+            state.set_websocket_connected(true).await;
             match ws::stream_tickers(inst_ids.clone(), sender.clone()).await {
                 Ok(()) => tracing::warn!("OKX ticker stream closed"),
                 Err(error) => tracing::warn!(?error, "OKX ticker stream failed"),
             }
+            state.set_websocket_connected(false).await;
             time::sleep(Duration::from_secs(5)).await;
         }
     });
