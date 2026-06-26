@@ -20,6 +20,17 @@ wheels/
 .installed.cfg
 *.egg
 
+# Rust
+target/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
 # Virtual environments
 venv/
 ENV/
