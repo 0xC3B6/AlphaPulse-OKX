@@ -13,6 +13,10 @@ fn default_config_matches_v1_decisions() {
     assert_eq!(config.dynamic_pool_size, 40);
     assert_eq!(config.trend_alert_threshold, 80);
     assert_eq!(config.range_alert_threshold, 80);
+    assert_eq!(config.min_listing_age_days, 3.0);
+    assert_eq!(config.new_listing_days, 14.0);
+    assert_eq!(config.min_history_days, 3.0);
+    assert_eq!(config.thin_history_days, 7.0);
     assert!(config
         .fixed_watchlist
         .contains(&"BTC-USDT-SWAP".to_string()));

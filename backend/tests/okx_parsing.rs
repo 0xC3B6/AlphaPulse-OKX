@@ -1,5 +1,5 @@
 use alphapulse_okx_backend::okx::{
-    rest::{parse_candles, parse_tickers},
+    rest::{parse_candles, parse_instruments, parse_tickers},
     ws::parse_ticker_event,
 };
 
@@ -34,6 +34,22 @@ fn parses_okx_ticker_rows() {
     assert_eq!(tickers[0].inst_id, "LAB-USDT-SWAP");
     assert_eq!(tickers[0].last, 17.187);
     assert_eq!(tickers[0].quote_volume_24h, 20113997.0);
+}
+
+#[test]
+fn parses_okx_instrument_rows() {
+    let json = r#"{
+        "code":"0",
+        "msg":"",
+        "data":[{"instId":"LAB-USDT-SWAP","state":"live","listTime":"1781800000000"}]
+    }"#;
+
+    let instruments = parse_instruments(json).unwrap();
+
+    assert_eq!(instruments.len(), 1);
+    assert_eq!(instruments[0].inst_id, "LAB-USDT-SWAP");
+    assert_eq!(instruments[0].state, "live");
+    assert_eq!(instruments[0].list_time_ms, 1781800000000);
 }
 
 #[test]

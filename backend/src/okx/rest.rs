@@ -1,4 +1,7 @@
-use crate::domain::{Candle, Timeframe};
+use crate::{
+    domain::{Candle, Timeframe},
+    universe::InstrumentMetadata,
+};
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -24,6 +27,14 @@ struct RawTicker {
     ts: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawInstrument {
+    inst_id: String,
+    state: String,
+    list_time: String,
+}
+
 pub fn parse_tickers(json: &str) -> anyhow::Result<Vec<TickerRow>> {
     let response: OkxResponse<Vec<RawTicker>> = serde_json::from_str(json)?;
     response
@@ -35,6 +46,21 @@ pub fn parse_tickers(json: &str) -> anyhow::Result<Vec<TickerRow>> {
                 last: row.last.parse()?,
                 quote_volume_24h: row.vol_ccy24h.parse()?,
                 ts_ms: row.ts.parse()?,
+            })
+        })
+        .collect()
+}
+
+pub fn parse_instruments(json: &str) -> anyhow::Result<Vec<InstrumentMetadata>> {
+    let response: OkxResponse<Vec<RawInstrument>> = serde_json::from_str(json)?;
+    response
+        .data
+        .into_iter()
+        .map(|row| {
+            Ok(InstrumentMetadata {
+                inst_id: row.inst_id,
+                state: row.state,
+                list_time_ms: row.list_time.parse()?,
             })
         })
         .collect()
@@ -93,6 +119,13 @@ impl OkxRestClient {
             .get_json("/api/v5/market/tickers?instType=SWAP")
             .await?;
         parse_tickers(&json)
+    }
+
+    pub async fn fetch_swap_instruments(&self) -> anyhow::Result<Vec<InstrumentMetadata>> {
+        let json = self
+            .get_json("/api/v5/public/instruments?instType=SWAP")
+            .await?;
+        parse_instruments(&json)
     }
 
     pub async fn fetch_candles(

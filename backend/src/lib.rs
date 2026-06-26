@@ -3,6 +3,7 @@ pub mod config;
 pub mod domain;
 pub mod indicators;
 pub mod okx;
+pub mod quality;
 pub mod runtime;
 pub mod scoring;
 pub mod server;

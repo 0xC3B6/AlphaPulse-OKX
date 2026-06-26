@@ -5,9 +5,15 @@ import {
   shouldNotify,
 } from "./notifications";
 import "./styles.css";
+import { defaultLanguage, translations } from "./i18n";
+import type { Copy, Language } from "./i18n";
 import type { BackendEvent, DashboardSnapshot, SymbolSnapshot } from "./types";
 
 type Filter = "all" | "trend" | "range" | "hot" | "fixed";
+type ThemeMode = "light" | "dark" | "system";
+
+const themeStorageKey = "alphapulse-theme";
+const languageStorageKey = "alphapulse-language";
 
 const emptySnapshot: DashboardSnapshot = {
   symbols: [],
@@ -22,11 +28,32 @@ export default function App() {
   );
   const [streamState, setStreamState] = useState<"connected" | "idle">("idle");
   const [filter, setFilter] = useState<Filter>("all");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
+  const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState(() =>
     "Notification" in window ? Notification.permission : "unsupported",
   );
   const notified = useRef(new Map<string, string>());
+  const copy = translations[language];
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    if (themeMode === "system") {
+      localStorage.removeItem(themeStorageKey);
+      return;
+    }
+    localStorage.setItem(themeStorageKey, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    if (language === defaultLanguage) {
+      localStorage.removeItem(languageStorageKey);
+      return;
+    }
+    localStorage.setItem(languageStorageKey, language);
+  }, [language]);
 
   useEffect(() => {
     let active = true;
@@ -109,58 +136,91 @@ export default function App() {
       <header className="topbar">
         <div>
           <h1>AlphaPulse OKX</h1>
-          <p>USDT perpetual radar</p>
+          <p>{copy.subtitle}</p>
         </div>
-        <dl className="status-grid" aria-label="connection status">
+        <dl className="status-grid" aria-label={copy.aria.connectionStatus}>
           <div>
-            <dt>Backend</dt>
-            <dd>{backendState}</dd>
+            <dt>{copy.status.backend}</dt>
+            <dd>{formatState(backendState, copy)}</dd>
           </div>
           <div>
-            <dt>Stream</dt>
-            <dd>{streamState}</dd>
+            <dt>{copy.status.stream}</dt>
+            <dd>{formatState(streamState, copy)}</dd>
           </div>
           <div>
-            <dt>Notifications</dt>
-            <dd>{notificationPermission}</dd>
+            <dt>{copy.status.notifications}</dt>
+            <dd>{formatState(notificationPermission, copy)}</dd>
           </div>
           <div>
-            <dt>Last scan</dt>
+            <dt>{copy.status.lastScan}</dt>
             <dd>{formatTimestamp(snapshot.last_scan_at_ms)}</dd>
           </div>
           <div>
-            <dt>Symbols</dt>
+            <dt>{copy.status.symbols}</dt>
             <dd>{snapshot.symbols.length}</dd>
           </div>
         </dl>
       </header>
 
-      <section className="toolbar" aria-label="radar filters">
-        {[
-          ["all", "All"],
-          ["trend", "Trend"],
-          ["range", "Range"],
-          ["hot", "Hot"],
-          ["fixed", "Fixed"],
-        ].map(([value, label]) => (
-          <button
-            className={filter === value ? "active" : ""}
-            key={value}
-            onClick={() => setFilter(value as Filter)}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
+      <section className="toolbar" aria-label={copy.aria.radarControls}>
+        <div className="toolbar-group" role="group" aria-label={copy.aria.opportunityFilters}>
+          {[
+            ["all", copy.filters.all],
+            ["trend", copy.filters.trend],
+            ["range", copy.filters.range],
+            ["hot", copy.filters.hot],
+            ["fixed", copy.filters.fixed],
+          ].map(([value, label]) => (
+            <button
+              className={filter === value ? "active" : ""}
+              key={value}
+              onClick={() => setFilter(value as Filter)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-group theme-toggle" role="group" aria-label={copy.aria.themeMode}>
+          {[
+            ["light", copy.themes.light],
+            ["dark", copy.themes.dark],
+            ["system", copy.themes.system],
+          ].map(([value, label]) => (
+            <button
+              className={themeMode === value ? "active" : ""}
+              key={value}
+              onClick={() => setThemeMode(value as ThemeMode)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-group" role="group" aria-label={copy.aria.languageMode}>
+          {[
+            ["zh", copy.languages.zh],
+            ["en", copy.languages.en],
+          ].map(([value, label]) => (
+            <button
+              className={language === value ? "active" : ""}
+              key={value}
+              onClick={() => setLanguage(value as Language)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button onClick={requestNotifications} type="button">
-          Enable notifications
+          {copy.actions.enableNotifications}
         </button>
       </section>
 
       {filteredSymbols.length === 0 ? (
         <section className="empty-state">
-          <h2>No symbols loaded</h2>
-          <p>Start the Rust backend to populate the radar.</p>
+          <h2>{copy.empty.title}</h2>
+          <p>{copy.empty.body}</p>
         </section>
       ) : (
         <section className="radar-grid">
@@ -168,14 +228,14 @@ export default function App() {
             <table>
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th>Price</th>
+                  <th>{copy.table.symbol}</th>
+                  <th>{copy.table.price}</th>
                   <th>5m</th>
                   <th>15m</th>
                   <th>1h</th>
-                  <th>Trend</th>
-                  <th>Range</th>
-                  <th>Signal</th>
+                  <th>{copy.table.trend}</th>
+                  <th>{copy.table.range}</th>
+                  <th>{copy.table.signal}</th>
                 </tr>
               </thead>
               <tbody>
@@ -187,22 +247,22 @@ export default function App() {
                   >
                     <td>
                       <strong>{symbol.inst_id}</strong>
-                      <span>{symbol.pool_tags.join(" / ") || "unlabeled"}</span>
+                      <span>{formatTags(symbol.pool_tags, copy)}</span>
                     </td>
                     <td>{formatPrice(symbol.price)}</td>
                     <td>{formatPct(symbol.change_5m_pct)}</td>
                     <td>{formatPct(symbol.change_15m_pct)}</td>
                     <td>{formatPct(symbol.change_1h_pct)}</td>
-                    <td>{formatScore(symbol.trend_score)}</td>
-                    <td>{formatScore(symbol.range_score)}</td>
-                    <td>{symbol.trigger_reason || "watching"}</td>
+                    <td>{formatScore(symbol.trend_score, copy)}</td>
+                    <td>{formatScore(symbol.range_score, copy)}</td>
+                    <td>{symbol.trigger_reason || copy.misc.watching}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <aside className="detail-panel">
-            {selected ? <SymbolDetail symbol={selected} /> : null}
+            {selected ? <SymbolDetail copy={copy} symbol={selected} /> : null}
           </aside>
         </section>
       )}
@@ -210,56 +270,79 @@ export default function App() {
   );
 }
 
-function SymbolDetail({ symbol }: { symbol: SymbolSnapshot }) {
+function readStoredTheme(): ThemeMode {
+  const stored = localStorage.getItem(themeStorageKey);
+  if (stored === "light" || stored === "dark") {
+    return stored;
+  }
+  return "system";
+}
+
+function readStoredLanguage(): Language {
+  const stored = localStorage.getItem(languageStorageKey);
+  if (stored === "en" || stored === "zh") {
+    return stored;
+  }
+  return defaultLanguage;
+}
+
+function SymbolDetail({
+  copy,
+  symbol,
+}: {
+  copy: Copy;
+  symbol: SymbolSnapshot;
+}) {
   return (
     <>
       <header>
         <h2>{symbol.inst_id}</h2>
-        <p>{symbol.trigger_reason || "No active trigger"}</p>
+        <p>{symbol.trigger_reason || copy.detail.noActiveTrigger}</p>
       </header>
       <dl className="detail-list">
         <div>
-          <dt>Funding</dt>
+          <dt>{copy.detail.funding}</dt>
           <dd>{symbol.funding_rate === null ? "-" : formatPct(symbol.funding_rate)}</dd>
         </div>
         <div>
-          <dt>Updated</dt>
+          <dt>{copy.detail.updated}</dt>
           <dd>{formatTimestamp(symbol.updated_at_ms)}</dd>
         </div>
       </dl>
       <section>
-        <h3>FVG</h3>
+        <h3>{copy.detail.fvg}</h3>
         {symbol.fvgs.length === 0 ? (
-          <p className="muted">No FVG zones</p>
+          <p className="muted">{copy.detail.noFvgZones}</p>
         ) : (
           <ul>
             {symbol.fvgs.map((zone, index) => (
               <li key={`${zone.timeframe}-${zone.direction}-${index}`}>
-                {zone.timeframe} {zone.direction} {formatPrice(zone.lower)}-
-                {formatPrice(zone.upper)} dist {formatPct(zone.distance_pct)}
+                {zone.timeframe} {copy.directions[zone.direction]}{" "}
+                {formatPrice(zone.lower)}-{formatPrice(zone.upper)}{" "}
+                {copy.detail.distance} {formatPct(zone.distance_pct)}
               </li>
             ))}
           </ul>
         )}
       </section>
       <section>
-        <h3>Levels</h3>
+        <h3>{copy.detail.levels}</h3>
         {symbol.levels.length === 0 ? (
-          <p className="muted">No levels</p>
+          <p className="muted">{copy.detail.noLevels}</p>
         ) : (
           <ul>
             {symbol.levels.map((level, index) => (
               <li key={`${level.kind}-${index}`}>
-                {level.kind} {formatPrice(level.lower)}-{formatPrice(level.upper)}{" "}
-                touches {level.touches}
+                {copy.levelKinds[level.kind]} {formatPrice(level.lower)}-
+                {formatPrice(level.upper)} {copy.detail.touches} {level.touches}
               </li>
             ))}
           </ul>
         )}
       </section>
       <section>
-        <h3>Account</h3>
-        <p className="muted">No read-only OKX API key connected.</p>
+        <h3>{copy.detail.account}</h3>
+        <p className="muted">{copy.detail.noApiKey}</p>
       </section>
     </>
   );
@@ -294,8 +377,26 @@ function maxScore(symbol: SymbolSnapshot): number {
   return Math.max(symbol.trend_score.value, symbol.range_score.value);
 }
 
-function formatScore(score: SymbolSnapshot["trend_score"]): string {
-  return `${score.value} ${score.direction}`;
+function formatScore(score: SymbolSnapshot["trend_score"], copy: Copy): string {
+  return `${score.value} ${copy.directions[score.direction]}`;
+}
+
+function formatTags(tags: string[], copy: Copy): string {
+  if (tags.length === 0) {
+    return copy.misc.unlabeled;
+  }
+  return tags
+    .map((tag) => formatTag(tag, copy))
+    .join(" / ");
+}
+
+function formatTag(tag: string, copy: Copy): string {
+  const labels = copy.poolTags as unknown as Record<string, string>;
+  return labels[tag] ?? tag;
+}
+
+function formatState(value: string, copy: Copy): string {
+  return copy.states[value as keyof Copy["states"]] ?? value;
 }
 
 function formatPrice(value: number): string {

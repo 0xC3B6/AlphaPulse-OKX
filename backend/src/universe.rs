@@ -1,5 +1,10 @@
 use std::collections::BTreeMap;
 
+use crate::quality::add_tag;
+pub use crate::quality::UniversePolicy;
+
+const DAY_MS: f64 = 86_400_000.0;
+
 #[derive(Debug, Clone)]
 pub struct MarketActivity {
     pub inst_id: String,
@@ -43,6 +48,13 @@ impl MarketActivity {
 pub struct UniverseSymbol {
     pub inst_id: String,
     pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstrumentMetadata {
+    pub inst_id: String,
+    pub state: String,
+    pub list_time_ms: i64,
 }
 
 pub fn build_symbol_universe(
@@ -100,4 +112,112 @@ pub fn build_symbol_universe(
     });
 
     output
+}
+
+pub fn build_filtered_symbol_universe(
+    activity: &[MarketActivity],
+    fixed_watchlist: &[String],
+    dynamic_pool_size: usize,
+    instruments: &[InstrumentMetadata],
+    policy: UniversePolicy,
+    now_ms: i64,
+) -> Vec<UniverseSymbol> {
+    let instrument_map: BTreeMap<_, _> = instruments
+        .iter()
+        .map(|instrument| (instrument.inst_id.as_str(), instrument))
+        .collect();
+    let mut ranked = activity.to_vec();
+    ranked.sort_by(|left, right| {
+        right
+            .hotness_score()
+            .partial_cmp(&left.hotness_score())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut symbols: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    for item in ranked.iter() {
+        if symbols
+            .values()
+            .filter(|tags| tags.iter().any(|tag| tag == "dynamic"))
+            .count()
+            >= dynamic_pool_size
+        {
+            break;
+        }
+        let Some(instrument) = instrument_map.get(item.inst_id.as_str()) else {
+            continue;
+        };
+        if !instrument_is_monitorable(instrument, policy, now_ms) {
+            continue;
+        }
+
+        let tags = symbols.entry(item.inst_id.clone()).or_default();
+        add_tag(tags, "dynamic");
+        add_listing_tags(tags, instrument, policy, now_ms);
+    }
+
+    for inst_id in fixed_watchlist {
+        let Some(instrument) = instrument_map.get(inst_id.as_str()) else {
+            continue;
+        };
+        if !instrument_is_monitorable(instrument, policy, now_ms) {
+            continue;
+        }
+
+        let tags = symbols.entry(inst_id.clone()).or_default();
+        add_tag(tags, "fixed");
+        add_tag(tags, "manual_watch");
+        add_listing_tags(tags, instrument, policy, now_ms);
+    }
+
+    let mut output: Vec<UniverseSymbol> = symbols
+        .into_iter()
+        .map(|(inst_id, mut tags)| {
+            tags.sort();
+            tags.dedup();
+            UniverseSymbol { inst_id, tags }
+        })
+        .collect();
+
+    output.sort_by(|left, right| {
+        let left_score = activity
+            .iter()
+            .find(|item| item.inst_id == left.inst_id)
+            .map(MarketActivity::hotness_score)
+            .unwrap_or(0.0);
+        let right_score = activity
+            .iter()
+            .find(|item| item.inst_id == right.inst_id)
+            .map(MarketActivity::hotness_score)
+            .unwrap_or(0.0);
+        right_score
+            .partial_cmp(&left_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    output
+}
+
+fn instrument_is_monitorable(
+    instrument: &InstrumentMetadata,
+    policy: UniversePolicy,
+    now_ms: i64,
+) -> bool {
+    instrument.state == "live" && listing_age_days(instrument, now_ms) >= policy.min_listing_age_days
+}
+
+fn add_listing_tags(
+    tags: &mut Vec<String>,
+    instrument: &InstrumentMetadata,
+    policy: UniversePolicy,
+    now_ms: i64,
+) {
+    if listing_age_days(instrument, now_ms) < policy.new_listing_days {
+        add_tag(tags, "new_listing");
+    }
+}
+
+fn listing_age_days(instrument: &InstrumentMetadata, now_ms: i64) -> f64 {
+    ((now_ms - instrument.list_time_ms).max(0) as f64) / DAY_MS
 }

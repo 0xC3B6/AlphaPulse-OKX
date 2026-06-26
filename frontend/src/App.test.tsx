@@ -24,7 +24,7 @@ const snapshot: DashboardSnapshot = {
         direction: "neutral",
         reasons: ["clear recent range"],
       },
-      pool_tags: ["dynamic"],
+      pool_tags: ["dynamic", "new_listing"],
       trigger_reason: "trend short 84: volume 3.1x",
       funding_rate: -0.003,
       fvgs: [
@@ -69,6 +69,8 @@ const snapshot: DashboardSnapshot = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
 });
 
 function mockSnapshot(data: DashboardSnapshot = snapshot) {
@@ -86,8 +88,8 @@ describe("App", () => {
     mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false });
     render(<App />);
     expect(screen.getByText("AlphaPulse OKX")).toBeInTheDocument();
-    expect(screen.getByText("Backend")).toBeInTheDocument();
-    await screen.findByText("No symbols loaded");
+    expect(screen.getByText("后端")).toBeInTheDocument();
+    await screen.findByText("暂无合约数据");
   });
 
   it("loads symbols and filters trend opportunities", async () => {
@@ -95,13 +97,70 @@ describe("App", () => {
     render(<App />);
 
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    expect(screen.getByText("动态 / 新币")).toBeInTheDocument();
     expect(screen.getByText("DOGE-USDT-SWAP")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Trend" }));
+    fireEvent.click(screen.getByRole("button", { name: "趋势" }));
 
     expect(screen.getAllByText("LAB-USDT-SWAP").length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.queryByText("DOGE-USDT-SWAP")).not.toBeInTheDocument();
     });
+  });
+
+  it("defaults to following the system theme", async () => {
+    mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false });
+
+    render(<App />);
+
+    await screen.findByText("暂无合约数据");
+    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveClass("active");
+    expect(document.documentElement).toHaveAttribute("data-theme", "system");
+    expect(localStorage.getItem("alphapulse-theme")).toBeNull();
+  });
+
+  it("stores and applies explicit theme choices", async () => {
+    mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false });
+
+    render(<App />);
+    await screen.findByText("暂无合约数据");
+
+    fireEvent.click(screen.getByRole("button", { name: "深色主题" }));
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(localStorage.getItem("alphapulse-theme")).toBe("dark");
+    expect(screen.getByRole("button", { name: "深色主题" })).toHaveClass("active");
+
+    fireEvent.click(screen.getByRole("button", { name: "浅色主题" }));
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(localStorage.getItem("alphapulse-theme")).toBe("light");
+  });
+
+  it("defaults to Chinese language", async () => {
+    mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false });
+
+    render(<App />);
+
+    await screen.findByText("暂无合约数据");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveClass("active");
+    expect(screen.getByText("后端")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
+    expect(localStorage.getItem("alphapulse-language")).toBeNull();
+  });
+
+  it("stores and applies English language choice", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+
+    expect(localStorage.getItem("alphapulse-language")).toBe("en");
+    expect(screen.getByRole("button", { name: "English" })).toHaveClass("active");
+    expect(screen.getByText("Backend")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Signal" })).toBeInTheDocument();
   });
 });

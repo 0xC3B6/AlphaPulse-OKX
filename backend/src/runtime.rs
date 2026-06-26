@@ -16,9 +16,10 @@ use crate::{
         rest::{OkxRestClient, TickerRow},
         ws::{self, TickerEvent},
     },
+    quality::{add_tag, classify_history},
     scoring::{score_symbol, ScoringInput},
     state::RadarState,
-    universe::{build_symbol_universe, MarketActivity, UniverseSymbol},
+    universe::{build_filtered_symbol_universe, MarketActivity, UniverseSymbol},
 };
 
 pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result<()> {
@@ -74,6 +75,7 @@ async fn scan_once(
     rest: &OkxRestClient,
 ) -> anyhow::Result<()> {
     let tickers = rest.fetch_swap_tickers().await?;
+    let instruments = rest.fetch_swap_instruments().await?;
     let ticker_map: Arc<HashMap<String, TickerRow>> = Arc::new(tickers
         .into_iter()
         .filter(|ticker| ticker.inst_id.ends_with("-USDT-SWAP"))
@@ -84,10 +86,14 @@ async fn scan_once(
         .values()
         .map(|ticker| MarketActivity::new(&ticker.inst_id, ticker.quote_volume_24h, 0.0, 0.0, 0.0, 1.0))
         .collect();
-    let universe = build_symbol_universe(
+    let policy = config.universe_policy();
+    let universe = build_filtered_symbol_universe(
         &seed_activity,
         &config.fixed_watchlist,
         config.dynamic_pool_size,
+        &instruments,
+        policy,
+        Utc::now().timestamp_millis(),
     );
 
     let mut snapshots = stream::iter(universe.into_iter().map(|symbol| {
@@ -95,7 +101,7 @@ async fn scan_once(
         let rest = rest.clone();
         async move {
             let inst_id = symbol.inst_id.clone();
-            let result = build_symbol_snapshot(&symbol, &ticker_map, &rest).await;
+            let result = build_symbol_snapshot(&symbol, &ticker_map, &rest, policy).await;
             (inst_id, result)
         }
     }))
@@ -116,6 +122,7 @@ async fn build_symbol_snapshot(
     symbol: &UniverseSymbol,
     tickers: &HashMap<String, TickerRow>,
     rest: &OkxRestClient,
+    policy: crate::quality::UniversePolicy,
 ) -> anyhow::Result<SymbolSnapshot> {
     let ticker = tickers
         .get(&symbol.inst_id)
@@ -129,9 +136,21 @@ async fn build_symbol_snapshot(
         .await
         .unwrap_or_default();
     let candles_1h = rest
-        .fetch_candles(&symbol.inst_id, Timeframe::H1, 120)
+        .fetch_candles(&symbol.inst_id, Timeframe::H1, 240)
         .await
         .unwrap_or_default();
+
+    let history_decision = classify_history(&candles_1h, policy);
+    if !history_decision.allowed {
+        anyhow::bail!(
+            "insufficient 1h candle history: {:.2} days",
+            history_decision.history_days
+        );
+    }
+    let mut pool_tags = symbol.tags.clone();
+    for tag in history_decision.tags {
+        add_tag(&mut pool_tags, &tag);
+    }
 
     let price = ticker.last;
     let change_5m_pct = last_bar_change(&candles_5m);
@@ -208,7 +227,7 @@ async fn build_symbol_snapshot(
         change_1h_pct,
         trend_score: scored.trend_score,
         range_score: scored.range_score,
-        pool_tags: symbol.tags.clone(),
+        pool_tags,
         trigger_reason,
         funding_rate: None,
         fvgs,
