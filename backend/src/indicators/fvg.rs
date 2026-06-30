@@ -22,15 +22,22 @@ pub fn detect_fvgs(
             let upper = third.low;
             let gap_pct = (upper - lower) / lower;
             if gap_pct >= min_gap_pct {
-                let filled = later.iter().any(|candle| candle.low <= upper);
+                let filled_at = later.iter().find(|candle| candle.low <= lower);
                 zones.push(FvgZone {
                     timeframe,
                     direction: Direction::Long,
+                    start_ts_ms: first.ts_ms,
+                    end_ts_ms: filled_at.map(|candle| candle.ts_ms).unwrap_or_else(|| {
+                        candles
+                            .last()
+                            .map(|candle| candle.ts_ms)
+                            .unwrap_or(first.ts_ms)
+                    }),
                     lower,
                     upper,
                     gap_pct,
                     distance_pct: zone_distance_pct(current_price, lower, upper),
-                    filled,
+                    filled: filled_at.is_some(),
                 });
             }
         }
@@ -40,15 +47,22 @@ pub fn detect_fvgs(
             let upper = first.low;
             let gap_pct = (upper - lower) / lower;
             if gap_pct >= min_gap_pct {
-                let filled = later.iter().any(|candle| candle.high >= lower);
+                let filled_at = later.iter().find(|candle| candle.high >= upper);
                 zones.push(FvgZone {
                     timeframe,
                     direction: Direction::Short,
+                    start_ts_ms: first.ts_ms,
+                    end_ts_ms: filled_at.map(|candle| candle.ts_ms).unwrap_or_else(|| {
+                        candles
+                            .last()
+                            .map(|candle| candle.ts_ms)
+                            .unwrap_or(first.ts_ms)
+                    }),
                     lower,
                     upper,
                     gap_pct,
                     distance_pct: zone_distance_pct(current_price, lower, upper),
-                    filled,
+                    filled: filled_at.is_some(),
                 });
             }
         }

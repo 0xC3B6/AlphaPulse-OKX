@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};

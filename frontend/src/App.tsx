@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { connectEvents, fetchSnapshot } from "./api";
+import {
+  closePaperPosition,
+  connectEvents,
+  fetchSnapshot,
+  openPaperOrder,
+} from "./api";
+import { ChartPanel } from "./ChartPanel";
+import { MacroPanel } from "./MacroPanel";
 import {
   sendBrowserNotification,
   shouldNotify,
@@ -7,18 +14,38 @@ import {
 import "./styles.css";
 import { defaultLanguage, translations } from "./i18n";
 import type { Copy, Language } from "./i18n";
-import type { BackendEvent, DashboardSnapshot, SymbolSnapshot } from "./types";
+import type {
+  BackendEvent,
+  DashboardSnapshot,
+  PaperAccountSnapshot,
+  PaperSide,
+  SymbolSnapshot,
+} from "./types";
 
 type Filter = "all" | "trend" | "range" | "hot" | "fixed";
 type ThemeMode = "light" | "dark" | "system";
+type ViewMode = "radar" | "macro";
 
 const themeStorageKey = "alphapulse-theme";
 const languageStorageKey = "alphapulse-language";
+
+const emptyPaperAccount: PaperAccountSnapshot = {
+  mode: "paper",
+  initial_balance: 10000,
+  realized_pnl: 0,
+  unrealized_pnl: 0,
+  equity: 10000,
+  used_margin: 0,
+  available_balance: 10000,
+  positions: [],
+  trades: [],
+};
 
 const emptySnapshot: DashboardSnapshot = {
   symbols: [],
   last_scan_at_ms: null,
   websocket_connected: false,
+  paper: emptyPaperAccount,
 };
 
 export default function App() {
@@ -27,10 +54,15 @@ export default function App() {
     "disconnected",
   );
   const [streamState, setStreamState] = useState<"connected" | "idle">("idle");
+  const [viewMode, setViewMode] = useState<ViewMode>("radar");
   const [filter, setFilter] = useState<Filter>("all");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [orderMargin, setOrderMargin] = useState("100");
+  const [orderLeverage, setOrderLeverage] = useState("10");
+  const [tradeBusy, setTradeBusy] = useState(false);
+  const [tradeError, setTradeError] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState(() =>
     "Notification" in window ? Notification.permission : "unsupported",
   );
@@ -90,6 +122,10 @@ export default function App() {
         setSelectedId((current) => current ?? event.data.symbols[0]?.inst_id ?? null);
         return;
       }
+      if (event.type === "paper_updated") {
+        setSnapshot((current) => ({ ...current, paper: event.data }));
+        return;
+      }
 
       setSnapshot((current) => upsertSymbol(current, event.data));
       setSelectedId((current) => current ?? event.data.inst_id);
@@ -131,6 +167,47 @@ export default function App() {
     setNotificationPermission(permission);
   }
 
+  async function submitPaperOrder(side: PaperSide) {
+    if (!selected) {
+      return;
+    }
+
+    const margin = Number(orderMargin);
+    const leverage = Number(orderLeverage);
+    setTradeBusy(true);
+    setTradeError(null);
+    try {
+      const paper = await openPaperOrder({
+        inst_id: selected.inst_id,
+        side,
+        margin,
+        leverage,
+      });
+      setSnapshot((current) => ({ ...current, paper }));
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTradeBusy(false);
+    }
+  }
+
+  async function submitPaperClose() {
+    if (!selected) {
+      return;
+    }
+
+    setTradeBusy(true);
+    setTradeError(null);
+    try {
+      const paper = await closePaperPosition(selected.inst_id);
+      setSnapshot((current) => ({ ...current, paper }));
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTradeBusy(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -163,6 +240,22 @@ export default function App() {
       </header>
 
       <section className="toolbar" aria-label={copy.aria.radarControls}>
+        <div className="toolbar-group" role="group" aria-label={copy.aria.viewMode}>
+          {[
+            ["radar", copy.views.radar],
+            ["macro", copy.views.macro],
+          ].map(([value, label]) => (
+            <button
+              className={viewMode === value ? "active" : ""}
+              key={value}
+              onClick={() => setViewMode(value as ViewMode)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {viewMode === "radar" ? (
         <div className="toolbar-group" role="group" aria-label={copy.aria.opportunityFilters}>
           {[
             ["all", copy.filters.all],
@@ -181,6 +274,7 @@ export default function App() {
             </button>
           ))}
         </div>
+        ) : null}
         <div className="toolbar-group theme-toggle" role="group" aria-label={copy.aria.themeMode}>
           {[
             ["light", copy.themes.light],
@@ -217,7 +311,9 @@ export default function App() {
         </button>
       </section>
 
-      {filteredSymbols.length === 0 ? (
+      {viewMode === "macro" ? (
+        <MacroPanel copy={copy} themeMode={themeMode} />
+      ) : filteredSymbols.length === 0 ? (
         <section className="empty-state">
           <h2>{copy.empty.title}</h2>
           <p>{copy.empty.body}</p>
@@ -262,7 +358,22 @@ export default function App() {
             </table>
           </div>
           <aside className="detail-panel">
-            {selected ? <SymbolDetail copy={copy} symbol={selected} /> : null}
+            {selected ? (
+              <SymbolDetail
+                copy={copy}
+                onClosePaper={submitPaperClose}
+                onLeverageChange={setOrderLeverage}
+                onMarginChange={setOrderMargin}
+                onOpenPaper={submitPaperOrder}
+                orderLeverage={orderLeverage}
+                orderMargin={orderMargin}
+                paper={snapshot.paper}
+                symbol={selected}
+                themeMode={themeMode}
+                tradeBusy={tradeBusy}
+                tradeError={tradeError}
+              />
+            ) : null}
           </aside>
         </section>
       )}
@@ -288,11 +399,36 @@ function readStoredLanguage(): Language {
 
 function SymbolDetail({
   copy,
+  onClosePaper,
+  onLeverageChange,
+  onMarginChange,
+  onOpenPaper,
+  orderLeverage,
+  orderMargin,
+  paper,
   symbol,
+  themeMode,
+  tradeBusy,
+  tradeError,
 }: {
   copy: Copy;
+  onClosePaper: () => void;
+  onLeverageChange: (value: string) => void;
+  onMarginChange: (value: string) => void;
+  onOpenPaper: (side: PaperSide) => void;
+  orderLeverage: string;
+  orderMargin: string;
+  paper: PaperAccountSnapshot;
   symbol: SymbolSnapshot;
+  themeMode: ThemeMode;
+  tradeBusy: boolean;
+  tradeError: string | null;
 }) {
+  const position = paper.positions.find((item) => item.inst_id === symbol.inst_id);
+  const trades = paper.trades
+    .filter((trade) => trade.inst_id === symbol.inst_id)
+    .slice(0, 5);
+
   return (
     <>
       <header>
@@ -309,6 +445,7 @@ function SymbolDetail({
           <dd>{formatTimestamp(symbol.updated_at_ms)}</dd>
         </div>
       </dl>
+      <ChartPanel copy={copy} symbol={symbol} themeMode={themeMode} />
       <section>
         <h3>{copy.detail.fvg}</h3>
         {symbol.fvgs.length === 0 ? (
@@ -342,7 +479,138 @@ function SymbolDetail({
       </section>
       <section>
         <h3>{copy.detail.account}</h3>
-        <p className="muted">{copy.detail.noApiKey}</p>
+        <dl className="paper-metrics">
+          <div>
+            <dt>{copy.paper.equity}</dt>
+            <dd>{formatUsdt(paper.equity)}</dd>
+          </div>
+          <div>
+            <dt>{copy.paper.available}</dt>
+            <dd>{formatUsdt(paper.available_balance)}</dd>
+          </div>
+          <div>
+            <dt>{copy.paper.usedMargin}</dt>
+            <dd>{formatUsdt(paper.used_margin)}</dd>
+          </div>
+          <div>
+            <dt>{copy.paper.unrealized}</dt>
+            <dd className={pnlClass(paper.unrealized_pnl)}>
+              {formatSignedUsdt(paper.unrealized_pnl)}
+            </dd>
+          </div>
+        </dl>
+        <div className="paper-order">
+          <label>
+            <span>{copy.paper.margin}</span>
+            <input
+              min="1"
+              onChange={(event) => onMarginChange(event.target.value)}
+              step="1"
+              type="number"
+              value={orderMargin}
+            />
+          </label>
+          <label>
+            <span>{copy.paper.leverage}</span>
+            <input
+              max="50"
+              min="1"
+              onChange={(event) => onLeverageChange(event.target.value)}
+              step="1"
+              type="number"
+              value={orderLeverage}
+            />
+          </label>
+        </div>
+        <div className="paper-actions">
+          <button
+            className="buy-button"
+            disabled={tradeBusy}
+            onClick={() => onOpenPaper("long")}
+            type="button"
+          >
+            {copy.actions.openLong}
+          </button>
+          <button
+            className="sell-button"
+            disabled={tradeBusy}
+            onClick={() => onOpenPaper("short")}
+            type="button"
+          >
+            {copy.actions.openShort}
+          </button>
+        </div>
+        {tradeError ? (
+          <p className="paper-error">
+            {copy.paper.orderError}: {tradeError}
+          </p>
+        ) : null}
+        <section className="paper-subsection">
+          <h3>{copy.paper.position}</h3>
+          {position ? (
+            <>
+              <dl className="paper-position">
+                <div>
+                  <dt>{copy.paper.side}</dt>
+                  <dd>{copy.directions[position.side]}</dd>
+                </div>
+                <div>
+                  <dt>{copy.paper.entry}</dt>
+                  <dd>{formatPrice(position.entry_price)}</dd>
+                </div>
+                <div>
+                  <dt>{copy.paper.mark}</dt>
+                  <dd>{formatPrice(position.mark_price)}</dd>
+                </div>
+                <div>
+                  <dt>{copy.paper.qty}</dt>
+                  <dd>{formatQuantity(position.qty)}</dd>
+                </div>
+                <div>
+                  <dt>{copy.paper.notional}</dt>
+                  <dd>{formatUsdt(position.notional)}</dd>
+                </div>
+                <div>
+                  <dt>{copy.paper.pnl}</dt>
+                  <dd className={pnlClass(position.unrealized_pnl)}>
+                    {formatSignedUsdt(position.unrealized_pnl)} /{" "}
+                    {formatPct(position.pnl_pct)}
+                  </dd>
+                </div>
+              </dl>
+              <button
+                className="close-button"
+                disabled={tradeBusy}
+                onClick={onClosePaper}
+                type="button"
+              >
+                {copy.actions.closePosition}
+              </button>
+            </>
+          ) : (
+            <p className="muted">{copy.paper.noPosition}</p>
+          )}
+        </section>
+        <section className="paper-subsection">
+          <h3>{copy.paper.history}</h3>
+          {trades.length === 0 ? (
+            <p className="muted">{copy.paper.noTrades}</p>
+          ) : (
+            <ul className="trade-list">
+              {trades.map((trade) => (
+                <li key={trade.id}>
+                  <span>
+                    {copy.paper.tradeActions[trade.action]}{" "}
+                    {copy.directions[trade.side]} @ {formatPrice(trade.price)}
+                  </span>
+                  <strong className={pnlClass(trade.realized_pnl)}>
+                    {formatSignedUsdt(trade.realized_pnl)}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </section>
     </>
   );
@@ -409,8 +677,40 @@ function formatPrice(value: number): string {
   return value.toFixed(6);
 }
 
+function formatQuantity(value: number): string {
+  if (value >= 100) {
+    return value.toFixed(2);
+  }
+  if (value >= 1) {
+    return value.toFixed(4);
+  }
+  return value.toFixed(6);
+}
+
+function formatUsdt(value: number): string {
+  return `${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })} USDT`;
+}
+
+function formatSignedUsdt(value: number): string {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${formatUsdt(value)}`;
+}
+
 function formatPct(value: number): string {
   return `${(value * 100).toFixed(2)}%`;
+}
+
+function pnlClass(value: number): string {
+  if (value > 0) {
+    return "positive";
+  }
+  if (value < 0) {
+    return "negative";
+  }
+  return "";
 }
 
 function formatTimestamp(value: number | null): string {

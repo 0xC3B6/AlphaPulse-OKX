@@ -1,32 +1,54 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
-    },
-    response::IntoResponse,
-    routing::get,
     Json, Router,
+    extract::{
+        Path, Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
 };
+use serde::{Deserialize, Serialize};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
     config::AppConfig,
+    domain::{ChartSnapshot, Timeframe},
+    indicators::fvg::detect_fvgs,
+    macro_cycle,
+    okx::rest::OkxRestClient,
+    paper::{PaperError, PaperOrderRequest},
     runtime,
     state::{BackendEvent, RadarState},
+    valuation::CoinglassValuationClient,
 };
 
 #[derive(Clone)]
 struct AppCtx {
     state: RadarState,
+    rest: OkxRestClient,
+    valuation: CoinglassValuationClient,
 }
 
-pub fn build_router(_config: AppConfig, state: RadarState) -> Router {
-    let ctx = AppCtx { state };
+pub fn build_router(config: AppConfig, state: RadarState) -> Router {
+    let ctx = AppCtx {
+        state,
+        rest: OkxRestClient::new(),
+        valuation: CoinglassValuationClient::new(config.coinglass_api_key.clone()),
+    };
     Router::new()
         .route("/api/health", get(health))
         .route("/api/snapshot", get(snapshot))
+        .route("/api/macro/btc", get(btc_macro))
+        .route("/api/symbols/:inst_id/chart", get(symbol_chart))
+        .route("/api/paper", get(paper))
+        .route("/api/paper/orders", post(open_paper_order))
+        .route(
+            "/api/paper/positions/:inst_id/close",
+            post(close_paper_position),
+        )
         .route("/ws", get(ws_handler))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -59,6 +81,72 @@ async fn snapshot(State(ctx): State<AppCtx>) -> impl IntoResponse {
     Json(ctx.state.snapshot().await)
 }
 
+async fn btc_macro(State(ctx): State<AppCtx>) -> Result<impl IntoResponse, ApiError> {
+    let snapshot = macro_cycle::fetch_btc_macro_snapshot(&ctx.rest, &ctx.valuation)
+        .await
+        .map_err(ApiError::bad_gateway)?;
+    Ok(Json(snapshot))
+}
+
+async fn symbol_chart(
+    State(ctx): State<AppCtx>,
+    Path(inst_id): Path<String>,
+    Query(query): Query<ChartQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let timeframe = query.timeframe.unwrap_or(Timeframe::M15);
+    let limit = query.limit.unwrap_or(180).clamp(30, 300);
+    let candles = ctx
+        .rest
+        .fetch_candles(&inst_id, timeframe, limit)
+        .await
+        .map_err(ApiError::bad_gateway)?;
+    let current_price = candles
+        .last()
+        .map(|candle| candle.close)
+        .ok_or_else(|| ApiError::not_found(format!("no candles for {inst_id}")))?;
+    let mut fvgs = detect_fvgs(&candles, timeframe, 0.003, current_price);
+    if query.filled == Some(false) {
+        fvgs.retain(|zone| !zone.filled);
+    }
+    fvgs.sort_by(|left, right| {
+        left.distance_pct
+            .partial_cmp(&right.distance_pct)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let updated_at_ms = candles
+        .last()
+        .map(|candle| candle.ts_ms)
+        .unwrap_or_default();
+
+    Ok(Json(ChartSnapshot {
+        inst_id,
+        timeframe,
+        candles,
+        fvgs,
+        updated_at_ms,
+    }))
+}
+
+async fn paper(State(ctx): State<AppCtx>) -> impl IntoResponse {
+    Json(ctx.state.paper_snapshot().await)
+}
+
+async fn open_paper_order(
+    State(ctx): State<AppCtx>,
+    Json(order): Json<PaperOrderRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let paper = ctx.state.open_paper_order(order).await?;
+    Ok(Json(paper))
+}
+
+async fn close_paper_position(
+    State(ctx): State<AppCtx>,
+    Path(inst_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let paper = ctx.state.close_paper_position(&inst_id).await?;
+    Ok(Json(paper))
+}
+
 async fn ws_handler(State(ctx): State<AppCtx>, ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| ws_loop(socket, ctx.state))
 }
@@ -80,5 +168,71 @@ async fn ws_loop(mut socket: WebSocket, state: RadarState) {
         {
             break;
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorResponse {
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChartQuery {
+    timeframe: Option<Timeframe>,
+    limit: Option<usize>,
+    filled: Option<bool>,
+}
+
+#[derive(Debug)]
+struct ApiError {
+    status: StatusCode,
+    message: String,
+}
+
+impl ApiError {
+    fn not_found(message: String) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            message,
+        }
+    }
+
+    fn bad_gateway(error: anyhow::Error) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<PaperError> for ApiError {
+    fn from(error: PaperError) -> Self {
+        let status = match error {
+            PaperError::PriceUnavailable(_) | PaperError::PositionNotFound(_) => {
+                StatusCode::NOT_FOUND
+            }
+            PaperError::EmptyInstrument
+            | PaperError::InvalidMargin
+            | PaperError::InvalidLeverage
+            | PaperError::InsufficientBalance
+            | PaperError::OppositePosition => StatusCode::BAD_REQUEST,
+        };
+
+        Self {
+            status,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            self.status,
+            Json(ErrorResponse {
+                message: self.message,
+            }),
+        )
+            .into_response()
     }
 }
