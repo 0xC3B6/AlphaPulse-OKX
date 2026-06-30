@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
 use std::time::Duration;
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
-use futures_util::{stream, StreamExt};
+use futures_util::{StreamExt, stream};
 use tokio::{sync::mpsc, time};
 
 use crate::{
@@ -10,16 +10,16 @@ use crate::{
     domain::{Candle, Direction, Score, SymbolSnapshot, Timeframe},
     indicators::{
         fvg::detect_fvgs,
-        levels::{find_levels, LevelConfig},
+        levels::{LevelConfig, find_levels},
     },
     okx::{
         rest::{OkxRestClient, TickerRow},
         ws::{self, TickerEvent},
     },
     quality::{add_tag, classify_history},
-    scoring::{score_symbol, ScoringInput},
+    scoring::{ScoringInput, score_symbol},
     state::RadarState,
-    universe::{build_filtered_symbol_universe, MarketActivity, UniverseSymbol},
+    universe::{MarketActivity, UniverseSymbol, build_filtered_symbol_universe},
 };
 
 pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result<()> {
@@ -76,15 +76,19 @@ async fn scan_once(
 ) -> anyhow::Result<()> {
     let tickers = rest.fetch_swap_tickers().await?;
     let instruments = rest.fetch_swap_instruments().await?;
-    let ticker_map: Arc<HashMap<String, TickerRow>> = Arc::new(tickers
-        .into_iter()
-        .filter(|ticker| ticker.inst_id.ends_with("-USDT-SWAP"))
-        .map(|ticker| (ticker.inst_id.clone(), ticker))
-        .collect());
+    let ticker_map: Arc<HashMap<String, TickerRow>> = Arc::new(
+        tickers
+            .into_iter()
+            .filter(|ticker| ticker.inst_id.ends_with("-USDT-SWAP"))
+            .map(|ticker| (ticker.inst_id.clone(), ticker))
+            .collect(),
+    );
 
     let seed_activity: Vec<MarketActivity> = ticker_map
         .values()
-        .map(|ticker| MarketActivity::new(&ticker.inst_id, ticker.quote_volume_24h, 0.0, 0.0, 0.0, 1.0))
+        .map(|ticker| {
+            MarketActivity::new(&ticker.inst_id, ticker.quote_volume_24h, 0.0, 0.0, 0.0, 1.0)
+        })
         .collect();
     let policy = config.universe_policy();
     let universe = build_filtered_symbol_universe(

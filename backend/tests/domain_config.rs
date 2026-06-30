@@ -45,4 +45,6 @@ fn timeframe_maps_to_okx_bar_names() {
     assert_eq!(Timeframe::M5.okx_bar(), "5m");
     assert_eq!(Timeframe::M15.okx_bar(), "15m");
     assert_eq!(Timeframe::H1.okx_bar(), "1H");
+    assert_eq!(Timeframe::D1.okx_bar(), "1D");
+    assert_eq!(Timeframe::W1.okx_bar(), "1W");
 }

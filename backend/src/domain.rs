@@ -14,6 +14,8 @@ pub enum Timeframe {
     M5,
     M15,
     H1,
+    D1,
+    W1,
 }
 
 impl Timeframe {
@@ -22,6 +24,8 @@ impl Timeframe {
             Self::M5 => "5m",
             Self::M15 => "15m",
             Self::H1 => "1H",
+            Self::D1 => "1D",
+            Self::W1 => "1W",
         }
     }
 }
@@ -47,6 +51,8 @@ pub struct Score {
 pub struct FvgZone {
     pub timeframe: Timeframe,
     pub direction: Direction,
+    pub start_ts_ms: i64,
+    pub end_ts_ms: i64,
     pub lower: f64,
     pub upper: f64,
     pub gap_pct: f64,
@@ -84,5 +90,14 @@ pub struct SymbolSnapshot {
     pub funding_rate: Option<f64>,
     pub fvgs: Vec<FvgZone>,
     pub levels: Vec<LevelZone>,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChartSnapshot {
+    pub inst_id: String,
+    pub timeframe: Timeframe,
+    pub candles: Vec<Candle>,
+    pub fvgs: Vec<FvgZone>,
     pub updated_at_ms: i64,
 }

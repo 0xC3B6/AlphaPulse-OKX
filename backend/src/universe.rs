@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use crate::quality::add_tag;
 pub use crate::quality::UniversePolicy;
+use crate::quality::add_tag;
 
 const DAY_MS: f64 = 86_400_000.0;
 
@@ -204,7 +204,8 @@ fn instrument_is_monitorable(
     policy: UniversePolicy,
     now_ms: i64,
 ) -> bool {
-    instrument.state == "live" && listing_age_days(instrument, now_ms) >= policy.min_listing_age_days
+    instrument.state == "live"
+        && listing_age_days(instrument, now_ms) >= policy.min_listing_age_days
 }
 
 fn add_listing_tags(

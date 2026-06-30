@@ -38,10 +38,7 @@ fn cluster_prices(
     current_price: f64,
     config: LevelConfig,
 ) -> Vec<LevelZone> {
-    prices.sort_by(|left, right| {
-        left.partial_cmp(right)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    prices.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut zones = Vec::new();
     let mut index = 0;

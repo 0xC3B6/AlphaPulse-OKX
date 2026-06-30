@@ -26,13 +26,15 @@ fn detects_bullish_three_candle_gap() {
 
     assert_eq!(zones.len(), 1);
     assert_eq!(zones[0].direction, Direction::Long);
+    assert_eq!(zones[0].start_ts_ms, 1);
+    assert_eq!(zones[0].end_ts_ms, 3);
     assert_eq!(zones[0].lower, 10.0);
     assert_eq!(zones[0].upper, 10.8);
     assert!(!zones[0].filled);
 }
 
 #[test]
-fn marks_bullish_gap_filled_when_later_low_revisits_zone() {
+fn does_not_mark_bullish_gap_filled_on_partial_revisit() {
     let candles = vec![
         candle(1, 10.0, 9.5, 9.8),
         candle(2, 10.4, 9.7, 10.1),
@@ -43,7 +45,23 @@ fn marks_bullish_gap_filled_when_later_low_revisits_zone() {
     let zones = detect_fvgs(&candles, Timeframe::M15, 0.02, 10.7);
 
     assert_eq!(zones.len(), 1);
+    assert!(!zones[0].filled);
+}
+
+#[test]
+fn marks_bullish_gap_filled_when_later_low_fully_revisits_zone() {
+    let candles = vec![
+        candle(1, 10.0, 9.5, 9.8),
+        candle(2, 10.4, 9.7, 10.1),
+        candle(3, 11.4, 10.8, 11.2),
+        candle(4, 10.8, 9.9, 10.0),
+    ];
+
+    let zones = detect_fvgs(&candles, Timeframe::M15, 0.02, 10.0);
+
+    assert_eq!(zones.len(), 1);
     assert!(zones[0].filled);
+    assert_eq!(zones[0].end_ts_ms, 4);
 }
 
 #[test]
@@ -58,6 +76,8 @@ fn detects_bearish_three_candle_gap() {
 
     assert_eq!(zones.len(), 1);
     assert_eq!(zones[0].direction, Direction::Short);
+    assert_eq!(zones[0].start_ts_ms, 1);
+    assert_eq!(zones[0].end_ts_ms, 3);
     assert_eq!(zones[0].lower, 19.1);
     assert_eq!(zones[0].upper, 20.0);
 }

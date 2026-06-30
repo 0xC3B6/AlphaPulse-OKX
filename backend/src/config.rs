@@ -4,6 +4,7 @@ use crate::quality::UniversePolicy;
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
+    pub coinglass_api_key: Option<String>,
     pub scan_interval_secs: u64,
     pub dynamic_pool_size: usize,
     pub trend_alert_threshold: u8,
@@ -21,6 +22,7 @@ impl Default for AppConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 8787,
+            coinglass_api_key: None,
             scan_interval_secs: 30,
             dynamic_pool_size: 40,
             trend_alert_threshold: 80,
@@ -48,6 +50,35 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn load() -> Self {
+        let _ = dotenvy::from_filename(".env.local");
+        let _ = dotenvy::dotenv();
+        Self::from_env()
+    }
+
+    pub fn from_env() -> Self {
+        Self::from_env_pairs(std::env::vars())
+    }
+
+    pub fn from_env_pairs<I, K, V>(pairs: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<str>,
+        V: Into<String>,
+    {
+        let mut config = Self::default();
+        for (key, value) in pairs {
+            if key.as_ref() == "COINGLASS_API_KEY" {
+                let value = value.into();
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    config.coinglass_api_key = Some(trimmed.to_string());
+                }
+            }
+        }
+        config
+    }
+
     pub fn universe_policy(&self) -> UniversePolicy {
         UniversePolicy {
             min_listing_age_days: self.min_listing_age_days,
