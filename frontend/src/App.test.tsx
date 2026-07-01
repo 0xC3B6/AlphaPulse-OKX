@@ -430,6 +430,8 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "大周期" }));
 
     expect(await screen.findByText("BTC 大周期")).toBeInTheDocument();
+    expect(screen.getByTestId("macro-regime-card")).toHaveTextContent("熊市反弹");
+    expect(screen.getByTestId("macro-cycle-progress")).toHaveTextContent("55.00%");
     expect(screen.getByText("熊市反弹")).toBeInTheDocument();
     expect(screen.getByText("2026 US midterm elections")).toBeInTheDocument();
     expect(screen.getAllByText("AHR999").length).toBeGreaterThan(0);

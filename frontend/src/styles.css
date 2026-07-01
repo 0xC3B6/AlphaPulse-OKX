@@ -767,14 +767,22 @@ tr.selected {
   font-size: 13px;
 }
 
-.macro-regime-band {
+.macro-overview-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 16px;
 }
 
-.macro-regime-band div,
+.macro-regime-card {
+  grid-column: span 2;
+  min-height: 156px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 18px;
+}
+
 .macro-metric {
   min-width: 0;
   border: 1px solid var(--border);
@@ -783,27 +791,35 @@ tr.selected {
   padding: 12px;
 }
 
-.macro-regime-band span,
+.macro-regime-card span,
 .macro-metric span,
-.macro-progress span,
+.macro-cycle-card span,
+.macro-cycle-card p,
 .macro-list span,
 .macro-list em {
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.macro-regime-band strong {
+.macro-regime-card > strong {
   display: block;
-  margin-top: 4px;
-  overflow-wrap: anywhere;
-  font-size: 18px;
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
 }
 
-.macro-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+.macro-regime-card-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.macro-regime-card-footer b {
+  display: block;
+  margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .macro-metric strong {
@@ -813,18 +829,27 @@ tr.selected {
   font-size: 16px;
 }
 
-.macro-progress {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 170px;
-  gap: 12px;
-  align-items: center;
-  margin-top: 16px;
+.macro-cycle-card {
+  grid-column: span 2;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
 }
 
-.macro-progress strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 13px;
+.macro-cycle-card-dates {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.macro-cycle-card p {
+  margin-top: 10px;
+  text-align: right;
+}
+
+.macro-cycle-card p strong {
+  color: var(--accent);
 }
 
 .macro-progress-track {
@@ -1907,6 +1932,10 @@ input {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .macro-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .radar-workspace {
     grid-template-columns: 1fr;
   }
@@ -1919,6 +1948,22 @@ input {
 @media (max-width: 640px) {
   .macro-summary-strip {
     grid-template-columns: 1fr;
+  }
+
+  .macro-overview-grid,
+  .macro-regime-card-footer,
+  .macro-cycle-card-dates {
+    grid-template-columns: 1fr;
+  }
+
+  .macro-regime-card-footer,
+  .macro-cycle-card-dates {
+    flex-direction: column;
+  }
+
+  .macro-regime-card,
+  .macro-cycle-card {
+    grid-column: span 1;
   }
 
   .detail-metric-strip {
@@ -1949,10 +1994,8 @@ input {
     grid-template-columns: 1fr;
   }
 
-  .macro-regime-band,
-  .macro-grid,
+  .macro-overview-grid,
   .macro-columns,
-  .macro-progress,
   .macro-chart-grid,
   .macro-band-grid,
   .macro-kline-grid,

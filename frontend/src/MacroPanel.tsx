@@ -91,33 +91,24 @@ export function MacroPanel({
         </button>
       </header>
 
-      <section className="macro-regime-band">
-        <div>
+      <section className="macro-overview-grid">
+        <div className="macro-regime-card" data-testid="macro-regime-card">
           <span>{copy.macro.regime}</span>
           <strong>{formatRegime(snapshot.regime, copy)}</strong>
+          <div className="macro-regime-card-footer">
+            <div>
+              <span>{copy.macro.price}</span>
+              <b>{formatUsd(snapshot.price)}</b>
+            </div>
+            <div>
+              <span>{copy.macro.confidence}</span>
+              <b className="positive">{snapshot.confidence}/100</b>
+            </div>
+          </div>
         </div>
-        <div>
-          <span>{copy.macro.confidence}</span>
-          <strong>{snapshot.confidence}/100</strong>
-        </div>
-        <div>
-          <span>{copy.macro.price}</span>
-          <strong>{formatUsd(snapshot.price)}</strong>
-        </div>
-      </section>
-
-      <section className="macro-grid">
         <MetricTile
           label={copy.macro.daysSinceHalving}
           value={`${snapshot.cycle.days_since_halving}`}
-        />
-        <MetricTile
-          label={copy.macro.cycleQuarter}
-          value={`Q${snapshot.cycle.cycle_quarter}`}
-        />
-        <MetricTile
-          label={copy.macro.cycleProgress}
-          value={formatPct(snapshot.cycle.estimated_cycle_progress_pct)}
         />
         <MetricTile
           label={copy.macro.drawdown}
@@ -129,19 +120,6 @@ export function MacroPanel({
           value={snapshot.trend.ma_200w === null ? "-" : formatUsd(snapshot.trend.ma_200w)}
         />
         <MetricTile
-          label={copy.macro.priceVsMa200w}
-          value={
-            snapshot.trend.price_vs_200w_pct === null
-              ? "-"
-              : formatPct(snapshot.trend.price_vs_200w_pct)
-          }
-          tone={
-            snapshot.trend.price_vs_200w_pct !== null && snapshot.trend.price_vs_200w_pct < 0
-              ? "negative"
-              : "positive"
-          }
-        />
-        <MetricTile
           label={copy.macro.change90d}
           value={snapshot.momentum.change_90d_pct === null ? "-" : formatPct(snapshot.momentum.change_90d_pct)}
           tone={
@@ -150,34 +128,30 @@ export function MacroPanel({
               : "positive"
           }
         />
-        <MetricTile
-          label={copy.macro.volatility90d}
-          value={
-            snapshot.momentum.volatility_90d_pct === null
-              ? "-"
-              : formatPct(snapshot.momentum.volatility_90d_pct)
-          }
-        />
-      </section>
-
-      <section className="macro-progress">
-        <div>
-          <span>{copy.macro.lastHalving}</span>
-          <strong>{formatDate(snapshot.cycle.last_halving_ms)}</strong>
-        </div>
-        <div className="macro-progress-track">
-          <span
-            style={{
-              width: `${Math.min(
-                100,
-                Math.max(0, snapshot.cycle.estimated_cycle_progress_pct * 100),
-              )}%`,
-            }}
-          />
-        </div>
-        <div>
-          <span>{copy.macro.nextHalving}</span>
-          <strong>{formatDate(snapshot.cycle.next_halving_estimate_ms)}</strong>
+        <div className="macro-cycle-card" data-testid="macro-cycle-progress">
+          <div className="macro-cycle-card-dates">
+            <span>
+              {copy.macro.lastHalving}: <strong>{formatDate(snapshot.cycle.last_halving_ms)}</strong>
+            </span>
+            <span>
+              {copy.macro.nextHalving}:{" "}
+              <strong>{formatDate(snapshot.cycle.next_halving_estimate_ms)}</strong>
+            </span>
+          </div>
+          <div className="macro-progress-track">
+            <span
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.max(0, snapshot.cycle.estimated_cycle_progress_pct * 100),
+                )}%`,
+              }}
+            />
+          </div>
+          <p>
+            {copy.macro.cycleProgress}:{" "}
+            <strong>{formatPct(snapshot.cycle.estimated_cycle_progress_pct)}</strong>
+          </p>
         </div>
       </section>
 
