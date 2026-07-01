@@ -38,6 +38,19 @@ export function ConsoleShell({
   themeMode: ThemeMode;
   viewMode: ViewMode;
 }) {
+  const themeOptions: Array<[ThemeMode, string]> = [
+    ["light", "Light"],
+    ["dark", "Dark"],
+    ["system", "System"],
+  ];
+  const languageOptions: Array<[Language, string]> = [
+    ["zh", "ZH"],
+    ["en", "EN"],
+  ];
+  const selectedThemeLabel =
+    themeOptions.find(([value]) => value === themeMode)?.[1] ?? "System";
+  const selectedLanguageLabel =
+    languageOptions.find(([value]) => value === language)?.[1] ?? "ZH";
   const statusItems = [
     { label: copy.status.backend, value: formatState(backendState, copy), tone: backendState },
     { label: copy.status.stream, value: formatState(streamState, copy), tone: streamState },
@@ -81,36 +94,58 @@ export function ConsoleShell({
           ))}
         </dl>
         <div className="console-actions">
-          <div className="toolbar-group" role="group" aria-label={copy.aria.themeMode}>
-            {[
-              ["light", copy.themes.light],
-              ["dark", copy.themes.dark],
-              ["system", copy.themes.system],
-            ].map(([value, label]) => (
-              <button
-                className={themeMode === value ? "active" : ""}
-                key={value}
-                onClick={() => onThemeModeChange(value as ThemeMode)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
+          <div className="console-menu">
+            <button
+              aria-haspopup="menu"
+              aria-label={`${copy.aria.themeMode}: ${selectedThemeLabel}`}
+              className="console-menu-trigger"
+              title={copy.aria.themeMode}
+              type="button"
+            >
+              <span aria-hidden="true" className="console-menu-icon">
+                ◐
+              </span>
+              <span>{selectedThemeLabel}</span>
+            </button>
+            <div className="console-menu-popover" role="menu">
+              {themeOptions.map(([value, label]) => (
+                <button
+                  aria-checked={themeMode === value}
+                  className={themeMode === value ? "active" : ""}
+                  key={value}
+                  onClick={() => onThemeModeChange(value)}
+                  role="menuitemradio"
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="toolbar-group" role="group" aria-label={copy.aria.languageMode}>
-            {[
-              ["zh", copy.languages.zh],
-              ["en", copy.languages.en],
-            ].map(([value, label]) => (
-              <button
-                className={language === value ? "active" : ""}
-                key={value}
-                onClick={() => onLanguageChange(value as Language)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
+          <div className="console-menu">
+            <button
+              aria-haspopup="menu"
+              aria-label={`${copy.aria.languageMode}: ${selectedLanguageLabel}`}
+              className="console-menu-trigger console-language-trigger"
+              title={copy.aria.languageMode}
+              type="button"
+            >
+              {selectedLanguageLabel}
+            </button>
+            <div className="console-menu-popover" role="menu">
+              {languageOptions.map(([value, label]) => (
+                <button
+                  aria-checked={language === value}
+                  className={language === value ? "active" : ""}
+                  key={value}
+                  onClick={() => onLanguageChange(value)}
+                  role="menuitemradio"
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <button onClick={onRequestNotifications} type="button">
             {copy.actions.enableNotifications}

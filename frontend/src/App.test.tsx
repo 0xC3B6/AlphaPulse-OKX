@@ -371,7 +371,11 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByText("暂无合约数据");
-    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "主题模式: System" })).toHaveTextContent("System");
+    expect(screen.getByRole("menuitemradio", { name: "System" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(document.documentElement).toHaveAttribute("data-theme", "system");
     expect(localStorage.getItem("alphapulse-theme")).toBeNull();
   });
@@ -382,13 +386,17 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("暂无合约数据");
 
-    fireEvent.click(screen.getByRole("button", { name: "深色主题" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Dark" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     expect(localStorage.getItem("alphapulse-theme")).toBe("dark");
-    expect(screen.getByRole("button", { name: "深色主题" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "主题模式: Dark" })).toHaveTextContent("Dark");
+    expect(screen.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "浅色主题" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Light" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
     expect(localStorage.getItem("alphapulse-theme")).toBe("light");
@@ -400,7 +408,11 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByText("暂无合约数据");
-    expect(screen.getByRole("button", { name: "中文" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "语言: ZH" })).toHaveTextContent("ZH");
+    expect(screen.getByRole("menuitemradio", { name: "ZH" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByText("后端")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
     expect(localStorage.getItem("alphapulse-language")).toBeNull();
@@ -412,10 +424,14 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "EN" }));
 
     expect(localStorage.getItem("alphapulse-language")).toBe("en");
-    expect(screen.getByRole("button", { name: "English" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "language: EN" })).toHaveTextContent("EN");
+    expect(screen.getByRole("menuitemradio", { name: "EN" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByText("Backend")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Signal" })).toBeInTheDocument();
