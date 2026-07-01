@@ -342,13 +342,40 @@ describe("App", () => {
     });
   });
 
+  it("opens a TradingView chart modal from the radar only", async () => {
+    mockSnapshot();
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "打开 LAB-USDT-SWAP TradingView 图表" })[0]);
+
+    const dialog = screen.getByRole("dialog", { name: "LAB-USDT-SWAP TradingView" });
+    expect(dialog).toBeInTheDocument();
+    const frame = screen.getByTitle("LAB-USDT-SWAP TradingView");
+    const source = decodeURIComponent(frame.getAttribute("src") ?? "");
+    expect(source).toContain("https://s.tradingview.com/widgetembed/");
+    expect(source).toContain("symbol=OKX:LABUSDT.P");
+    expect(source).toContain("interval=15");
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭 TradingView" }));
+    expect(screen.queryByRole("dialog", { name: "LAB-USDT-SWAP TradingView" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    expect(screen.queryByRole("button", { name: /TradingView/ })).not.toBeInTheDocument();
+  });
+
   it("defaults to following the system theme", async () => {
     mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false, paper });
 
     render(<App />);
 
     await screen.findByText("暂无合约数据");
-    expect(screen.getByRole("button", { name: "跟随系统" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "主题模式: System" })).toHaveTextContent("System");
+    expect(screen.getByRole("menuitemradio", { name: "System" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(document.documentElement).toHaveAttribute("data-theme", "system");
     expect(localStorage.getItem("alphapulse-theme")).toBeNull();
   });
@@ -359,13 +386,17 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("暂无合约数据");
 
-    fireEvent.click(screen.getByRole("button", { name: "深色主题" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Dark" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     expect(localStorage.getItem("alphapulse-theme")).toBe("dark");
-    expect(screen.getByRole("button", { name: "深色主题" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "主题模式: Dark" })).toHaveTextContent("Dark");
+    expect(screen.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "浅色主题" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Light" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
     expect(localStorage.getItem("alphapulse-theme")).toBe("light");
@@ -377,7 +408,11 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByText("暂无合约数据");
-    expect(screen.getByRole("button", { name: "中文" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "语言: ZH" })).toHaveTextContent("ZH");
+    expect(screen.getByRole("menuitemradio", { name: "ZH" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByText("后端")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
     expect(localStorage.getItem("alphapulse-language")).toBeNull();
@@ -389,10 +424,14 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "EN" }));
 
     expect(localStorage.getItem("alphapulse-language")).toBe("en");
-    expect(screen.getByRole("button", { name: "English" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "language: EN" })).toHaveTextContent("EN");
+    expect(screen.getByRole("menuitemradio", { name: "EN" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByText("Backend")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Signal" })).toBeInTheDocument();
@@ -407,9 +446,122 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "大周期" }));
 
     expect(await screen.findByText("BTC 大周期")).toBeInTheDocument();
+    expect(screen.getByTestId("macro-regime-card")).toHaveTextContent("熊市反弹");
+    expect(screen.getByTestId("macro-cycle-progress")).toHaveTextContent("55.00%");
     expect(screen.getByText("熊市反弹")).toBeInTheDocument();
     expect(screen.getByText("2026 US midterm elections")).toBeInTheDocument();
     expect(screen.getAllByText("AHR999").length).toBeGreaterThan(0);
+  });
+
+  it("prefetches macro data before the macro view is opened", async () => {
+    let macroRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/macro/btc")) {
+          macroRequests += 1;
+          return {
+            ok: true,
+            json: async () => macro,
+          };
+        }
+        if (String(input).includes("/chart")) {
+          return {
+            ok: true,
+            json: async () => chart,
+          };
+        }
+        return {
+          ok: true,
+          json: async () => snapshot,
+        };
+      }),
+    );
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    await waitFor(() => expect(macroRequests).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+
+    expect(screen.queryByTestId("macro-loading")).not.toBeInTheDocument();
+    expect(await screen.findByText("BTC 大周期")).toBeInTheDocument();
+    expect(macroRequests).toBe(1);
+  });
+
+  it("shows a compact macro summary on the radar console", async () => {
+    mockSnapshot();
+
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    const summary = await screen.findByTestId("macro-summary-strip");
+
+    expect(summary).toHaveTextContent("BTC 大周期摘要");
+    expect(summary).toHaveTextContent("熊市反弹");
+    expect(summary).toHaveTextContent("$60,000.00");
+    expect(summary).toHaveTextContent("80/100");
+    expect(summary).toHaveTextContent("-40.00%");
+    expect(summary).toHaveTextContent("55.00%");
+  });
+
+  it("keeps the radar workspace usable when the macro summary request fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/macro/btc")) {
+          return {
+            ok: false,
+            json: async () => ({ message: "macro unavailable" }),
+          };
+        }
+        if (String(input).includes("/chart")) {
+          return {
+            ok: true,
+            json: async () => chart,
+          };
+        }
+        return {
+          ok: true,
+          json: async () => snapshot,
+        };
+      }),
+    );
+
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    const summary = await screen.findByTestId("macro-summary-strip");
+    expect(summary).toHaveTextContent("大周期数据不可用");
+    expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
+  });
+
+  it("selects symbols from the dense radar table", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
+
+    const detail = screen.getByTestId("symbol-detail-panel");
+    expect(detail).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(detail).toHaveTextContent("range long 82: near support");
+  });
+
+  it("opens TradingView from a table button without changing the selected detail symbol", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("DOGE-USDT-SWAP");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "打开 LAB-USDT-SWAP TradingView 图表" })[0]);
+
+    expect(screen.getByRole("dialog", { name: "LAB-USDT-SWAP TradingView" })).toBeInTheDocument();
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("DOGE-USDT-SWAP");
   });
 
   it("renders AHR999 history guidance and paginated rows", async () => {
@@ -435,6 +587,60 @@ describe("App", () => {
     expect(screen.getByRole("cell", { name: "2026/06/01" })).toBeInTheDocument();
   });
 
+  it("supports AHR999 tooltip, legend toggles, and page jump controls", async () => {
+    const manyRowsMacro = {
+      ...macro,
+      ahr999_history: {
+        ...macro.ahr999_history,
+        points: Array.from({ length: 50 }, (_, index) => ({
+          ts_ms: 1777670400000 + index * 86400000,
+          date: `2026/05/${String(index + 1).padStart(2, "0")}`,
+          value: 0.35 + index * 0.01,
+          btc_price: 58000 + index * 100,
+          gma200: 74000 + index * 50,
+          model_price: 160000 + index * 20,
+          zone: index < 10 ? "deep_value" : "accumulation",
+        })),
+      },
+    } as BtcMacroSnapshot;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => ({
+        ok: true,
+        json: async () => {
+          if (String(input).includes("/chart")) {
+            return chart;
+          }
+          if (String(input).includes("/macro/btc")) {
+            return manyRowsMacro;
+          }
+          return snapshot;
+        },
+      })),
+    );
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+
+    expect(await screen.findByText("AHR999 历史")).toBeInTheDocument();
+    fireEvent.pointerMove(screen.getByLabelText("AHR999 chart"), {
+      clientX: 300,
+      clientY: 200,
+    });
+    expect(screen.getByTestId("ahr999-tooltip")).toHaveTextContent("BTC Price");
+    expect(screen.getByTestId("ahr999-tooltip")).toHaveTextContent("Ahr999 Index");
+
+    const btcToggle = screen.getByRole("button", { name: "BTC Price" });
+    fireEvent.click(btcToggle);
+    expect(btcToggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByLabelText("BTC Price series")).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.change(screen.getByLabelText("跳转页码"), { target: { value: "2" } });
+    expect(screen.getByRole("cell", { name: "2026/05/30" })).toBeInTheDocument();
+  });
+
   it("renders analog forward K-line windows with score components", async () => {
     mockSnapshot();
 
@@ -446,9 +652,10 @@ describe("App", () => {
     expect(await screen.findByText("历史 K 线对比")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "90D" })).toHaveClass("active");
     expect(screen.getByText("当前节点前 90D")).toBeInTheDocument();
-    expect(screen.getAllByText("历史节点后 90D 2021/01/01 · 82/100").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("历史相似+后续 90D 2021/01/01 · 82/100").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("当前节点前 90D K线")).toBeInTheDocument();
-    expect(screen.getByLabelText("历史节点后 90D 2021/01/01 K线")).toBeInTheDocument();
+    expect(screen.getByLabelText("历史相似+后续 90D 2021/01/01 K线")).toBeInTheDocument();
+    expect(screen.getByText("锚点 2021/01/01 · $90.20")).toBeInTheDocument();
     expect(screen.getByText("price $100.00 -> $89.30 · range $85.30-$103.00")).toBeInTheDocument();
     expect(screen.getAllByText("path shape 39/45").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "30D" }));
