@@ -70,6 +70,11 @@ export const translations = {
       signal: "信号",
     },
     detail: {
+      market: "市场",
+      structure: "结构",
+      paperTrading: "模拟盘",
+      recentSignals: "近期信号",
+      noRecentSignals: "暂无近期信号",
       noActiveTrigger: "暂无触发信号",
       funding: "资金费率",
       updated: "更新时间",
@@ -93,6 +98,9 @@ export const translations = {
     macro: {
       title: "BTC 大周期",
       loading: "加载大周期数据中",
+      summaryLabel: "BTC 大周期摘要",
+      summaryUnavailable: "大周期数据不可用",
+      summaryLoading: "加载大周期摘要中",
       refresh: "刷新",
       regime: "状态",
       confidence: "置信度",
@@ -265,6 +273,11 @@ export const translations = {
       signal: "Signal",
     },
     detail: {
+      market: "Market",
+      structure: "Structure",
+      paperTrading: "Paper trading",
+      recentSignals: "Recent signals",
+      noRecentSignals: "No recent signals",
       noActiveTrigger: "No active trigger",
       funding: "Funding",
       updated: "Updated",
@@ -288,6 +301,9 @@ export const translations = {
     macro: {
       title: "BTC Macro Cycle",
       loading: "Loading macro data",
+      summaryLabel: "BTC macro summary",
+      summaryUnavailable: "Macro data unavailable",
+      summaryLoading: "Loading macro summary",
       refresh: "Refresh",
       regime: "Regime",
       confidence: "Confidence",

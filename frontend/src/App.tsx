@@ -7,6 +7,7 @@ import {
   openPaperOrder,
 } from "./api";
 import { ChartPanel } from "./ChartPanel";
+import { ConsoleShell } from "./ConsoleShell";
 import { MacroPanel } from "./MacroPanel";
 import {
   sendBrowserNotification,
@@ -21,7 +22,6 @@ import {
   formatQuantity,
   formatScore,
   formatSignedUsdt,
-  formatState,
   formatTags,
   formatTemplate,
   formatTimestamp,
@@ -290,108 +290,21 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>AlphaPulse OKX</h1>
-          <p>{copy.subtitle}</p>
-        </div>
-        <dl className="status-grid" aria-label={copy.aria.connectionStatus}>
-          <div>
-            <dt>{copy.status.backend}</dt>
-            <dd>{formatState(backendState, copy)}</dd>
-          </div>
-          <div>
-            <dt>{copy.status.stream}</dt>
-            <dd>{formatState(streamState, copy)}</dd>
-          </div>
-          <div>
-            <dt>{copy.status.notifications}</dt>
-            <dd>{formatState(notificationPermission, copy)}</dd>
-          </div>
-          <div>
-            <dt>{copy.status.lastScan}</dt>
-            <dd>{formatTimestamp(snapshot.last_scan_at_ms)}</dd>
-          </div>
-          <div>
-            <dt>{copy.status.symbols}</dt>
-            <dd>{snapshot.symbols.length}</dd>
-          </div>
-        </dl>
-      </header>
-
-      <section className="toolbar" aria-label={copy.aria.radarControls}>
-        <div className="toolbar-group" role="group" aria-label={copy.aria.viewMode}>
-          {[
-            ["radar", copy.views.radar],
-            ["macro", copy.views.macro],
-          ].map(([value, label]) => (
-            <button
-              className={viewMode === value ? "active" : ""}
-              key={value}
-              onClick={() => setViewMode(value as ViewMode)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {viewMode === "radar" ? (
-        <div className="toolbar-group" role="group" aria-label={copy.aria.opportunityFilters}>
-          {[
-            ["all", copy.filters.all],
-            ["trend", copy.filters.trend],
-            ["range", copy.filters.range],
-            ["hot", copy.filters.hot],
-            ["fixed", copy.filters.fixed],
-          ].map(([value, label]) => (
-            <button
-              className={filter === value ? "active" : ""}
-              key={value}
-              onClick={() => setFilter(value as Filter)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        ) : null}
-        <div className="toolbar-group theme-toggle" role="group" aria-label={copy.aria.themeMode}>
-          {[
-            ["light", copy.themes.light],
-            ["dark", copy.themes.dark],
-            ["system", copy.themes.system],
-          ].map(([value, label]) => (
-            <button
-              className={themeMode === value ? "active" : ""}
-              key={value}
-              onClick={() => setThemeMode(value as ThemeMode)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="toolbar-group" role="group" aria-label={copy.aria.languageMode}>
-          {[
-            ["zh", copy.languages.zh],
-            ["en", copy.languages.en],
-          ].map(([value, label]) => (
-            <button
-              className={language === value ? "active" : ""}
-              key={value}
-              onClick={() => setLanguage(value as Language)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <button onClick={requestNotifications} type="button">
-          {copy.actions.enableNotifications}
-        </button>
-      </section>
-
+    <ConsoleShell
+      backendState={backendState}
+      copy={copy}
+      language={language}
+      lastScanAt={snapshot.last_scan_at_ms}
+      notificationPermission={notificationPermission}
+      onLanguageChange={setLanguage}
+      onRequestNotifications={requestNotifications}
+      onThemeModeChange={setThemeMode}
+      onViewModeChange={setViewMode}
+      streamState={streamState}
+      symbolCount={snapshot.symbols.length}
+      themeMode={themeMode}
+      viewMode={viewMode}
+    >
       {viewMode === "macro" ? (
         <MacroPanel
           copy={copy}
@@ -403,86 +316,110 @@ export default function App() {
           snapshot={macroSnapshot}
           themeMode={themeMode}
         />
-      ) : filteredSymbols.length === 0 ? (
-        <section className="empty-state">
-          <h2>{copy.empty.title}</h2>
-          <p>{copy.empty.body}</p>
-        </section>
       ) : (
-        <section className="radar-grid">
-          <div className="table-panel">
-            <table>
-              <thead>
-                <tr>
-                  <th>{copy.table.symbol}</th>
-                  <th>{copy.table.price}</th>
-                  <th>5m</th>
-                  <th>15m</th>
-                  <th>1h</th>
-                  <th>{copy.table.trend}</th>
-                  <th>{copy.table.range}</th>
-                  <th>{copy.table.signal}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSymbols.map((symbol) => (
-                  <tr
-                    className={symbol.inst_id === selected?.inst_id ? "selected" : ""}
-                    key={symbol.inst_id}
-                    onClick={() => setSelectedId(symbol.inst_id)}
-                  >
-                    <td>
-                      <div className="symbol-cell">
-                        <div className="symbol-cell-main">
-                          <strong>{symbol.inst_id}</strong>
-                          <span>{formatTags(symbol.pool_tags, copy)}</span>
-                        </div>
-                        <button
-                          aria-label={formatTemplate(copy.actions.openTradingViewChart, symbol.inst_id)}
-                          className="symbol-tv-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openTradingView(symbol);
-                          }}
-                          title={copy.actions.openTradingView}
-                          type="button"
-                        >
-                          TV
-                        </button>
-                      </div>
-                    </td>
-                    <td>{formatPrice(symbol.price)}</td>
-                    <td>{formatPct(symbol.change_5m_pct)}</td>
-                    <td>{formatPct(symbol.change_15m_pct)}</td>
-                    <td>{formatPct(symbol.change_1h_pct)}</td>
-                    <td>{formatScore(symbol.trend_score, copy)}</td>
-                    <td>{formatScore(symbol.range_score, copy)}</td>
-                    <td>{symbol.trigger_reason || copy.misc.watching}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <aside className="detail-panel">
-            {selected ? (
-              <SymbolDetail
-                copy={copy}
-                onClosePaper={submitPaperClose}
-                onOpenTradingView={openTradingView}
-                onLeverageChange={setOrderLeverage}
-                onMarginChange={setOrderMargin}
-                onOpenPaper={submitPaperOrder}
-                orderLeverage={orderLeverage}
-                orderMargin={orderMargin}
-                paper={snapshot.paper}
-                symbol={selected}
-                themeMode={themeMode}
-                tradeBusy={tradeBusy}
-                tradeError={tradeError}
-              />
-            ) : null}
-          </aside>
-        </section>
+        <>
+          <section className="toolbar" aria-label={copy.aria.radarControls}>
+            <div className="toolbar-group" role="group" aria-label={copy.aria.opportunityFilters}>
+              {[
+                ["all", copy.filters.all],
+                ["trend", copy.filters.trend],
+                ["range", copy.filters.range],
+                ["hot", copy.filters.hot],
+                ["fixed", copy.filters.fixed],
+              ].map(([value, label]) => (
+                <button
+                  className={filter === value ? "active" : ""}
+                  key={value}
+                  onClick={() => setFilter(value as Filter)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+          {filteredSymbols.length === 0 ? (
+            <section className="empty-state">
+              <h2>{copy.empty.title}</h2>
+              <p>{copy.empty.body}</p>
+            </section>
+          ) : (
+            <section className="radar-grid">
+              <div className="table-panel">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{copy.table.symbol}</th>
+                      <th>{copy.table.price}</th>
+                      <th>5m</th>
+                      <th>15m</th>
+                      <th>1h</th>
+                      <th>{copy.table.trend}</th>
+                      <th>{copy.table.range}</th>
+                      <th>{copy.table.signal}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSymbols.map((symbol) => (
+                      <tr
+                        className={symbol.inst_id === selected?.inst_id ? "selected" : ""}
+                        key={symbol.inst_id}
+                        onClick={() => setSelectedId(symbol.inst_id)}
+                      >
+                        <td>
+                          <div className="symbol-cell">
+                            <div className="symbol-cell-main">
+                              <strong>{symbol.inst_id}</strong>
+                              <span>{formatTags(symbol.pool_tags, copy)}</span>
+                            </div>
+                            <button
+                              aria-label={formatTemplate(copy.actions.openTradingViewChart, symbol.inst_id)}
+                              className="symbol-tv-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTradingView(symbol);
+                              }}
+                              title={copy.actions.openTradingView}
+                              type="button"
+                            >
+                              TV
+                            </button>
+                          </div>
+                        </td>
+                        <td>{formatPrice(symbol.price)}</td>
+                        <td>{formatPct(symbol.change_5m_pct)}</td>
+                        <td>{formatPct(symbol.change_15m_pct)}</td>
+                        <td>{formatPct(symbol.change_1h_pct)}</td>
+                        <td>{formatScore(symbol.trend_score, copy)}</td>
+                        <td>{formatScore(symbol.range_score, copy)}</td>
+                        <td>{symbol.trigger_reason || copy.misc.watching}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <aside className="detail-panel">
+                {selected ? (
+                  <SymbolDetail
+                    copy={copy}
+                    onClosePaper={submitPaperClose}
+                    onOpenTradingView={openTradingView}
+                    onLeverageChange={setOrderLeverage}
+                    onMarginChange={setOrderMargin}
+                    onOpenPaper={submitPaperOrder}
+                    orderLeverage={orderLeverage}
+                    orderMargin={orderMargin}
+                    paper={snapshot.paper}
+                    symbol={selected}
+                    themeMode={themeMode}
+                    tradeBusy={tradeBusy}
+                    tradeError={tradeError}
+                  />
+                ) : null}
+              </aside>
+            </section>
+          )}
+        </>
       )}
       {viewMode === "radar" && tradingViewSymbol ? (
         <TradingViewModal
@@ -493,7 +430,7 @@ export default function App() {
           themeMode={themeMode}
         />
       ) : null}
-    </main>
+    </ConsoleShell>
   );
 }
 
