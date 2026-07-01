@@ -31,7 +31,7 @@ const symbol: SymbolSnapshot = {
 
 describe("uiFormat", () => {
   it("formats table values and tags", () => {
-    expect(formatPrice(symbol.price)).toBe("1,585.29");
+    expect(formatPrice(symbol.price)).toBe("1585.29");
     expect(formatPct(symbol.change_15m_pct)).toBe("0.22%");
     expect(formatTags(symbol.pool_tags, copy)).toBe("固定 / 手动关注");
   });

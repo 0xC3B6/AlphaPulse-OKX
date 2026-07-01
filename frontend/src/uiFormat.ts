@@ -64,10 +64,7 @@ export function formatState(value: string, copy: Copy): string {
 
 export function formatPrice(value: number): string {
   if (value >= 100) {
-    return value.toLocaleString(undefined, {
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2,
-    });
+    return value.toFixed(2);
   }
   if (value >= 1) {
     return value.toFixed(4);
