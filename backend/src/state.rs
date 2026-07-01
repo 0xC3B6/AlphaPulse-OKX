@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::Utc;
 use serde::Serialize;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 
 use crate::{
     domain::SymbolSnapshot,

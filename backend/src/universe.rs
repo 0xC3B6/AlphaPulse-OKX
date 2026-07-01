@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-pub use crate::quality::UniversePolicy;
 use crate::quality::add_tag;
+pub use crate::quality::UniversePolicy;
 
 const DAY_MS: f64 = 86_400_000.0;
 

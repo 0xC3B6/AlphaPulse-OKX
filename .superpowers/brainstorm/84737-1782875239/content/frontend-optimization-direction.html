@@ -1,0 +1,431 @@
+<style>
+  .ap-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .ap-card {
+    min-height: 520px;
+  }
+
+  .ap-preview {
+    overflow: hidden;
+    border: 1px solid #283244;
+    border-radius: 10px;
+    background: #0b0e14;
+    color: #cbd5e1;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .ap-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #283244;
+    background: #151924;
+    padding: 10px 12px;
+  }
+
+  .ap-logo {
+    color: white;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .ap-logo span {
+    color: #3b82f6;
+  }
+
+  .ap-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ap-pill,
+  .ap-tab {
+    border: 1px solid #2b313f;
+    border-radius: 999px;
+    background: #0b0e14;
+    color: #94a3b8;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .ap-tab {
+    border-radius: 7px;
+  }
+
+  .ap-tab.active,
+  .ap-pill.active {
+    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(59, 130, 246, 0.16);
+    color: #60a5fa;
+  }
+
+  .ap-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+  }
+
+  .ap-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #10b981;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.55);
+  }
+
+  .ap-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34%;
+    min-height: 306px;
+  }
+
+  .ap-toolbar {
+    border-bottom: 1px solid #283244;
+    padding: 9px;
+  }
+
+  .ap-table {
+    display: grid;
+    gap: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+  }
+
+  .ap-row {
+    display: grid;
+    grid-template-columns: 1.15fr 0.7fr 0.55fr 0.55fr 1fr;
+    gap: 6px;
+    align-items: center;
+    border-bottom: 1px solid rgba(40, 50, 68, 0.72);
+    padding: 9px 12px;
+  }
+
+  .ap-row.head {
+    position: sticky;
+    top: 0;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: #151924;
+  }
+
+  .ap-symbol {
+    color: white;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .ap-sub {
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .ap-pos {
+    color: #34d399;
+  }
+
+  .ap-neg {
+    color: #fb7185;
+  }
+
+  .ap-side {
+    border-left: 1px solid #283244;
+    background: #0b0e14;
+    padding: 14px;
+  }
+
+  .ap-price {
+    color: #34d399;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .ap-chart {
+    display: grid;
+    place-items: center;
+    height: 172px;
+    margin-top: 12px;
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, transparent 0 48%, rgba(52, 211, 153, 0.25) 49% 51%, transparent 52%),
+      radial-gradient(circle at 20% 25%, rgba(96, 165, 250, 0.14), transparent 28%),
+      #151924;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .ap-macro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .ap-hero {
+    position: relative;
+    grid-column: span 2;
+    min-height: 132px;
+    overflow: hidden;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    background: #18181b;
+    padding: 18px;
+  }
+
+  .ap-hero:after {
+    position: absolute;
+    top: -50px;
+    right: -50px;
+    width: 140px;
+    height: 140px;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.16);
+    filter: blur(28px);
+    content: "";
+  }
+
+  .ap-hero b {
+    display: block;
+    margin-top: 8px;
+    color: white;
+    font-size: 24px;
+    line-height: 1.05;
+  }
+
+  .ap-metric {
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    background: #18181b;
+    padding: 15px;
+  }
+
+  .ap-metric span,
+  .ap-hero span {
+    color: #71717a;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .ap-metric strong {
+    display: block;
+    margin-top: 10px;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 21px;
+  }
+
+  .ap-progress {
+    grid-column: span 2;
+    border: 1px solid #27272a;
+    border-radius: 14px;
+    background: #18181b;
+    padding: 17px;
+  }
+
+  .ap-track {
+    overflow: hidden;
+    height: 10px;
+    margin-top: 14px;
+    border-radius: 999px;
+    background: #27272a;
+  }
+
+  .ap-track i {
+    display: block;
+    width: 56%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2563eb, #60a5fa);
+  }
+
+  .ap-hybrid {
+    display: grid;
+    gap: 12px;
+    padding: 13px;
+  }
+
+  .ap-hybrid-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38%;
+    gap: 12px;
+  }
+
+  .ap-hybrid .ap-table-card,
+  .ap-hybrid .ap-panel-card,
+  .ap-hybrid .ap-macro-strip {
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background: #151924;
+  }
+
+  .ap-hybrid .ap-macro-strip {
+    display: grid;
+    grid-template-columns: 1.5fr repeat(4, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .ap-hybrid .ap-tile {
+    min-width: 0;
+    border: 1px solid #283244;
+    border-radius: 7px;
+    background: #0b0e14;
+    padding: 9px;
+  }
+
+  .ap-hybrid .ap-tile span {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .ap-hybrid .ap-tile strong {
+    display: block;
+    margin-top: 5px;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+
+  .ap-option-note {
+    margin-top: 12px;
+    color: #5b6472;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 1100px) {
+    .ap-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<h2>前端优化方向</h2>
+<p class="subtitle">请看三个方向。你可以点击选择一个，也可以直接在终端说要混合哪些点。</p>
+
+<div class="cards ap-grid">
+  <div class="card ap-card" data-choice="radar-console" onclick="toggleSelect(this)">
+    <div class="card-image ap-preview">
+      <div class="ap-topbar">
+        <div class="ap-logo">AlphaPulse <span>OKX</span></div>
+        <div class="ap-pill-row">
+          <span class="ap-tab active">Radar</span>
+          <span class="ap-tab">Macro</span>
+        </div>
+        <div class="ap-status"><i class="ap-dot"></i> Backend Connected</div>
+      </div>
+      <div class="ap-layout">
+        <div>
+          <div class="ap-toolbar ap-pill-row">
+            <span class="ap-pill">All</span>
+            <span class="ap-pill">Trend</span>
+            <span class="ap-pill active">Fixed</span>
+          </div>
+          <div class="ap-table">
+            <div class="ap-row head"><span>Symbol</span><span>Price</span><span>5m</span><span>15m</span><span>Signal</span></div>
+            <div class="ap-row"><span><b class="ap-symbol">ETH-USDT</b><br><i class="ap-sub">fixed / watch</i></span><span>1,585.29</span><span class="ap-pos">+0.13%</span><span class="ap-pos">+0.22%</span><span class="ap-pos">LONG</span></div>
+            <div class="ap-row"><span><b class="ap-symbol">LAB-USDT</b><br><i class="ap-sub">manual watch</i></span><span>11.9550</span><span class="ap-neg">-0.12%</span><span class="ap-neg">-1.44%</span><span>NEUTRAL</span></div>
+            <div class="ap-row"><span><b class="ap-symbol">BEAT-USDT</b><br><i class="ap-sub">fixed</i></span><span>2.9667</span><span class="ap-neg">-0.10%</span><span class="ap-pos">+0.36%</span><span class="ap-neg">SHORT</span></div>
+          </div>
+        </div>
+        <aside class="ap-side">
+          <b class="ap-symbol">ETH-USDT</b>
+          <div class="ap-sub">Updated 10:38:17</div>
+          <div style="margin-top:14px;color:#94a3b8;font-size:11px;">Current Price</div>
+          <div class="ap-price">1,585.53</div>
+          <div class="ap-chart">Chart / FVG Area</div>
+        </aside>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 交易雷达工作台</h3>
+      <p>重点优化主雷达：紧凑顶栏、连接状态胶囊、固定高度表格、右侧详情面板，更像日内交易终端。</p>
+    </div>
+  </div>
+
+  <div class="card ap-card" data-choice="macro-cards" onclick="toggleSelect(this)">
+    <div class="card-image ap-preview" style="background:#09090b;">
+      <div style="padding:18px 18px 4px;">
+        <div style="color:white;font-size:20px;font-weight:800;">BTC Macro Cycle</div>
+        <div class="ap-sub">Quarter 9 - Drawdown -53.2% - 200W MA near</div>
+      </div>
+      <div class="ap-macro-grid">
+        <div class="ap-hero">
+          <span>Current Regime</span>
+          <b>Bottoming Accumulation</b>
+          <div style="display:flex;justify-content:space-between;margin-top:24px;">
+            <div><span>BTC Price</span><strong style="display:block;color:white;font-size:18px;">$59,016</strong></div>
+            <div><span>Confidence</span><strong style="display:block;color:#34d399;font-size:18px;">90/100</strong></div>
+          </div>
+        </div>
+        <div class="ap-metric"><span>Days Since Halving</span><strong>802</strong></div>
+        <div class="ap-metric"><span>Drawdown</span><strong class="ap-neg">-53.24%</strong></div>
+        <div class="ap-metric"><span>Weekly MA200</span><strong>$62,691</strong></div>
+        <div class="ap-metric"><span>90d Change</span><strong class="ap-neg">-11.72%</strong></div>
+        <div class="ap-progress"><span>Cycle Progress</span><div class="ap-track"><i></i></div><div style="margin-top:10px;text-align:right;color:#60a5fa;font-family:ui-monospace;">54.89%</div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 宏观周期卡片化</h3>
+      <p>重点优化 Macro：大状态卡、指标卡、进度条和图表区层级，让宏观判断一眼可扫。</p>
+    </div>
+  </div>
+
+  <div class="card ap-card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image ap-preview">
+      <div class="ap-topbar">
+        <div class="ap-logo">AlphaPulse <span>OKX</span></div>
+        <div class="ap-pill-row">
+          <span class="ap-tab active">Radar</span>
+          <span class="ap-tab">Macro</span>
+        </div>
+        <div class="ap-pill-row">
+          <span class="ap-pill active">Connected</span>
+          <span class="ap-pill">Idle</span>
+          <span class="ap-pill">10:38</span>
+        </div>
+      </div>
+      <div class="ap-hybrid">
+        <div class="ap-macro-strip">
+          <div class="ap-tile"><span>Regime</span><strong>Bottoming</strong></div>
+          <div class="ap-tile"><span>BTC</span><strong>$59,016</strong></div>
+          <div class="ap-tile"><span>Conf.</span><strong class="ap-pos">90</strong></div>
+          <div class="ap-tile"><span>Drawdown</span><strong class="ap-neg">-53%</strong></div>
+          <div class="ap-tile"><span>Cycle</span><strong>55%</strong></div>
+        </div>
+        <div class="ap-hybrid-main">
+          <div class="ap-table-card">
+            <div class="ap-toolbar ap-pill-row"><span class="ap-pill active">All</span><span class="ap-pill">Trend</span><span class="ap-pill">Range</span><span class="ap-pill">Hot</span></div>
+            <div class="ap-table">
+              <div class="ap-row head"><span>Symbol</span><span>Price</span><span>5m</span><span>15m</span><span>Signal</span></div>
+              <div class="ap-row"><span><b class="ap-symbol">ETH-USDT</b><br><i class="ap-sub">fixed</i></span><span>1,585.29</span><span class="ap-pos">+0.13%</span><span class="ap-pos">+0.22%</span><span class="ap-pos">LONG</span></div>
+              <div class="ap-row"><span><b class="ap-symbol">BEAT-USDT</b><br><i class="ap-sub">hot</i></span><span>2.9667</span><span class="ap-neg">-0.10%</span><span class="ap-pos">+0.36%</span><span class="ap-neg">SHORT</span></div>
+            </div>
+          </div>
+          <div class="ap-panel-card ap-side" style="border-left:1px solid #283244;">
+            <b class="ap-symbol">Selected Symbol</b>
+            <div class="ap-chart" style="height:126px;">Chart</div>
+            <div class="ap-option-note">FVG、支撑阻力、模拟持仓收进分组区块，避免详情面板过长。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 推荐：统一交易控制台</h3>
+      <p>用雷达 HTML 的工作台结构作为全局壳，再把宏观 HTML 的核心卡片压缩成顶部摘要或 Macro 页首屏。</p>
+    </div>
+  </div>
+</div>
