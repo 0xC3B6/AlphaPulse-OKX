@@ -15,6 +15,24 @@ import {
 import "./styles.css";
 import { defaultLanguage, translations } from "./i18n";
 import type { Copy, Language } from "./i18n";
+import {
+  formatPct,
+  formatPrice,
+  formatQuantity,
+  formatScore,
+  formatSignedUsdt,
+  formatState,
+  formatTags,
+  formatTemplate,
+  formatTimestamp,
+  formatUsdt,
+  matchesFilter,
+  maxScore,
+  pnlClass,
+  type Filter,
+  type ThemeMode,
+  type ViewMode,
+} from "./uiFormat";
 import type {
   BackendEvent,
   BtcMacroSnapshot,
@@ -23,10 +41,6 @@ import type {
   PaperSide,
   SymbolSnapshot,
 } from "./types";
-
-type Filter = "all" | "trend" | "range" | "hot" | "fixed";
-type ThemeMode = "light" | "dark" | "system";
-type ViewMode = "radar" | "macro";
 
 const themeStorageKey = "alphapulse-theme";
 const languageStorageKey = "alphapulse-language";
@@ -793,98 +807,6 @@ function upsertSymbol(
   return { ...snapshot, symbols };
 }
 
-function matchesFilter(symbol: SymbolSnapshot, filter: Filter): boolean {
-  if (filter === "trend") {
-    return symbol.trend_score.value >= 65;
-  }
-  if (filter === "range") {
-    return symbol.range_score.value >= 65;
-  }
-  if (filter === "hot") {
-    return symbol.pool_tags.includes("dynamic");
-  }
-  if (filter === "fixed") {
-    return symbol.pool_tags.includes("fixed");
-  }
-  return true;
-}
-
-function maxScore(symbol: SymbolSnapshot): number {
-  return Math.max(symbol.trend_score.value, symbol.range_score.value);
-}
-
-function formatScore(score: SymbolSnapshot["trend_score"], copy: Copy): string {
-  return `${score.value} ${copy.directions[score.direction]}`;
-}
-
-function formatTags(tags: string[], copy: Copy): string {
-  if (tags.length === 0) {
-    return copy.misc.unlabeled;
-  }
-  return tags
-    .map((tag) => formatTag(tag, copy))
-    .join(" / ");
-}
-
-function formatTag(tag: string, copy: Copy): string {
-  const labels = copy.poolTags as unknown as Record<string, string>;
-  return labels[tag] ?? tag;
-}
-
-function formatState(value: string, copy: Copy): string {
-  return copy.states[value as keyof Copy["states"]] ?? value;
-}
-
-function formatPrice(value: number): string {
-  if (value >= 100) {
-    return value.toFixed(2);
-  }
-  if (value >= 1) {
-    return value.toFixed(4);
-  }
-  return value.toFixed(6);
-}
-
-function formatQuantity(value: number): string {
-  if (value >= 100) {
-    return value.toFixed(2);
-  }
-  if (value >= 1) {
-    return value.toFixed(4);
-  }
-  return value.toFixed(6);
-}
-
-function formatUsdt(value: number): string {
-  return `${value.toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })} USDT`;
-}
-
-function formatSignedUsdt(value: number): string {
-  const prefix = value > 0 ? "+" : "";
-  return `${prefix}${formatUsdt(value)}`;
-}
-
-function formatPct(value: number): string {
-  return `${(value * 100).toFixed(2)}%`;
-}
-
-function pnlClass(value: number): string {
-  if (value > 0) {
-    return "positive";
-  }
-  if (value < 0) {
-    return "negative";
-  }
-  return "";
-}
-
-function formatTemplate(template: string, symbol: string): string {
-  return template.replace("{symbol}", symbol);
-}
-
 function resolveTradingViewSymbol(instId: string): string | null {
   const normalized = instId.toUpperCase().replace(/[^A-Z0-9-]/g, "");
   const swapMatch = normalized.match(/^([A-Z0-9]+)-USDT-SWAP$/);
@@ -914,11 +836,4 @@ function buildTradingViewEmbedUrl(symbol: string, themeMode: ThemeMode, language
     withdateranges: "1",
   });
   return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-}
-
-function formatTimestamp(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return new Date(value).toLocaleTimeString();
 }

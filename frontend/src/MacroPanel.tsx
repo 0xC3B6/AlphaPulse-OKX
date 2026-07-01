@@ -16,8 +16,14 @@ import type {
   AnalogPathSummary,
   BtcMacroSnapshot,
   ExternalMetricStatus,
-  MacroRegime,
 } from "./types";
+import {
+  formatDate,
+  formatPct,
+  formatRegime,
+  formatSnake,
+  formatUsd,
+} from "./uiFormat";
 
 export function MacroPanel({
   copy,
@@ -1717,14 +1723,6 @@ function formatCompactUsdAxis(value: number): string {
   return `$${value.toFixed(4)}`;
 }
 
-function formatRegime(regime: MacroRegime, copy: Copy): string {
-  return copy.macro.regimes[regime] ?? formatSnake(regime);
-}
-
-function formatSnake(value: string): string {
-  return value.replace(/_/g, " ");
-}
-
 function formatValuationMetric(metric: ExternalMetricStatus): string {
   if (metric.value == null) {
     return formatSnake(metric.status);
@@ -1736,19 +1734,4 @@ function formatMetricMeta(metric: ExternalMetricStatus): string {
   return [metric.source, metric.date, metric.zone ? formatSnake(metric.zone) : null, metric.note]
     .filter(Boolean)
     .join(" · ");
-}
-
-function formatUsd(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`;
-}
-
-function formatPct(value: number): string {
-  return `${(value * 100).toFixed(2)}%`;
-}
-
-function formatDate(value: number): string {
-  return new Date(value).toLocaleDateString();
 }
