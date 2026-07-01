@@ -1,0 +1,355 @@
+<style>
+  .console-plan {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+    gap: 18px;
+  }
+
+  .console-frame {
+    overflow: hidden;
+    border: 1px solid #283244;
+    border-radius: 12px;
+    background: #0b0e14;
+    color: #cbd5e1;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .console-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid #283244;
+    background: #151924;
+    padding: 12px 14px;
+  }
+
+  .console-logo {
+    color: white;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .console-logo span {
+    color: #3b82f6;
+  }
+
+  .console-tabs,
+  .console-status,
+  .console-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .chip {
+    border: 1px solid #2b313f;
+    border-radius: 999px;
+    background: #0b0e14;
+    color: #94a3b8;
+    padding: 5px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .chip.tab {
+    border-radius: 7px;
+  }
+
+  .chip.active {
+    border-color: rgba(59, 130, 246, 0.48);
+    background: rgba(59, 130, 246, 0.16);
+    color: #60a5fa;
+  }
+
+  .macro-strip {
+    display: grid;
+    grid-template-columns: 1.55fr repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    border-bottom: 1px solid #283244;
+    padding: 12px 14px;
+  }
+
+  .macro-tile {
+    min-width: 0;
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background: #151924;
+    padding: 10px;
+  }
+
+  .macro-tile span {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .macro-tile strong {
+    display: block;
+    margin-top: 6px;
+    overflow: hidden;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .console-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    min-height: 430px;
+  }
+
+  .radar-area {
+    min-width: 0;
+    border-right: 1px solid #283244;
+  }
+
+  .console-filters {
+    border-bottom: 1px solid #283244;
+    padding: 10px 12px;
+  }
+
+  .radar-table {
+    display: grid;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .radar-row {
+    display: grid;
+    grid-template-columns: 1.15fr 0.78fr 0.58fr 0.58fr 0.58fr 0.82fr 1.2fr;
+    gap: 8px;
+    align-items: center;
+    border-bottom: 1px solid rgba(40, 50, 68, 0.7);
+    padding: 10px 12px;
+  }
+
+  .radar-row.head {
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: #151924;
+  }
+
+  .sym {
+    color: white;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .muted {
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .pos {
+    color: #34d399;
+  }
+
+  .neg {
+    color: #fb7185;
+  }
+
+  .detail-area {
+    min-width: 0;
+    background: #0b0e14;
+    padding: 14px;
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .price {
+    margin-top: 10px;
+    color: #34d399;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .chart-box {
+    display: grid;
+    place-items: center;
+    height: 160px;
+    margin-top: 12px;
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, transparent 0 47%, rgba(52, 211, 153, 0.24) 48% 50%, transparent 51%),
+      radial-gradient(circle at 22% 25%, rgba(96, 165, 250, 0.15), transparent 28%),
+      #151924;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .detail-groups {
+    display: grid;
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .group {
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background: #151924;
+    padding: 10px;
+  }
+
+  .group strong {
+    display: block;
+    color: white;
+    font-size: 12px;
+  }
+
+  .group span {
+    display: block;
+    margin-top: 5px;
+    color: #94a3b8;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .component-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 0;
+  }
+
+  .component-list .option {
+    cursor: default;
+  }
+
+  @media (max-width: 1200px) {
+    .console-plan,
+    .console-body {
+      grid-template-columns: 1fr;
+    }
+
+    .macro-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
+
+<h2>方案 2：组件化控制台改版</h2>
+<p class="subtitle">第一段先确认整体布局和组件边界。视觉目标是深色交易终端，信息目标是首屏可扫、详情可钻取。</p>
+
+<div class="console-plan">
+  <div class="mockup">
+    <div class="mockup-header">布局预览：统一交易控制台</div>
+    <div class="mockup-body">
+      <div class="console-frame">
+        <div class="console-topbar">
+          <div class="console-logo">AlphaPulse <span>OKX</span></div>
+          <div class="console-tabs">
+            <span class="chip tab active">Radar</span>
+            <span class="chip tab">Macro</span>
+          </div>
+          <div class="console-status">
+            <span class="chip active">Backend Connected</span>
+            <span class="chip">Stream Idle</span>
+            <span class="chip">10:38:02</span>
+          </div>
+        </div>
+
+        <div class="macro-strip">
+          <div class="macro-tile"><span>Regime</span><strong>Bottoming Accumulation</strong></div>
+          <div class="macro-tile"><span>BTC</span><strong>$59,016</strong></div>
+          <div class="macro-tile"><span>Confidence</span><strong class="pos">90/100</strong></div>
+          <div class="macro-tile"><span>Drawdown</span><strong class="neg">-53.24%</strong></div>
+          <div class="macro-tile"><span>Cycle</span><strong>54.89%</strong></div>
+          <div class="macro-tile"><span>MA200W</span><strong>$62,691</strong></div>
+        </div>
+
+        <div class="console-body">
+          <div class="radar-area">
+            <div class="console-filters">
+              <span class="chip active">All</span>
+              <span class="chip">Trend</span>
+              <span class="chip">Range</span>
+              <span class="chip">Hot</span>
+              <span class="chip">Fixed</span>
+            </div>
+            <div class="radar-table">
+              <div class="radar-row head">
+                <span>Symbol</span><span>Price</span><span>5m</span><span>15m</span><span>1h</span><span>Score</span><span>Signal</span>
+              </div>
+              <div class="radar-row">
+                <span><b class="sym">ETH-USDT</b><br><i class="muted">fixed / manual watch</i></span>
+                <span>1,585.29</span><span class="pos">+0.13%</span><span class="pos">+0.22%</span><span class="pos">+1.18%</span><span class="pos">90 / 76</span><span>range 90: clear recent range</span>
+              </div>
+              <div class="radar-row">
+                <span><b class="sym">LAB-USDT</b><br><i class="muted">fixed / watch</i></span>
+                <span>11.9550</span><span class="neg">-0.12%</span><span class="neg">-1.44%</span><span>+0.04%</span><span>61 / 72</span><span>near FVG zone</span>
+              </div>
+              <div class="radar-row">
+                <span><b class="sym">BEAT-USDT</b><br><i class="muted">hot / dynamic</i></span>
+                <span>2.9667</span><span class="neg">-0.10%</span><span class="pos">+0.36%</span><span class="neg">-0.88%</span><span class="neg">83 / 40</span><span>near resistance</span>
+              </div>
+            </div>
+          </div>
+
+          <aside class="detail-area">
+            <div class="detail-header">
+              <div>
+                <b class="sym">ETH-USDT</b>
+                <div class="muted">Updated 10:38:17</div>
+              </div>
+              <span class="chip">TV</span>
+            </div>
+            <div class="price">1,585.53</div>
+            <div class="chart-box">Chart + FVG Overlay</div>
+            <div class="detail-groups">
+              <div class="group"><strong>Structure</strong><span>FVG zones, support/resistance, funding snapshot.</span></div>
+              <div class="group"><strong>Paper Trading</strong><span>Equity, margin, current position, quick long/short controls.</span></div>
+              <div class="group"><strong>Recent Signals</strong><span>Latest reasons and score changes stay compact.</span></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3>组件边界</h3>
+    <div class="options component-list">
+      <div class="option">
+        <div class="letter">1</div>
+        <div class="content">
+          <h3>ConsoleShell</h3>
+          <p>负责页面骨架、顶栏、状态胶囊、视图切换、主题/语言/通知入口。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">2</div>
+        <div class="content">
+          <h3>MacroSummaryStrip</h3>
+          <p>在 Radar 首屏显示宏观核心摘要；Macro 页继续展示完整周期分析。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">3</div>
+        <div class="content">
+          <h3>RadarWorkspace</h3>
+          <p>承载过滤器、市场表格和右侧详情面板，保持交易工作台密度。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">4</div>
+        <div class="content">
+          <h3>SymbolDetailPanel</h3>
+          <p>把图表、结构信号、模拟账户、历史信号分组，减少长列表滚动感。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

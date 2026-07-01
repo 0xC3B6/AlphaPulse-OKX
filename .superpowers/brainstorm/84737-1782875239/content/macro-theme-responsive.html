@@ -1,0 +1,327 @@
+<style>
+  .macro-plan {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+    gap: 18px;
+  }
+
+  .macro-screen {
+    overflow: hidden;
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    background: #09090b;
+    color: #d4d4d8;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    padding: 18px;
+  }
+
+  .macro-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .macro-head h3 {
+    margin: 0;
+    color: white;
+    font-size: 22px;
+  }
+
+  .macro-head p {
+    margin: 4px 0 0;
+    color: #71717a;
+    font-size: 12px;
+  }
+
+  .refresh {
+    border: 1px solid #3f3f46;
+    border-radius: 7px;
+    background: #18181b;
+    color: white;
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .macro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .hero,
+  .tile,
+  .progress,
+  .chart-card {
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    background: #18181b;
+  }
+
+  .hero {
+    position: relative;
+    grid-column: span 2;
+    min-height: 150px;
+    overflow: hidden;
+    padding: 18px;
+  }
+
+  .hero:after {
+    position: absolute;
+    top: -52px;
+    right: -52px;
+    width: 150px;
+    height: 150px;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.16);
+    filter: blur(30px);
+    content: "";
+  }
+
+  .eyebrow,
+  .tile span,
+  .progress span {
+    color: #71717a;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .hero strong {
+    display: block;
+    margin-top: 8px;
+    color: white;
+    font-size: 28px;
+    line-height: 1.05;
+  }
+
+  .hero-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 26px;
+  }
+
+  .hero-foot b,
+  .tile strong {
+    display: block;
+    margin-top: 5px;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .tile {
+    min-height: 86px;
+    padding: 15px;
+  }
+
+  .tile strong {
+    font-size: 20px;
+  }
+
+  .neg {
+    color: #fb7185 !important;
+  }
+
+  .pos {
+    color: #34d399 !important;
+  }
+
+  .progress {
+    grid-column: span 2;
+    padding: 16px;
+  }
+
+  .progress-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .track {
+    overflow: hidden;
+    height: 10px;
+    margin-top: 12px;
+    border-radius: 999px;
+    background: #27272a;
+  }
+
+  .track i {
+    display: block;
+    width: 55%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2563eb, #60a5fa);
+  }
+
+  .chart-card {
+    grid-column: span 4;
+    min-height: 180px;
+    padding: 14px;
+  }
+
+  .chart-line {
+    height: 118px;
+    margin-top: 12px;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, transparent 0 44%, rgba(91, 140, 255, 0.35) 45% 47%, transparent 48%),
+      linear-gradient(24deg, transparent 0 57%, rgba(229, 184, 77, 0.32) 58% 60%, transparent 61%),
+      #111827;
+  }
+
+  .specs {
+    display: grid;
+    gap: 10px;
+  }
+
+  .specs .option {
+    cursor: default;
+  }
+
+  .mobile-strip {
+    margin-top: 16px;
+    border: 1px solid #283244;
+    border-radius: 12px;
+    background: #0b0e14;
+    padding: 12px;
+  }
+
+  .mobile-bar {
+    display: grid;
+    gap: 8px;
+    max-width: 310px;
+    margin: 0 auto;
+  }
+
+  .mobile-top {
+    display: flex;
+    justify-content: space-between;
+    color: white;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .mobile-card {
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background: #151924;
+    padding: 10px;
+  }
+
+  .mobile-card span {
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .mobile-card strong {
+    display: block;
+    margin-top: 4px;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (max-width: 1100px) {
+    .macro-plan {
+      grid-template-columns: 1fr;
+    }
+
+    .macro-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .chart-card {
+      grid-column: span 2;
+    }
+  }
+</style>
+
+<h2>设计 3：Macro、主题与响应式策略</h2>
+<p class="subtitle">Macro 页保留完整分析能力，但首屏更像参考 HTML：先给状态判断，再给指标和图表。</p>
+
+<div class="macro-plan">
+  <div class="mockup">
+    <div class="mockup-header">Macro 完整页首屏</div>
+    <div class="mockup-body">
+      <div class="macro-screen">
+        <div class="macro-head">
+          <div>
+            <h3>BTC Macro Cycle</h3>
+            <p>Quarter 9 - Drawdown -53.2% - 200W MA near</p>
+          </div>
+          <button class="refresh">Refresh Data</button>
+        </div>
+        <div class="macro-grid">
+          <div class="hero">
+            <span class="eyebrow">Current Regime</span>
+            <strong>Bottoming Accumulation</strong>
+            <div class="hero-foot">
+              <div><span class="eyebrow">BTC Price</span><b>$59,016</b></div>
+              <div><span class="eyebrow">Confidence</span><b class="pos">90/100</b></div>
+            </div>
+          </div>
+          <div class="tile"><span>Days Since Halving</span><strong>802</strong></div>
+          <div class="tile"><span>Drawdown</span><strong class="neg">-53.24%</strong></div>
+          <div class="tile"><span>Weekly MA200</span><strong>$62,691</strong></div>
+          <div class="tile"><span>90d Change</span><strong class="neg">-11.72%</strong></div>
+          <div class="progress">
+            <div class="progress-row"><span>Last Halving: 2024/4/20</span><span>Next: 2028/4/20</span></div>
+            <div class="track"><i></i></div>
+            <div style="margin-top:10px;text-align:right;color:#60a5fa;font-family:ui-monospace;">Cycle Progress 54.89%</div>
+          </div>
+          <div class="chart-card">
+            <span class="eyebrow">AHR999 + Analog Comparisons</span>
+            <div class="chart-line"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3>实现策略</h3>
+    <div class="options specs">
+      <div class="option">
+        <div class="letter">1</div>
+        <div class="content">
+          <h3>MacroSummaryStrip 复用数据，不复制逻辑</h3>
+          <p>Radar 顶部摘要和 Macro 页首屏都从同一个 macro snapshot 派生展示，避免两个请求或两套格式化逻辑。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">2</div>
+        <div class="content">
+          <h3>主题变量收敛为交易终端色板</h3>
+          <p>深色主题优先对齐参考 HTML；浅色主题保留可读性，但不追求完全同等视觉重量。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">3</div>
+        <div class="content">
+          <h3>响应式：桌面双栏，移动单栏</h3>
+          <p>桌面保持左表右详情；移动端把宏观摘要、过滤器、表格、详情按顺序堆叠，避免横向挤压。</p>
+        </div>
+      </div>
+      <div class="option">
+        <div class="letter">4</div>
+        <div class="content">
+          <h3>测试覆盖组件行为和关键文本</h3>
+          <p>保留现有测试，增加摘要条、视图切换、表格选中和 Macro loading/error 的覆盖；视觉用浏览器截图人工验收。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-strip">
+      <h3 style="margin-top:0;">移动端顺序</h3>
+      <div class="mobile-bar">
+        <div class="mobile-top"><span>AlphaPulse OKX</span><span>Radar</span></div>
+        <div class="mobile-card"><span>Macro Summary</span><strong>Bottoming / $59,016 / 90</strong></div>
+        <div class="mobile-card"><span>Filters</span><strong>All - Trend - Range - Fixed</strong></div>
+        <div class="mobile-card"><span>Selected Symbol</span><strong>ETH-USDT Detail</strong></div>
+      </div>
+    </div>
+  </div>
+</div>

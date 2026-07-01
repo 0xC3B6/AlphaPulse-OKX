@@ -1,10 +1,10 @@
 use std::sync::{
-    Arc,
     atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use alphapulse_okx_backend::{domain::Timeframe, okx::rest::OkxRestClient};
-use axum::{Router, extract::Query, http::StatusCode, routing::get};
+use axum::{extract::Query, http::StatusCode, routing::get, Router};
 
 #[tokio::test]
 async fn retries_transient_http_failures() {

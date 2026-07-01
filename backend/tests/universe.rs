@@ -24,10 +24,14 @@ fn merges_dynamic_and_fixed_symbols_without_duplicates() {
             .count(),
         1
     );
-    assert!(universe.iter().any(|symbol| symbol.inst_id == "DOGE-USDT-SWAP"
-        && symbol.tags.contains(&"fixed".to_string())));
-    assert!(universe.iter().any(|symbol| symbol.inst_id == "LAB-USDT-SWAP"
-        && symbol.tags.contains(&"dynamic".to_string())));
+    assert!(universe
+        .iter()
+        .any(|symbol| symbol.inst_id == "DOGE-USDT-SWAP"
+            && symbol.tags.contains(&"fixed".to_string())));
+    assert!(universe
+        .iter()
+        .any(|symbol| symbol.inst_id == "LAB-USDT-SWAP"
+            && symbol.tags.contains(&"dynamic".to_string())));
 }
 
 #[test]

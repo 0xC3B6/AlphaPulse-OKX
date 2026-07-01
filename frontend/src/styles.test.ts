@@ -63,4 +63,17 @@ describe("console palette", () => {
     expect(css).toContain(".radar-workspace > .detail-panel");
     expect(css).not.toContain(".radar-table-panel,\n.detail-panel");
   });
+
+  it("keeps detail market metrics inside their cards", () => {
+    const metricStrip = cssBlock(".detail-metric-strip");
+    const metricCard = cssBlock(".detail-metric-strip div");
+    const metricValue = cssBlock(".detail-metric-strip dd");
+
+    expect(metricStrip).toContain("auto-fit");
+    expect(metricStrip).toContain("minmax(96px, 1fr)");
+    expect(metricCard).toContain("min-width: 0");
+    expect(metricCard).toContain("overflow: hidden");
+    expect(metricValue).toContain("max-width: 100%");
+    expect(metricValue).toContain("overflow-wrap: anywhere");
+  });
 });

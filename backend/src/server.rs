@@ -1,16 +1,18 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
-    Json, Router,
     extract::{
-        Path, Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
+        Path, Query, State,
     },
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
+    Json, Router,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
@@ -30,6 +32,7 @@ struct AppCtx {
     state: RadarState,
     rest: OkxRestClient,
     valuation: CoinglassValuationClient,
+    macro_cache: Arc<Mutex<macro_cycle::BtcMacroSnapshotCache>>,
 }
 
 pub fn build_router(config: AppConfig, state: RadarState) -> Router {
@@ -37,6 +40,9 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
         state,
         rest: OkxRestClient::new(),
         valuation: CoinglassValuationClient::new(config.coinglass_api_key.clone()),
+        macro_cache: Arc::new(Mutex::new(macro_cycle::BtcMacroSnapshotCache::new(
+            Duration::from_secs(60),
+        ))),
     };
     Router::new()
         .route("/api/health", get(health))
@@ -82,9 +88,15 @@ async fn snapshot(State(ctx): State<AppCtx>) -> impl IntoResponse {
 }
 
 async fn btc_macro(State(ctx): State<AppCtx>) -> Result<impl IntoResponse, ApiError> {
+    let now_ms = Utc::now().timestamp_millis();
+    if let Some(snapshot) = ctx.macro_cache.lock().await.get(now_ms) {
+        return Ok(Json(snapshot));
+    }
+
     let snapshot = macro_cycle::fetch_btc_macro_snapshot(&ctx.rest, &ctx.valuation)
         .await
         .map_err(ApiError::bad_gateway)?;
+    ctx.macro_cache.lock().await.store(now_ms, snapshot.clone());
     Ok(Json(snapshot))
 }
 

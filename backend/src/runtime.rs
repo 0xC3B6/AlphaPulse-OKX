@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use chrono::Utc;
-use futures_util::{StreamExt, stream};
+use futures_util::{stream, StreamExt};
 use tokio::{sync::mpsc, time};
 
 use crate::{
@@ -10,16 +10,16 @@ use crate::{
     domain::{Candle, Direction, Score, SymbolSnapshot, Timeframe},
     indicators::{
         fvg::detect_fvgs,
-        levels::{LevelConfig, find_levels},
+        levels::{find_levels, LevelConfig},
     },
     okx::{
         rest::{OkxRestClient, TickerRow},
         ws::{self, TickerEvent},
     },
     quality::{add_tag, classify_history},
-    scoring::{ScoringInput, score_symbol},
+    scoring::{score_symbol, ScoringInput},
     state::RadarState,
-    universe::{MarketActivity, UniverseSymbol, build_filtered_symbol_universe},
+    universe::{build_filtered_symbol_universe, MarketActivity, UniverseSymbol},
 };
 
 pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result<()> {

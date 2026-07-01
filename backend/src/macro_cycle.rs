@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use chrono::{Datelike, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -7,10 +9,11 @@ use crate::{
     valuation::{self, Ahr999History, CoinglassValuationClient, ExternalMetricStatus},
 };
 
-const BTC_INST_ID: &str = "BTC-USDT-SWAP";
+const BTC_HISTORY_INST_ID: &str = "BTC-USDT";
+const OKX_BTC_SPOT_MIN_VALID_DAILY_TS_MS: i64 = 1_507_680_000_000;
 const MA_200W_PERIOD: usize = 200;
 const WEEKLY_LIMIT: usize = 260;
-const DAILY_LIMIT: usize = 2600;
+const DAILY_LIMIT: usize = 3600;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -23,12 +26,65 @@ pub enum MacroRegime {
     Neutral,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrendStructure {
+    StrongBull,
+    BullPullback,
+    RepairRally,
+    BearTrend,
+    Choppy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MacroPermissionState {
+    TradeAllowed,
+    ReducedRisk,
+    OnlyBtcEth,
+    ObserveOnly,
+    RadarSilent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadarPriority {
+    High,
+    Medium,
+    Low,
+    Silent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LeverageHint {
+    Normal,
+    Reduced,
+    Avoid,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RadarPolicy {
+    pub altcoin_notify: bool,
+    pub max_priority: RadarPriority,
+    pub leverage_hint: LeverageHint,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MacroPermissionSnapshot {
+    pub state: MacroPermissionState,
+    pub radar_policy: RadarPolicy,
+    pub allowed_behaviors: Vec<String>,
+    pub reasons: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BtcMacroSnapshot {
     pub asset: String,
     pub updated_at_ms: i64,
     pub price: f64,
     pub regime: MacroRegime,
+    pub market_permission: MacroPermissionSnapshot,
     pub confidence: u8,
     pub summary: String,
     pub cycle: HalvingCycleSnapshot,
@@ -40,6 +96,42 @@ pub struct BtcMacroSnapshot {
     pub analogs: Vec<HistoricalAnalog>,
     pub analog_comparisons: Vec<AnalogComparisonSet>,
     pub trading_bias: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BtcMacroSnapshotCache {
+    ttl_ms: i64,
+    entry: Option<CachedBtcMacroSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedBtcMacroSnapshot {
+    stored_at_ms: i64,
+    snapshot: BtcMacroSnapshot,
+}
+
+impl BtcMacroSnapshotCache {
+    pub fn new(ttl: Duration) -> Self {
+        Self {
+            ttl_ms: ttl.as_millis().min(i64::MAX as u128) as i64,
+            entry: None,
+        }
+    }
+
+    pub fn get(&self, now_ms: i64) -> Option<BtcMacroSnapshot> {
+        let entry = self.entry.as_ref()?;
+        if now_ms.saturating_sub(entry.stored_at_ms) <= self.ttl_ms {
+            return Some(entry.snapshot.clone());
+        }
+        None
+    }
+
+    pub fn store(&mut self, now_ms: i64, snapshot: BtcMacroSnapshot) {
+        self.entry = Some(CachedBtcMacroSnapshot {
+            stored_at_ms: now_ms,
+            snapshot,
+        });
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,6 +153,13 @@ pub struct MacroTrendSnapshot {
     pub ma_200w: Option<f64>,
     pub price_vs_200w_pct: Option<f64>,
     pub weekly_ma200_status: String,
+    pub ma_50d: Option<f64>,
+    pub ma_200d: Option<f64>,
+    pub price_vs_50d_pct: Option<f64>,
+    pub price_vs_200d_pct: Option<f64>,
+    pub ma_50d_slope_30d_pct: Option<f64>,
+    pub ma_200d_slope_30d_pct: Option<f64>,
+    pub structure: TrendStructure,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -103,6 +202,19 @@ pub struct AnalogComparisonSet {
     pub timeframe_days: usize,
     pub current: Option<AnalogPathSummary>,
     pub matches: Vec<AnalogMatch>,
+    pub cohort_stats: Vec<AnalogCohortStats>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnalogCohortStats {
+    pub requested_size: usize,
+    pub sample_size: usize,
+    pub up_probability: f64,
+    pub median_forward_return_pct: f64,
+    pub lower_quartile_forward_return_pct: f64,
+    pub median_forward_drawdown_pct: f64,
+    pub median_forward_runup_pct: f64,
+    pub score_floor: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -157,20 +269,25 @@ pub async fn fetch_btc_macro_snapshot(
     valuation_client: &CoinglassValuationClient,
 ) -> anyhow::Result<BtcMacroSnapshot> {
     let daily = rest
-        .fetch_candles_with_history(BTC_INST_ID, Timeframe::D1, DAILY_LIMIT)
+        .fetch_candles_with_history(BTC_HISTORY_INST_ID, Timeframe::D1, DAILY_LIMIT)
         .await
+        .map(clean_btc_spot_daily_history)
         .unwrap_or_default();
-    let weekly = match rest
-        .fetch_candles(BTC_INST_ID, Timeframe::W1, WEEKLY_LIMIT)
-        .await
-    {
-        Ok(weekly) => weekly,
-        Err(error) => {
-            let fallback = weekly_from_daily(&daily);
-            if fallback.is_empty() {
-                return Err(error);
+    let weekly_from_spot_daily = weekly_from_daily(&daily);
+    let weekly = if weekly_from_spot_daily.len() >= MA_200W_PERIOD {
+        weekly_from_spot_daily
+    } else {
+        match rest
+            .fetch_candles(BTC_HISTORY_INST_ID, Timeframe::W1, WEEKLY_LIMIT)
+            .await
+        {
+            Ok(weekly) => weekly,
+            Err(error) => {
+                if weekly_from_spot_daily.is_empty() {
+                    return Err(error);
+                }
+                weekly_from_spot_daily
             }
-            fallback
         }
     };
 
@@ -196,10 +313,11 @@ pub fn build_btc_macro_snapshot(
     anyhow::ensure!(price > 0.0 && price.is_finite(), "BTC price is unavailable");
 
     let cycle = halving_cycle(now_ms);
-    let trend = macro_trend(weekly, price);
+    let trend = macro_trend(weekly, daily, price);
     let momentum = macro_momentum(weekly, daily);
     let events = vec![us_midterm_2026_event(now_ms)];
     let regime = classify_regime(&cycle, &trend, &momentum);
+    let market_permission = macro_market_permission(&regime, &trend, &momentum, &events);
     let confidence = regime_confidence(&trend, &momentum);
     let analogs = historical_analogs(&regime, &cycle, &trend, &momentum);
     let analog_comparisons = historical_analog_comparisons(daily);
@@ -212,6 +330,7 @@ pub fn build_btc_macro_snapshot(
         updated_at_ms: now_ms,
         price,
         regime,
+        market_permission,
         confidence,
         summary,
         cycle,
@@ -271,7 +390,7 @@ fn halving_cycle(now_ms: i64) -> HalvingCycleSnapshot {
     }
 }
 
-fn macro_trend(weekly: &[Candle], price: f64) -> MacroTrendSnapshot {
+fn macro_trend(weekly: &[Candle], daily: &[Candle], price: f64) -> MacroTrendSnapshot {
     let (window_ath, window_ath_ts_ms) = weekly
         .iter()
         .max_by(|left, right| {
@@ -298,6 +417,19 @@ fn macro_trend(weekly: &[Candle], price: f64) -> MacroTrendSnapshot {
         None => "insufficient_history",
     }
     .to_string();
+    let ma_50d = moving_average(daily, 50);
+    let ma_200d = moving_average(daily, 200);
+    let price_vs_50d_pct = ma_50d.map(|ma| price / ma - 1.0);
+    let price_vs_200d_pct = ma_200d.map(|ma| price / ma - 1.0);
+    let ma_50d_slope_30d_pct = moving_average_slope(daily, 50, 30);
+    let ma_200d_slope_30d_pct = moving_average_slope(daily, 200, 30);
+    let structure = trend_structure(
+        price,
+        ma_50d,
+        ma_200d,
+        ma_50d_slope_30d_pct,
+        ma_200d_slope_30d_pct,
+    );
 
     MacroTrendSnapshot {
         window_ath,
@@ -306,6 +438,48 @@ fn macro_trend(weekly: &[Candle], price: f64) -> MacroTrendSnapshot {
         ma_200w,
         price_vs_200w_pct,
         weekly_ma200_status,
+        ma_50d,
+        ma_200d,
+        price_vs_50d_pct,
+        price_vs_200d_pct,
+        ma_50d_slope_30d_pct,
+        ma_200d_slope_30d_pct,
+        structure,
+    }
+}
+
+fn trend_structure(
+    price: f64,
+    ma_50d: Option<f64>,
+    ma_200d: Option<f64>,
+    ma_50d_slope_30d_pct: Option<f64>,
+    ma_200d_slope_30d_pct: Option<f64>,
+) -> TrendStructure {
+    let Some(ma50) = ma_50d else {
+        return TrendStructure::Choppy;
+    };
+    let Some(ma200) = ma_200d else {
+        return TrendStructure::Choppy;
+    };
+    let Some(slope50) = ma_50d_slope_30d_pct else {
+        return TrendStructure::Choppy;
+    };
+    let Some(slope200) = ma_200d_slope_30d_pct else {
+        return TrendStructure::Choppy;
+    };
+
+    let slope_up = 0.002;
+    let slope_down = -0.002;
+    if price > ma50 && ma50 > ma200 && slope50 > slope_up && slope200 > slope_up {
+        TrendStructure::StrongBull
+    } else if price < ma50 && price > ma200 && slope200 > slope_up {
+        TrendStructure::BullPullback
+    } else if price > ma50 && price < ma200 && slope50 > slope_up && slope200 < slope_down {
+        TrendStructure::RepairRally
+    } else if price < ma50 && ma50 < ma200 && slope50 < slope_down && slope200 < slope_down {
+        TrendStructure::BearTrend
+    } else {
+        TrendStructure::Choppy
     }
 }
 
@@ -358,6 +532,152 @@ fn regime_confidence(trend: &MacroTrendSnapshot, momentum: &MacroMomentumSnapsho
         confidence += 10;
     }
     confidence.min(90)
+}
+
+fn macro_market_permission(
+    regime: &MacroRegime,
+    trend: &MacroTrendSnapshot,
+    momentum: &MacroMomentumSnapshot,
+    events: &[MacroEvent],
+) -> MacroPermissionSnapshot {
+    let change_30d = momentum.change_30d_pct.unwrap_or(0.0);
+    let volatility_90d = momentum.volatility_90d_pct.unwrap_or(0.0);
+    let mut reasons = Vec::new();
+
+    if change_30d <= -0.18 && volatility_90d >= 0.75 {
+        reasons.push("systemic_risk_fast_drawdown_high_volatility".to_string());
+        return MacroPermissionSnapshot {
+            state: MacroPermissionState::RadarSilent,
+            radar_policy: RadarPolicy {
+                altcoin_notify: false,
+                max_priority: RadarPriority::Silent,
+                leverage_hint: LeverageHint::Avoid,
+            },
+            allowed_behaviors: vec!["observe_only".to_string()],
+            reasons,
+        };
+    }
+
+    let mut permission = match regime {
+        MacroRegime::BullExpansion => MacroPermissionSnapshot {
+            state: MacroPermissionState::TradeAllowed,
+            radar_policy: RadarPolicy {
+                altcoin_notify: true,
+                max_priority: RadarPriority::High,
+                leverage_hint: LeverageHint::Normal,
+            },
+            allowed_behaviors: vec![
+                "major_trend_trades_allowed".to_string(),
+                "selective_altcoin_momentum_allowed".to_string(),
+            ],
+            reasons: vec!["bull_expansion_supports_risk_on_radar".to_string()],
+        },
+        MacroRegime::BearMarketRally => MacroPermissionSnapshot {
+            state: MacroPermissionState::ReducedRisk,
+            radar_policy: RadarPolicy {
+                altcoin_notify: true,
+                max_priority: RadarPriority::Medium,
+                leverage_hint: LeverageHint::Reduced,
+            },
+            allowed_behaviors: vec![
+                "intraday_or_short_duration_only".to_string(),
+                "avoid_altcoin_overnight_exposure".to_string(),
+            ],
+            reasons: vec!["repair_rally_requires_short_duration_trades".to_string()],
+        },
+        MacroRegime::BearMarket => MacroPermissionSnapshot {
+            state: MacroPermissionState::OnlyBtcEth,
+            radar_policy: RadarPolicy {
+                altcoin_notify: false,
+                max_priority: RadarPriority::Low,
+                leverage_hint: LeverageHint::Avoid,
+            },
+            allowed_behaviors: vec![
+                "btc_eth_only".to_string(),
+                "altcoin_radar_display_only".to_string(),
+            ],
+            reasons: vec!["bear_market_blocks_default_altcoin_notifications".to_string()],
+        },
+        MacroRegime::BottomingAccumulation => MacroPermissionSnapshot {
+            state: MacroPermissionState::OnlyBtcEth,
+            radar_policy: RadarPolicy {
+                altcoin_notify: false,
+                max_priority: RadarPriority::Medium,
+                leverage_hint: LeverageHint::Reduced,
+            },
+            allowed_behaviors: vec![
+                "spot_or_low_leverage_core_entries".to_string(),
+                "wait_for_confirmation_before_altcoins".to_string(),
+            ],
+            reasons: vec!["bottoming_accumulation_prefers_core_assets".to_string()],
+        },
+        MacroRegime::LateCycleDistribution => MacroPermissionSnapshot {
+            state: MacroPermissionState::ReducedRisk,
+            radar_policy: RadarPolicy {
+                altcoin_notify: false,
+                max_priority: RadarPriority::Medium,
+                leverage_hint: LeverageHint::Reduced,
+            },
+            allowed_behaviors: vec![
+                "take_profit_faster".to_string(),
+                "avoid_chasing_extended_altcoin_breakouts".to_string(),
+            ],
+            reasons: vec!["late_cycle_distribution_reduces_breakout_quality".to_string()],
+        },
+        MacroRegime::Neutral => MacroPermissionSnapshot {
+            state: MacroPermissionState::ObserveOnly,
+            radar_policy: RadarPolicy {
+                altcoin_notify: false,
+                max_priority: RadarPriority::Low,
+                leverage_hint: LeverageHint::Reduced,
+            },
+            allowed_behaviors: vec!["observe_or_small_intraday_only".to_string()],
+            reasons: vec!["mixed_macro_regime_lowers_signal_confidence".to_string()],
+        },
+    };
+
+    if trend.structure == TrendStructure::RepairRally
+        && permission.state != MacroPermissionState::RadarSilent
+    {
+        permission.state = MacroPermissionState::ReducedRisk;
+        permission.radar_policy.altcoin_notify = true;
+        permission.radar_policy.max_priority = RadarPriority::Medium;
+        permission.radar_policy.leverage_hint = LeverageHint::Reduced;
+    }
+    if trend.structure == TrendStructure::RepairRally
+        && !permission
+            .reasons
+            .iter()
+            .any(|reason| reason == "repair_rally_requires_short_duration_trades")
+    {
+        permission
+            .reasons
+            .push("repair_rally_requires_short_duration_trades".to_string());
+        permission
+            .allowed_behaviors
+            .push("avoid_altcoin_overnight_exposure".to_string());
+    }
+    if trend.structure == TrendStructure::BearTrend {
+        permission.radar_policy.altcoin_notify = false;
+        permission.radar_policy.leverage_hint = LeverageHint::Avoid;
+        permission
+            .reasons
+            .push("bear_trend_structure_blocks_altcoin_risk".to_string());
+    }
+    if events
+        .iter()
+        .any(|event| event.id == "us_midterm_2026" && event.days_to_event.abs() <= 120)
+    {
+        permission
+            .reasons
+            .push("us_midterm_window_policy_uncertainty".to_string());
+    }
+    if trend.price_vs_200w_pct.is_some_and(|value| value < 0.05) {
+        permission
+            .reasons
+            .push("weekly_200ma_area_requires_position_size_discount".to_string());
+    }
+    permission
 }
 
 fn historical_analogs(
@@ -484,13 +804,14 @@ fn analog_comparison_for_period(daily: &[Candle], timeframe_days: usize) -> Anal
             timeframe_days,
             current: None,
             matches: Vec::new(),
+            cohort_stats: Vec::new(),
         };
     };
 
     let current_start = daily.len().saturating_sub(timeframe_days + 1);
     let latest_allowed_start = current_start.saturating_sub(timeframe_days + 1);
     let stride = (timeframe_days / 6).max(1);
-    let mut matches = Vec::new();
+    let mut candidates = Vec::new();
     for start in (0..=latest_allowed_start).step_by(stride) {
         let end = start + timeframe_days;
         let forward_end = end + timeframe_days;
@@ -500,7 +821,7 @@ fn analog_comparison_for_period(daily: &[Candle], timeframe_days: usize) -> Anal
         if let Some(candidate) = kline_summary_for_slice(&daily[start..=end]) {
             let forward =
                 kline_summary_for_forward_slice(&daily[(end + 1)..=forward_end], daily[end].close);
-            matches.push(analog_match_from_candidate(
+            candidates.push(analog_match_from_candidate(
                 timeframe_days,
                 &current,
                 candidate,
@@ -508,18 +829,20 @@ fn analog_comparison_for_period(daily: &[Candle], timeframe_days: usize) -> Anal
             ));
         }
     }
-    matches.sort_by(|left, right| {
+    candidates.sort_by(|left, right| {
         right
             .score
             .cmp(&left.score)
             .then_with(|| right.end_ts_ms.cmp(&left.end_ts_ms))
     });
-    matches.truncate(3);
+    let cohort_stats = analog_cohort_stats(&candidates);
+    let matches = candidates.into_iter().take(3).collect();
 
     AnalogComparisonSet {
         timeframe_days,
         current: Some(current),
         matches,
+        cohort_stats,
     }
 }
 
@@ -650,6 +973,52 @@ fn analog_match_from_candidate(
     }
 }
 
+fn analog_cohort_stats(matches: &[AnalogMatch]) -> Vec<AnalogCohortStats> {
+    [20, 50]
+        .into_iter()
+        .filter_map(|requested_size| analog_cohort_stats_for_size(matches, requested_size))
+        .collect()
+}
+
+fn analog_cohort_stats_for_size(
+    matches: &[AnalogMatch],
+    requested_size: usize,
+) -> Option<AnalogCohortStats> {
+    let cohort: Vec<&AnalogMatch> = matches
+        .iter()
+        .take(requested_size)
+        .filter(|candidate| candidate.forward.is_some())
+        .collect();
+    if cohort.is_empty() {
+        return None;
+    }
+
+    let mut final_returns = Vec::with_capacity(cohort.len());
+    let mut drawdowns = Vec::with_capacity(cohort.len());
+    let mut runups = Vec::with_capacity(cohort.len());
+    let mut up_count = 0usize;
+    for candidate in &cohort {
+        let forward = candidate.forward.as_ref()?;
+        if forward.final_return_pct > 0.0 {
+            up_count += 1;
+        }
+        final_returns.push(forward.final_return_pct);
+        drawdowns.push(forward.max_drawdown_pct);
+        runups.push(forward.max_runup_pct);
+    }
+
+    Some(AnalogCohortStats {
+        requested_size,
+        sample_size: cohort.len(),
+        up_probability: up_count as f64 / cohort.len() as f64,
+        median_forward_return_pct: percentile(final_returns.clone(), 0.50)?,
+        lower_quartile_forward_return_pct: percentile(final_returns, 0.25)?,
+        median_forward_drawdown_pct: percentile(drawdowns, 0.50)?,
+        median_forward_runup_pct: percentile(runups, 0.50)?,
+        score_floor: cohort.last().map(|candidate| candidate.score),
+    })
+}
+
 fn path_rmse(left: &[AnalogPathPoint], right: &[AnalogPathPoint]) -> f64 {
     let len = left.len().min(right.len());
     if len == 0 {
@@ -662,6 +1031,16 @@ fn path_rmse(left: &[AnalogPathPoint], right: &[AnalogPathPoint]) -> f64 {
         .map(|(left, right)| (left.return_pct - right.return_pct).powi(2))
         .sum::<f64>();
     (sum / len as f64).sqrt()
+}
+
+fn percentile(mut values: Vec<f64>, percentile: f64) -> Option<f64> {
+    values.retain(|value| value.is_finite());
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let rank = ((values.len() - 1) as f64 * percentile.clamp(0.0, 1.0)).round() as usize;
+    values.get(rank).copied()
 }
 
 fn distance_component(
@@ -774,6 +1153,28 @@ fn moving_average(candles: &[Candle], period: usize) -> Option<f64> {
     Some(sum / period as f64)
 }
 
+fn moving_average_at(candles: &[Candle], period: usize, end_exclusive: usize) -> Option<f64> {
+    if end_exclusive < period || end_exclusive > candles.len() {
+        return None;
+    }
+    let start = end_exclusive - period;
+    let sum = candles[start..end_exclusive]
+        .iter()
+        .map(|candle| candle.close)
+        .sum::<f64>();
+    Some(sum / period as f64)
+}
+
+fn moving_average_slope(candles: &[Candle], period: usize, lookback: usize) -> Option<f64> {
+    let latest = moving_average_at(candles, period, candles.len())?;
+    let previous_end = candles.len().checked_sub(lookback)?;
+    let previous = moving_average_at(candles, period, previous_end)?;
+    if previous <= 0.0 || !previous.is_finite() || !latest.is_finite() {
+        return None;
+    }
+    Some(latest / previous - 1.0)
+}
+
 fn change_over_bars(candles: &[Candle], bars: usize) -> Option<f64> {
     if candles.len() <= bars {
         return None;
@@ -810,6 +1211,28 @@ fn daily_volatility(candles: &[Candle], bars: usize) -> Option<f64> {
         .sum::<f64>()
         / (returns.len() - 1) as f64;
     Some(variance.sqrt() * (365.0_f64).sqrt())
+}
+
+fn clean_btc_spot_daily_history(mut daily: Vec<Candle>) -> Vec<Candle> {
+    daily.retain(|candle| {
+        candle.ts_ms >= OKX_BTC_SPOT_MIN_VALID_DAILY_TS_MS
+            && candle.open > 0.0
+            && candle.high > 0.0
+            && candle.low > 0.0
+            && candle.close > 0.0
+            && candle.open.is_finite()
+            && candle.high.is_finite()
+            && candle.low.is_finite()
+            && candle.close.is_finite()
+            && candle.high >= candle.low
+            && candle.high >= candle.open
+            && candle.high >= candle.close
+            && candle.low <= candle.open
+            && candle.low <= candle.close
+    });
+    daily.sort_by_key(|candle| candle.ts_ms);
+    daily.dedup_by_key(|candle| candle.ts_ms);
+    daily
 }
 
 fn weekly_from_daily(daily: &[Candle]) -> Vec<Candle> {
@@ -924,6 +1347,27 @@ mod tests {
             .collect()
     }
 
+    fn repair_rally_daily_candles() -> Vec<Candle> {
+        let start_ms = utc_ms(2025, 10, 1);
+        (0..260)
+            .map(|index| {
+                let close = if index < 200 {
+                    100_000.0 - index as f64 * 250.0
+                } else {
+                    50_000.0 + (index - 199) as f64 * 165.0
+                };
+                Candle {
+                    ts_ms: start_ms + index as i64 * 86_400_000,
+                    open: close * 0.997,
+                    high: close * 1.012,
+                    low: close * 0.988,
+                    close,
+                    volume: 100.0,
+                }
+            })
+            .collect()
+    }
+
     #[test]
     fn builds_macro_snapshot_with_halving_and_midterm_context() {
         let now_ms = utc_ms(2026, 6, 29);
@@ -951,11 +1395,37 @@ mod tests {
         let snapshot = build_btc_macro_snapshot(&weekly, &daily, utc_ms(2026, 6, 29)).unwrap();
 
         assert_eq!(snapshot.regime, MacroRegime::BearMarketRally);
-        assert!(
-            snapshot
-                .trading_bias
-                .contains(&"alts_rebounds_should_be_treated_as_lower_confidence_longs".to_string())
+        assert!(snapshot
+            .trading_bias
+            .contains(&"alts_rebounds_should_be_treated_as_lower_confidence_longs".to_string()));
+    }
+
+    #[test]
+    fn macro_snapshot_exposes_market_permission_for_repair_rally() {
+        let mut weekly = weekly_candles(70_000.0);
+        weekly[180].high = 120_000.0;
+
+        let snapshot =
+            build_btc_macro_snapshot(&weekly, &repair_rally_daily_candles(), utc_ms(2026, 6, 29))
+                .unwrap();
+
+        assert_eq!(snapshot.trend.structure, TrendStructure::RepairRally);
+        assert_eq!(
+            snapshot.market_permission.state,
+            MacroPermissionState::ReducedRisk
         );
+        assert_eq!(
+            snapshot.market_permission.radar_policy.max_priority,
+            RadarPriority::Medium
+        );
+        assert_eq!(
+            snapshot.market_permission.radar_policy.leverage_hint,
+            LeverageHint::Reduced
+        );
+        assert!(snapshot
+            .market_permission
+            .reasons
+            .contains(&"repair_rally_requires_short_duration_trades".to_string()));
     }
 
     #[test]
@@ -970,17 +1440,33 @@ mod tests {
         let ahr999 = snapshot.ahr999_history.as_ref().unwrap();
         assert!(ahr999.points.len() > 600);
         assert_eq!(ahr999.bands.len(), 4);
-        assert!(
-            snapshot
-                .analog_comparisons
-                .iter()
-                .any(|comparison| comparison.timeframe_days == 90 && !comparison.matches.is_empty())
-        );
+        assert!(snapshot
+            .analog_comparisons
+            .iter()
+            .any(|comparison| comparison.timeframe_days == 90 && !comparison.matches.is_empty()));
         let comparison = snapshot
             .analog_comparisons
             .iter()
             .find(|comparison| comparison.timeframe_days == 90)
             .unwrap();
+        let top20 = comparison
+            .cohort_stats
+            .iter()
+            .find(|stats| stats.requested_size == 20)
+            .unwrap();
+        let top50 = comparison
+            .cohort_stats
+            .iter()
+            .find(|stats| stats.requested_size == 50)
+            .unwrap();
+        assert_eq!(comparison.matches.len(), 3);
+        assert!(top20.sample_size >= 10);
+        assert!(top50.sample_size >= top20.sample_size);
+        assert!((0.0..=1.0).contains(&top20.up_probability));
+        assert!(top20.median_forward_return_pct.is_finite());
+        assert!(top20.lower_quartile_forward_return_pct.is_finite());
+        assert!(top20.median_forward_drawdown_pct <= 0.0);
+        assert!(top20.median_forward_runup_pct >= 0.0);
         let match_window = comparison.matches.first().unwrap();
         assert_eq!(comparison.current.as_ref().unwrap().candles.len(), 91);
         assert_eq!(match_window.lookback.candles.len(), 91);
@@ -988,12 +1474,10 @@ mod tests {
         assert!(
             match_window.forward.as_ref().unwrap().start_ts_ms > match_window.lookback.end_ts_ms
         );
-        assert!(
-            snapshot.analogs[0]
-                .components
-                .iter()
-                .any(|component| component.label == "drawdown")
-        );
+        assert!(snapshot.analogs[0]
+            .components
+            .iter()
+            .any(|component| component.label == "drawdown"));
     }
 
     #[test]
@@ -1017,5 +1501,51 @@ mod tests {
             weekly[0].volume,
             daily[..7].iter().map(|candle| candle.volume).sum::<f64>()
         );
+    }
+
+    #[test]
+    fn macro_history_uses_okx_spot_and_filters_bad_bootstrap_candle() {
+        assert_eq!(BTC_HISTORY_INST_ID, "BTC-USDT");
+
+        let candles = clean_btc_spot_daily_history(vec![
+            Candle {
+                ts_ms: utc_ms(2017, 10, 10),
+                open: 1.0,
+                high: 4901.0,
+                low: 1.0,
+                close: 4901.0,
+                volume: 19.26,
+            },
+            Candle {
+                ts_ms: utc_ms(2017, 10, 11),
+                open: 4901.0,
+                high: 4999.0,
+                low: 4790.0,
+                close: 4989.0,
+                volume: 0.58,
+            },
+        ]);
+
+        assert_eq!(candles.len(), 1);
+        assert_eq!(candles[0].ts_ms, utc_ms(2017, 10, 11));
+    }
+
+    #[test]
+    fn btc_macro_snapshot_cache_respects_ttl() {
+        let snapshot = build_btc_macro_snapshot(
+            &weekly_candles(60_000.0),
+            &long_daily_candles(60_000.0),
+            utc_ms(2026, 6, 29),
+        )
+        .unwrap();
+        let mut cache = BtcMacroSnapshotCache::new(std::time::Duration::from_millis(1_000));
+
+        assert!(cache.get(1_000).is_none());
+        cache.store(1_000, snapshot.clone());
+        assert_eq!(
+            cache.get(1_500).unwrap().updated_at_ms,
+            snapshot.updated_at_ms
+        );
+        assert!(cache.get(2_001).is_none());
     }
 }

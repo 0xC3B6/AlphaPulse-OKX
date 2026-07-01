@@ -1,0 +1,361 @@
+<style>
+  .interaction-plan {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+    gap: 18px;
+  }
+
+  .terminal {
+    overflow: hidden;
+    border: 1px solid #283244;
+    border-radius: 12px;
+    background: #0b0e14;
+    color: #cbd5e1;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .terminal-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #283244;
+    background: #151924;
+    padding: 10px 12px;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .chip {
+    border: 1px solid #2b313f;
+    border-radius: 999px;
+    background: #0b0e14;
+    color: #94a3b8;
+    padding: 5px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .chip.active {
+    border-color: rgba(59, 130, 246, 0.48);
+    background: rgba(59, 130, 246, 0.16);
+    color: #60a5fa;
+  }
+
+  .chip.long {
+    border-color: rgba(52, 211, 153, 0.26);
+    background: rgba(52, 211, 153, 0.11);
+    color: #34d399;
+  }
+
+  .chip.short {
+    border-color: rgba(251, 113, 133, 0.28);
+    background: rgba(251, 113, 133, 0.1);
+    color: #fb7185;
+  }
+
+  .radar-table {
+    display: grid;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .radar-row {
+    display: grid;
+    grid-template-columns: 1.18fr 0.72fr 0.52fr 0.52fr 0.52fr 0.7fr 0.7fr 1.35fr;
+    gap: 8px;
+    align-items: center;
+    border-bottom: 1px solid rgba(40, 50, 68, 0.7);
+    padding: 9px 12px;
+  }
+
+  .radar-row.head {
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: #151924;
+  }
+
+  .radar-row.selected {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.16), rgba(59, 130, 246, 0.04));
+    box-shadow: inset 3px 0 0 #3b82f6;
+  }
+
+  .sym {
+    color: white;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .muted {
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .pos {
+    color: #34d399;
+  }
+
+  .neg {
+    color: #fb7185;
+  }
+
+  .score {
+    display: inline-flex;
+    min-width: 42px;
+    justify-content: flex-end;
+    border-radius: 5px;
+    padding: 3px 5px;
+    font-weight: 800;
+  }
+
+  .score.hot {
+    background: rgba(52, 211, 153, 0.08);
+    color: #34d399;
+  }
+
+  .score.warn {
+    background: rgba(251, 113, 133, 0.08);
+    color: #fb7185;
+  }
+
+  .detail {
+    display: grid;
+    gap: 11px;
+    border: 1px solid #283244;
+    border-radius: 12px;
+    background: #0b0e14;
+    padding: 14px;
+    color: #cbd5e1;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .price {
+    color: #34d399;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .moves {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .move {
+    border: 1px solid #283244;
+    border-radius: 7px;
+    background: #151924;
+    padding: 7px;
+  }
+
+  .move span {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .move strong {
+    display: block;
+    margin-top: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+
+  .chart {
+    display: grid;
+    place-items: center;
+    height: 145px;
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, transparent 0 47%, rgba(52, 211, 153, 0.24) 48% 50%, transparent 51%),
+      linear-gradient(45deg, transparent 0 58%, rgba(251, 113, 133, 0.16) 59% 61%, transparent 62%),
+      radial-gradient(circle at 22% 25%, rgba(96, 165, 250, 0.15), transparent 28%),
+      #151924;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .group {
+    border: 1px solid #283244;
+    border-radius: 8px;
+    background: #151924;
+  }
+
+  .group-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid rgba(40, 50, 68, 0.72);
+    padding: 9px 10px;
+  }
+
+  .group-title strong {
+    color: white;
+    font-size: 12px;
+  }
+
+  .group-body {
+    display: grid;
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .line {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 11px;
+  }
+
+  .line b {
+    color: #e5e7eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .rules {
+    display: grid;
+    gap: 10px;
+  }
+
+  .rules .option {
+    cursor: default;
+  }
+
+  @media (max-width: 1200px) {
+    .interaction-plan {
+      grid-template-columns: 1fr;
+    }
+
+    .radar-row {
+      grid-template-columns: 1fr 0.68fr 0.48fr 0.48fr 0.48fr;
+    }
+
+    .radar-row span:nth-child(n + 6) {
+      display: none;
+    }
+  }
+</style>
+
+<h2>设计 2：Radar 表格与详情面板交互</h2>
+<p class="subtitle">目标是把“扫机会”和“看细节”分清：表格负责快速排序和发现，右侧负责决策上下文。</p>
+
+<div class="interaction-plan">
+  <div class="mockup">
+    <div class="mockup-header">Radar 表格：高密度、可扫描、选中态明确</div>
+    <div class="mockup-body">
+      <div class="terminal">
+        <div class="terminal-toolbar">
+          <div class="chips">
+            <span class="chip active">All</span>
+            <span class="chip">Trend</span>
+            <span class="chip">Range</span>
+            <span class="chip">Hot</span>
+            <span class="chip">Fixed</span>
+          </div>
+          <div class="chips">
+            <span class="chip">Sort: Max Score</span>
+            <span class="chip active">Notify Ready</span>
+          </div>
+        </div>
+        <div class="radar-table">
+          <div class="radar-row head">
+            <span>Symbol</span><span>Price</span><span>5m</span><span>15m</span><span>1h</span><span>Trend</span><span>Range</span><span>Signal</span>
+          </div>
+          <div class="radar-row selected">
+            <span><b class="sym">ETH-USDT</b><br><i class="muted">fixed / manual watch</i></span>
+            <span>1,585.29</span><span class="pos">+0.13%</span><span class="pos">+0.22%</span><span class="pos">+1.18%</span>
+            <span><b class="score hot">82</b></span><span><b class="score hot">90</b></span><span><span class="chip long">LONG</span> clear recent range</span>
+          </div>
+          <div class="radar-row">
+            <span><b class="sym">LAB-USDT</b><br><i class="muted">fixed / watch</i></span>
+            <span>11.9550</span><span class="neg">-0.12%</span><span class="neg">-1.44%</span><span>+0.04%</span>
+            <span><b class="score">61</b></span><span><b class="score">72</b></span><span><span class="chip">NEUTRAL</span> near FVG zone</span>
+          </div>
+          <div class="radar-row">
+            <span><b class="sym">BEAT-USDT</b><br><i class="muted">hot / dynamic</i></span>
+            <span>2.9667</span><span class="neg">-0.10%</span><span class="pos">+0.36%</span><span class="neg">-0.88%</span>
+            <span><b class="score warn">83</b></span><span><b class="score">40</b></span><span><span class="chip short">SHORT</span> near resistance</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-head">
+      <div>
+        <b class="sym">ETH-USDT</b>
+        <div class="muted">range 90: clear recent range</div>
+      </div>
+      <div class="chips"><span class="chip">TV</span><span class="chip active">m15</span></div>
+    </div>
+    <div class="price">1,585.53</div>
+    <div class="moves">
+      <div class="move"><span>5m</span><strong class="pos">+0.13%</strong></div>
+      <div class="move"><span>15m</span><strong class="pos">+0.22%</strong></div>
+      <div class="move"><span>1h</span><strong class="pos">+1.18%</strong></div>
+      <div class="move"><span>Funding</span><strong>-0.01%</strong></div>
+    </div>
+    <div class="chart">Chart + FVG overlay + timeframe controls</div>
+    <div class="group">
+      <div class="group-title"><strong>Structure</strong><span class="chip">3 FVG</span></div>
+      <div class="group-body">
+        <div class="line"><span>Nearest support</span><b>1,548 - 1,556</b></div>
+        <div class="line"><span>Nearest resistance</span><b>1,622 - 1,638</b></div>
+        <div class="line"><span>FVG distance</span><b class="pos">0.42%</b></div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-title"><strong>Paper Trading</strong><span class="chip">Isolated</span></div>
+      <div class="group-body">
+        <div class="line"><span>Equity / available</span><b>10,000 / 9,840 USDT</b></div>
+        <div class="line"><span>Quick order</span><b>Long / Short / Close</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>交互规则</h3>
+  <div class="options rules">
+    <div class="option">
+      <div class="letter">1</div>
+      <div class="content">
+        <h3>表格点击只改变选中标的</h3>
+        <p>避免点击行时打开弹窗；TradingView 只通过明确的 TV 按钮打开。</p>
+      </div>
+    </div>
+    <div class="option">
+      <div class="letter">2</div>
+      <div class="content">
+        <h3>信号用标签 + 理由</h3>
+        <p>LONG / SHORT / NEUTRAL 是第一视觉锚点，后面保留当前触发原因，避免只看分数。</p>
+      </div>
+    </div>
+    <div class="option">
+      <div class="letter">3</div>
+      <div class="content">
+        <h3>详情分组默认展开</h3>
+        <p>第一版不做复杂折叠状态；用卡片分组和固定标题解决扫描问题，降低交互复杂度。</p>
+      </div>
+    </div>
+  </div>
+</div>
