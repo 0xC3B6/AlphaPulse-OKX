@@ -956,6 +956,126 @@ tr.selected {
   background: var(--accent);
 }
 
+.macro-permission-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 12px;
+}
+
+.macro-permission-card,
+.macro-trend-structure-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.macro-permission-card > span,
+.macro-trend-structure-card > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.macro-permission-card > strong,
+.macro-trend-structure-card > strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.macro-permission-card--trade_allowed > strong {
+  color: var(--positive);
+}
+
+.macro-permission-card--reduced_risk > strong,
+.macro-permission-card--only_btc_eth > strong {
+  color: var(--accent);
+}
+
+.macro-permission-card--observe_only > strong,
+.macro-permission-card--radar_silent > strong {
+  color: var(--negative);
+}
+
+.macro-policy-grid,
+.macro-trend-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.macro-trend-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.macro-policy-stat,
+.macro-trend-metric {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--app-bg) 12%);
+  padding: 9px;
+}
+
+.macro-policy-stat span,
+.macro-trend-metric span,
+.macro-trend-metric em {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.macro-policy-stat strong,
+.macro-trend-metric strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.macro-trend-metric em {
+  display: block;
+  margin-top: 5px;
+  font-style: normal;
+}
+
+.macro-permission-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.macro-permission-list {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.macro-permission-list > strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.macro-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.macro-chip-list span {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .macro-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1610,6 +1730,75 @@ tr.selected {
   font-size: 13px;
 }
 
+.macro-cohort-section {
+  margin-bottom: 12px;
+}
+
+.macro-cohort-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.macro-cohort-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.macro-cohort-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.macro-cohort-card > strong,
+.macro-cohort-card > span {
+  display: block;
+}
+
+.macro-cohort-card > strong {
+  font-size: 14px;
+}
+
+.macro-cohort-card > span {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.macro-cohort-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.macro-cohort-metrics span {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  padding: 7px 8px;
+  font-size: 11px;
+}
+
+.macro-cohort-metrics b {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.macro-cohort-metrics .positive b {
+  color: var(--positive);
+}
+
+.macro-cohort-metrics .negative b {
+  color: var(--negative);
+}
+
 .macro-kline-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2086,6 +2275,9 @@ input {
   .macro-columns,
   .macro-chart-grid,
   .macro-band-grid,
+  .macro-permission-grid,
+  .macro-permission-detail-grid,
+  .macro-cohort-grid,
   .macro-kline-grid,
   .macro-analog-list {
     grid-template-columns: 1fr;
@@ -2125,6 +2317,7 @@ input {
 
 @media (max-width: 860px) {
   .macro-chart-grid,
+  .macro-cohort-grid,
   .macro-kline-grid,
   .macro-list {
     grid-template-columns: 1fr;

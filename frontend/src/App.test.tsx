@@ -153,6 +153,16 @@ const macro = {
   regime: "bear_market_rally",
   confidence: 80,
   summary: "bear market rally; cycle day 801",
+  market_permission: {
+    state: "reduced_risk",
+    radar_policy: {
+      altcoin_notify: false,
+      max_priority: "medium",
+      leverage_hint: "reduced",
+    },
+    allowed_behaviors: ["intraday_or_short_duration_only", "avoid_altcoin_overnight_exposure"],
+    reasons: ["repair_rally_requires_short_duration_trades"],
+  },
   cycle: {
     last_halving_ms: 1713571200000,
     next_halving_estimate_ms: 1839801600000,
@@ -169,6 +179,13 @@ const macro = {
     ma_200w: 55000,
     price_vs_200w_pct: 0.09,
     weekly_ma200_status: "above_200w_ma",
+    ma_50d: 62000,
+    ma_200d: 70000,
+    price_vs_50d_pct: -0.032,
+    price_vs_200d_pct: -0.143,
+    ma_50d_slope_30d_pct: 0.025,
+    ma_200d_slope_30d_pct: -0.015,
+    structure: "repair_rally",
   },
   momentum: {
     change_30d_pct: 0.05,
@@ -260,11 +277,24 @@ const macro = {
     {
       timeframe_days: 30,
       current: analogWindow(1779811200000, 30, -0.15),
+      cohort_stats: [],
       matches: [],
     },
     {
       timeframe_days: 90,
       current: analogWindow(1774627200000, 90, -0.13),
+      cohort_stats: [
+        {
+          requested_size: 20,
+          sample_size: 20,
+          up_probability: 0.45,
+          median_forward_return_pct: -0.0177,
+          lower_quartile_forward_return_pct: -0.1565,
+          median_forward_drawdown_pct: -0.1021,
+          median_forward_runup_pct: 0.3055,
+          score_floor: 67,
+        },
+      ],
       matches: [
         {
           id: "90-1609459200000",
@@ -451,6 +481,26 @@ describe("App", () => {
     expect(screen.getByText("熊市反弹")).toBeInTheDocument();
     expect(screen.getByText("2026 US midterm elections")).toBeInTheDocument();
     expect(screen.getAllByText("AHR999").length).toBeGreaterThan(0);
+  });
+
+  it("renders macro permission, trend structure, and analog cohort statistics", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+
+    expect((await screen.findAllByText("交易许可")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("macro-permission-card")).toHaveTextContent("降风险");
+    expect(screen.getByTestId("macro-permission-card")).toHaveTextContent("山寨通知 关闭");
+    expect(screen.getByTestId("macro-trend-structure-card")).toHaveTextContent("修复反弹");
+    expect(screen.getByTestId("macro-trend-structure-card")).toHaveTextContent("日线 MA50");
+    fireEvent.click(screen.getByRole("button", { name: "90D" }));
+    expect(await screen.findByText("相似样本统计")).toBeInTheDocument();
+    expect(screen.getByTestId("analog-cohort-20")).toHaveTextContent("Top 20");
+    expect(screen.getByTestId("analog-cohort-20")).toHaveTextContent("上涨概率 45.00%");
+    expect(screen.getByTestId("analog-cohort-20")).toHaveTextContent("中位回撤 -10.21%");
   });
 
   it("prefetches macro data before the macro view is opened", async () => {

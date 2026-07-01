@@ -8,6 +8,37 @@ export type MacroRegime =
   | "bottoming_accumulation"
   | "neutral";
 
+export type TrendStructure =
+  | "strong_bull"
+  | "bull_pullback"
+  | "repair_rally"
+  | "bear_trend"
+  | "choppy";
+
+export type MacroPermissionState =
+  | "trade_allowed"
+  | "reduced_risk"
+  | "only_btc_eth"
+  | "observe_only"
+  | "radar_silent";
+
+export type RadarPriority = "high" | "medium" | "low" | "silent";
+
+export type LeverageHint = "normal" | "reduced" | "avoid";
+
+export interface RadarPolicy {
+  altcoin_notify: boolean;
+  max_priority: RadarPriority;
+  leverage_hint: LeverageHint;
+}
+
+export interface MacroPermissionSnapshot {
+  state: MacroPermissionState;
+  radar_policy: RadarPolicy;
+  allowed_behaviors: string[];
+  reasons: string[];
+}
+
 export interface Score {
   value: number;
   direction: Direction;
@@ -134,6 +165,7 @@ export interface BtcMacroSnapshot {
   updated_at_ms: number;
   price: number;
   regime: MacroRegime;
+  market_permission: MacroPermissionSnapshot;
   confidence: number;
   summary: string;
   cycle: HalvingCycleSnapshot;
@@ -164,6 +196,13 @@ export interface MacroTrendSnapshot {
   ma_200w: number | null;
   price_vs_200w_pct: number | null;
   weekly_ma200_status: string;
+  ma_50d: number | null;
+  ma_200d: number | null;
+  price_vs_50d_pct: number | null;
+  price_vs_200d_pct: number | null;
+  ma_50d_slope_30d_pct: number | null;
+  ma_200d_slope_30d_pct: number | null;
+  structure: TrendStructure;
 }
 
 export interface MacroMomentumSnapshot {
@@ -238,6 +277,18 @@ export interface AnalogComparisonSet {
   timeframe_days: number;
   current?: AnalogPathSummary | null;
   matches: AnalogMatch[];
+  cohort_stats: AnalogCohortStats[];
+}
+
+export interface AnalogCohortStats {
+  requested_size: number;
+  sample_size: number;
+  up_probability: number;
+  median_forward_return_pct: number;
+  lower_quartile_forward_return_pct: number;
+  median_forward_drawdown_pct: number;
+  median_forward_runup_pct: number;
+  score_floor?: number | null;
 }
 
 export interface AnalogPathSummary {

@@ -12,10 +12,13 @@ import type { Copy } from "./i18n";
 import type {
   Ahr999History,
   Ahr999HistoryPoint,
+  AnalogCohortStats,
   AnalogComparisonSet,
   AnalogPathSummary,
   BtcMacroSnapshot,
   ExternalMetricStatus,
+  MacroPermissionSnapshot,
+  MacroTrendSnapshot,
 } from "./types";
 import {
   formatDate,
@@ -155,6 +158,12 @@ export function MacroPanel({
         </div>
       </section>
 
+      <MacroPermissionSection
+        copy={copy}
+        permission={snapshot.market_permission}
+        trend={snapshot.trend}
+      />
+
       <div className="macro-columns">
         <section>
           <h3>{copy.macro.events}</h3>
@@ -257,6 +266,125 @@ function MetricTile({
     <div className="macro-metric">
       <span>{label}</span>
       <strong className={tone ?? ""}>{value}</strong>
+    </div>
+  );
+}
+
+function MacroPermissionSection({
+  copy,
+  permission,
+  trend,
+}: {
+  copy: Copy;
+  permission: MacroPermissionSnapshot;
+  trend: MacroTrendSnapshot;
+}) {
+  return (
+    <section className="macro-detail-section macro-permission-section">
+      <div className="macro-section-header">
+        <div>
+          <h3>{copy.macro.marketPermission}</h3>
+          <p>{copy.macro.radarPolicy}</p>
+        </div>
+      </div>
+      <div className="macro-permission-grid">
+        <div
+          className={`macro-permission-card macro-permission-card--${permission.state}`}
+          data-testid="macro-permission-card"
+        >
+          <span>{copy.macro.marketPermission}</span>
+          <strong>{formatPermissionState(copy, permission.state)}</strong>
+          <div className="macro-policy-grid">
+            <PolicyStat
+              label={copy.macro.altcoinNotify}
+              value={permission.radar_policy.altcoin_notify ? copy.macro.enabled : copy.macro.disabled}
+            />
+            <PolicyStat
+              label={copy.macro.maxPriority}
+              value={formatRadarPriority(copy, permission.radar_policy.max_priority)}
+            />
+            <PolicyStat
+              label={copy.macro.leverageHint}
+              value={formatLeverageHint(copy, permission.radar_policy.leverage_hint)}
+            />
+          </div>
+        </div>
+        <div className="macro-trend-structure-card" data-testid="macro-trend-structure-card">
+          <span>{copy.macro.trendStructure}</span>
+          <strong>{formatTrendStructure(copy, trend.structure)}</strong>
+          <div className="macro-trend-metrics">
+            <TrendMetric
+              label={copy.macro.ma50d}
+              slopeLabel={copy.macro.ma50dSlope}
+              slopeValue={trend.ma_50d_slope_30d_pct}
+              value={trend.ma_50d}
+            />
+            <TrendMetric
+              label={copy.macro.ma200d}
+              slopeLabel={copy.macro.ma200dSlope}
+              slopeValue={trend.ma_200d_slope_30d_pct}
+              value={trend.ma_200d}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="macro-permission-detail-grid">
+        <PermissionList items={permission.allowed_behaviors} title={copy.macro.allowedBehaviors} />
+        <PermissionList items={permission.reasons} title={copy.macro.permissionReasons} />
+      </div>
+    </section>
+  );
+}
+
+function PolicyStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="macro-policy-stat">
+      <span>{label} </span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TrendMetric({
+  label,
+  slopeLabel,
+  slopeValue,
+  value,
+}: {
+  label: string;
+  slopeLabel: string;
+  slopeValue: number | null;
+  value: number | null;
+}) {
+  return (
+    <div className="macro-trend-metric">
+      <span>{label}</span>
+      <strong>{value == null ? "-" : formatUsd(value)}</strong>
+      <em>
+        {slopeLabel} {slopeValue == null ? "-" : formatPct(slopeValue)}
+      </em>
+    </div>
+  );
+}
+
+function PermissionList({
+  items,
+  title,
+}: {
+  items: string[];
+  title: string;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <div className="macro-permission-list">
+      <strong>{title}</strong>
+      <div className="macro-chip-list">
+        {items.map((item) => (
+          <span key={item}>{formatSnake(item)}</span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -607,6 +735,9 @@ function AnalogComparisonSection({
       </div>
       {selected?.current ? (
         <>
+          {(selected.cohort_stats ?? []).length > 0 ? (
+            <AnalogCohortStatsGrid copy={copy} stats={selected.cohort_stats ?? []} />
+          ) : null}
           <div className="macro-kline-grid">
             <KlineComparisonCard
               ariaLabel={`${copy.macro.currentLookback} ${selected.timeframe_days}D K线`}
@@ -675,6 +806,74 @@ function AnalogComparisonSection({
         <p className="macro-empty">{copy.macro.noAnalogMatches}</p>
       )}
     </section>
+  );
+}
+
+function AnalogCohortStatsGrid({
+  copy,
+  stats,
+}: {
+  copy: Copy;
+  stats: AnalogCohortStats[];
+}) {
+  return (
+    <section className="macro-cohort-section">
+      <h4>{copy.macro.analogCohortStats}</h4>
+      <div className="macro-cohort-grid">
+        {stats.map((cohort) => (
+          <div
+            className="macro-cohort-card"
+            data-testid={`analog-cohort-${cohort.requested_size}`}
+            key={cohort.requested_size}
+          >
+            <strong>Top {cohort.requested_size}</strong>
+            <span>
+              {copy.macro.sampleSize} {cohort.sample_size}
+              {cohort.score_floor == null ? "" : ` · ${copy.macro.scoreFloor} ${cohort.score_floor}`}
+            </span>
+            <div className="macro-cohort-metrics">
+              <CohortMetric label={copy.macro.upProbability} value={formatPct(cohort.up_probability)} />
+              <CohortMetric
+                label={copy.macro.medianForwardReturn}
+                tone={cohort.median_forward_return_pct < 0 ? "negative" : "positive"}
+                value={formatPct(cohort.median_forward_return_pct)}
+              />
+              <CohortMetric
+                label={copy.macro.lowerQuartileForwardReturn}
+                tone="negative"
+                value={formatPct(cohort.lower_quartile_forward_return_pct)}
+              />
+              <CohortMetric
+                label={copy.macro.medianForwardDrawdown}
+                tone="negative"
+                value={formatPct(cohort.median_forward_drawdown_pct)}
+              />
+              <CohortMetric
+                label={copy.macro.medianForwardRunup}
+                tone="positive"
+                value={formatPct(cohort.median_forward_runup_pct)}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CohortMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: "positive" | "negative";
+  value: string;
+}) {
+  return (
+    <span className={tone ?? ""}>
+      {label} <b>{value}</b>
+    </span>
   );
 }
 
@@ -1695,6 +1894,32 @@ function formatCompactUsdAxis(value: number): string {
     return `$${value.toFixed(2)}`;
   }
   return `$${value.toFixed(4)}`;
+}
+
+function formatPermissionState(copy: Copy, state: MacroPermissionSnapshot["state"]): string {
+  return macroLookup(copy.macro.permissionStates, state);
+}
+
+function formatTrendStructure(copy: Copy, structure: MacroTrendSnapshot["structure"]): string {
+  return macroLookup(copy.macro.trendStructures, structure);
+}
+
+function formatRadarPriority(
+  copy: Copy,
+  priority: MacroPermissionSnapshot["radar_policy"]["max_priority"],
+): string {
+  return macroLookup(copy.macro.radarPriorities, priority);
+}
+
+function formatLeverageHint(
+  copy: Copy,
+  hint: MacroPermissionSnapshot["radar_policy"]["leverage_hint"],
+): string {
+  return macroLookup(copy.macro.leverageHints, hint);
+}
+
+function macroLookup(labels: unknown, key: string): string {
+  return (labels as Record<string, string>)[key] ?? formatSnake(key);
 }
 
 function formatValuationMetric(metric: ExternalMetricStatus): string {
