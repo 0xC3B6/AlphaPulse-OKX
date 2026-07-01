@@ -8,7 +8,6 @@ import {
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { fetchBtcMacro } from "./api";
 import type { Copy } from "./i18n";
 import type {
   Ahr999History,
@@ -20,29 +19,24 @@ import type {
   MacroRegime,
 } from "./types";
 
-export function MacroPanel({ copy, themeMode }: { copy: Copy; themeMode: string }) {
-  const [snapshot, setSnapshot] = useState<BtcMacroSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function MacroPanel({
+  copy,
+  error,
+  loading,
+  onRefresh,
+  snapshot,
+  themeMode,
+}: {
+  copy: Copy;
+  error: string | null;
+  loading: boolean;
+  onRefresh: () => void;
+  snapshot: BtcMacroSnapshot | null;
+  themeMode: string;
+}) {
   const [ahrPageSize, setAhrPageSize] = useState(20);
   const [ahrPage, setAhrPage] = useState(0);
   const [analogPeriod, setAnalogPeriod] = useState(90);
-
-  useEffect(() => {
-    loadMacro();
-  }, []);
-
-  async function loadMacro() {
-    setLoading(true);
-    setError(null);
-    try {
-      setSnapshot(await fetchBtcMacro());
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (loading && snapshot === null) {
     return (
@@ -68,7 +62,7 @@ export function MacroPanel({ copy, themeMode }: { copy: Copy; themeMode: string 
     return (
       <section className="macro-panel">
         <p className="paper-error">{error}</p>
-        <button onClick={loadMacro} type="button">
+        <button onClick={onRefresh} type="button">
           {copy.macro.refresh}
         </button>
       </section>
@@ -86,7 +80,7 @@ export function MacroPanel({ copy, themeMode }: { copy: Copy; themeMode: string 
           <h2>{copy.macro.title}</h2>
           <p>{snapshot.summary}</p>
         </div>
-        <button disabled={loading} onClick={loadMacro} type="button">
+        <button disabled={loading} onClick={onRefresh} type="button">
           {copy.macro.refresh}
         </button>
       </header>
@@ -287,6 +281,8 @@ function MetricTile({
   );
 }
 
+type AhrSeriesId = "cost200" | "btc" | "ahr" | "buy" | "fixed";
+
 function Ahr999HistorySection({
   copy,
   history,
@@ -324,6 +320,13 @@ function Ahr999HistorySection({
   );
   const [customStart, setCustomStart] = useState(() => bounds.startDate);
   const [customEnd, setCustomEnd] = useState(() => bounds.endDate);
+  const [visibleSeries, setVisibleSeries] = useState<Record<AhrSeriesId, boolean>>({
+    cost200: true,
+    btc: true,
+    ahr: true,
+    buy: true,
+    fixed: true,
+  });
 
   useEffect(() => {
     if (!hasHistory) {
@@ -383,6 +386,13 @@ function Ahr999HistorySection({
     setCustomEnd(endDate);
   }
 
+  function toggleVisibleSeries(series: AhrSeriesId) {
+    setVisibleSeries((current) => ({
+      ...current,
+      [series]: !current[series],
+    }));
+  }
+
   return (
     <section className="macro-detail-section">
       <div className="macro-section-header">
@@ -434,9 +444,11 @@ function Ahr999HistorySection({
           allPoints={points}
           copy={copy}
           onRangeChange={applyOverviewRange}
+          onToggleSeries={toggleVisibleSeries}
           points={filteredPoints}
           rangeEndTsMs={filteredPoints[filteredPoints.length - 1]?.ts_ms ?? bounds.endTsMs}
           rangeStartTsMs={filteredPoints[0]?.ts_ms ?? bounds.startTsMs}
+          visibleSeries={visibleSeries}
         />
       </div>
       <div className="macro-ahr-summary-grid">
@@ -469,9 +481,23 @@ function Ahr999HistorySection({
           <button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} type="button">
             ‹
           </button>
-          <span>
-            {copy.macro.historyPage} {safePage + 1}/{pageCount}
-          </span>
+          <AhrPageButtons page={safePage} pageCount={pageCount} setPage={setPage} />
+          <label className="macro-page-jump">
+            <span>{copy.macro.historyPageJump}</span>
+            <input
+              aria-label={copy.macro.historyPageJump}
+              max={pageCount}
+              min={1}
+              onChange={(event) => {
+                const nextPage = Number(event.target.value);
+                if (Number.isFinite(nextPage)) {
+                  setPage(clamp(Math.trunc(nextPage) - 1, 0, pageCount - 1));
+                }
+              }}
+              type="number"
+              value={safePage + 1}
+            />
+          </label>
           <button
             disabled={safePage >= pageCount - 1}
             onClick={() => setPage(safePage + 1)}
@@ -507,6 +533,55 @@ function Ahr999HistorySection({
   );
 }
 
+function AhrPageButtons({
+  page,
+  pageCount,
+  setPage,
+}: {
+  page: number;
+  pageCount: number;
+  setPage: (page: number) => void;
+}) {
+  const visiblePages = buildVisiblePageNumbers(page, pageCount);
+  return (
+    <>
+      {visiblePages.map((item, index) =>
+        item === "ellipsis" ? (
+          <span className="macro-page-ellipsis" key={`ellipsis-${index}`}>
+            ...
+          </span>
+        ) : (
+          <button
+            className={item === page ? "active" : ""}
+            key={item}
+            onClick={() => setPage(item)}
+            type="button"
+          >
+            {item + 1}
+          </button>
+        ),
+      )}
+    </>
+  );
+}
+
+function buildVisiblePageNumbers(page: number, pageCount: number): Array<number | "ellipsis"> {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index);
+  }
+  const pages = new Set([0, 1, 2, page - 1, page, page + 1, pageCount - 1]);
+  const sorted = [...pages]
+    .filter((item) => item >= 0 && item < pageCount)
+    .sort((left, right) => left - right);
+  return sorted.flatMap((item, index) => {
+    const previous = sorted[index - 1];
+    if (index > 0 && previous !== undefined && item - previous > 1) {
+      return ["ellipsis" as const, item];
+    }
+    return [item];
+  });
+}
+
 function AnalogComparisonSection({
   comparisons,
   copy,
@@ -533,7 +608,7 @@ function AnalogComparisonSection({
           <h3>{copy.macro.analogComparison}</h3>
           <p>
             {selected?.current
-              ? `${copy.macro.currentLookback} ${selected.timeframe_days}D -> ${copy.macro.historicalForward}`
+              ? `${copy.macro.currentLookback} ${selected.timeframe_days}D -> ${copy.macro.historicalAnalogForward}`
               : copy.macro.noAnalogMatches}
           </p>
         </div>
@@ -559,36 +634,44 @@ function AnalogComparisonSection({
               themeMode={themeMode}
               window={selected.current}
             />
-            {selected.matches.map((match) => (
-              <KlineComparisonCard
-                ariaLabel={`${formatForwardTitle(copy, match.label)} K线`}
-                key={match.id}
-                themeMode={themeMode}
-                title={`${formatForwardTitle(copy, match.label)} · ${match.score}/100`}
-                window={match.forward ?? match.lookback}
-              >
-                <div className="macro-kline-meta">
-                  <span>
-                    final {formatPct(match.final_return_pct)} · drawdown{" "}
-                    {formatPct(match.max_drawdown_pct)} · runup {formatPct(match.max_runup_pct)}
-                  </span>
-                  <div className="macro-score-components">
-                    {match.components.map((component) => (
-                      <small key={component.label}>
-                        {formatSnake(component.label)} {component.points}/{component.max_points}
-                      </small>
-                    ))}
+            {selected.matches.map((match) => {
+              const title = formatAnalogForwardTitle(copy, match.label);
+              const chartWindow = mergeAnalogWindows(match.lookback, match.forward ?? null);
+              const anchorLabel = formatAnalogAnchorLabel(copy, match.label, match.lookback);
+              return (
+                <KlineComparisonCard
+                  anchorLabel={anchorLabel}
+                  anchorTsMs={match.lookback.end_ts_ms}
+                  ariaLabel={`${title} K线`}
+                  key={match.id}
+                  summaryWindow={match.forward ?? match.lookback}
+                  themeMode={themeMode}
+                  title={`${title} · ${match.score}/100`}
+                  window={chartWindow}
+                >
+                  <div className="macro-kline-meta">
+                    <span>
+                      final {formatPct(match.final_return_pct)} · drawdown{" "}
+                      {formatPct(match.max_drawdown_pct)} · runup {formatPct(match.max_runup_pct)}
+                    </span>
+                    <div className="macro-score-components">
+                      {match.components.map((component) => (
+                        <small key={component.label}>
+                          {formatSnake(component.label)} {component.points}/{component.max_points}
+                        </small>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </KlineComparisonCard>
-            ))}
+                </KlineComparisonCard>
+              );
+            })}
           </div>
           {selected.matches.length > 0 ? (
             <ul className="macro-list macro-analog-list">
               {selected.matches.map((match) => (
                 <li key={match.id}>
                   <strong>
-                    {formatForwardTitle(copy, match.label)} · {match.score}/100
+                    {formatAnalogForwardTitle(copy, match.label)} · {match.score}/100
                   </strong>
                   <span>
                     final {formatPct(match.final_return_pct)} · drawdown{" "}
@@ -616,29 +699,42 @@ function AnalogComparisonSection({
 }
 
 function KlineComparisonCard({
+  anchorLabel,
+  anchorTsMs,
   ariaLabel,
   children,
+  summaryWindow,
   themeMode,
   title,
   window,
 }: {
+  anchorLabel?: string;
+  anchorTsMs?: number;
   ariaLabel: string;
   children?: ReactNode;
+  summaryWindow?: AnalogPathSummary;
   themeMode: string;
   title: string;
   window: AnalogPathSummary;
 }) {
-  const priceSummary = summarizeKlinePrices(window);
+  const displaySummary = summaryWindow ?? window;
+  const priceSummary = summarizeKlinePrices(displaySummary);
 
   return (
     <div className="macro-kline-card">
       <h4>{title}</h4>
-      <InteractiveKlineChart ariaLabel={ariaLabel} themeMode={themeMode} window={window} />
+      <InteractiveKlineChart
+        anchorLabel={anchorLabel}
+        anchorTsMs={anchorTsMs}
+        ariaLabel={ariaLabel}
+        themeMode={themeMode}
+        window={window}
+      />
       <div className="macro-kline-meta">
         {priceSummary ? <span>{priceSummary}</span> : null}
         <span>
-          final {formatPct(window.final_return_pct)} · drawdown {formatPct(window.max_drawdown_pct)}{" "}
-          · runup {formatPct(window.max_runup_pct)}
+          final {formatPct(displaySummary.final_return_pct)} · drawdown{" "}
+          {formatPct(displaySummary.max_drawdown_pct)} · runup {formatPct(displaySummary.max_runup_pct)}
         </span>
       </div>
       {children}
@@ -647,10 +743,14 @@ function KlineComparisonCard({
 }
 
 function InteractiveKlineChart({
+  anchorLabel,
+  anchorTsMs,
   ariaLabel,
   themeMode,
   window,
 }: {
+  anchorLabel?: string;
+  anchorTsMs?: number;
   ariaLabel: string;
   themeMode: string;
   window: AnalogPathSummary;
@@ -658,6 +758,18 @@ function InteractiveKlineChart({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const anchorTsMsRef = useRef(anchorTsMs);
+  const [anchorX, setAnchorX] = useState<number | null>(null);
+
+  function updateAnchorLine() {
+    const chart = chartRef.current;
+    const anchor = anchorTsMsRef.current;
+    if (!chart || anchor == null) {
+      setAnchorX(null);
+      return;
+    }
+    setAnchorX(chart.timeScale().timeToCoordinate(toChartTime(anchor)));
+  }
 
   useEffect(() => {
     const container = containerRef.current;
@@ -697,8 +809,10 @@ function InteractiveKlineChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateAnchorLine);
 
     return () => {
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(updateAnchorLine);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -725,6 +839,11 @@ function InteractiveKlineChart({
   }, [themeMode]);
 
   useEffect(() => {
+    anchorTsMsRef.current = anchorTsMs;
+    updateAnchorLine();
+  }, [anchorTsMs, window]);
+
+  useEffect(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
     if (!chart || !series) {
@@ -741,11 +860,23 @@ function InteractiveKlineChart({
       })),
     );
     chart.timeScale().fitContent();
+    requestAnimationFrame(updateAnchorLine);
   }, [window]);
 
   return (
     <div aria-label={ariaLabel} className="macro-kline-chart" role="img">
       <div className="macro-kline-canvas" ref={containerRef} />
+      {anchorLabel ? (
+        <>
+          {anchorX !== null ? <span className="macro-kline-anchor-line" style={{ left: `${anchorX}px` }} /> : null}
+          <span
+            className="macro-kline-anchor-label"
+            style={anchorX !== null ? { left: `${Math.max(8, anchorX + 6)}px` } : undefined}
+          >
+            {anchorLabel}
+          </span>
+        </>
+      ) : null}
       {import.meta.env.MODE === "test" ? (
         <div className="macro-kline-test-fallback">
           {window.candles.slice(0, 3).map((candle) => (
@@ -757,8 +888,45 @@ function InteractiveKlineChart({
   );
 }
 
-function formatForwardTitle(copy: Copy, label: string): string {
-  return `${copy.macro.historicalForward} ${label.replace(/^after\s+/i, "")}`;
+function formatAnalogForwardTitle(copy: Copy, label: string): string {
+  return `${copy.macro.historicalAnalogForward} ${label.replace(/^after\s+/i, "")}`;
+}
+
+function formatAnalogAnchorDate(label: string): string {
+  return label.replace(/^after\s+\d+D\s+/i, "");
+}
+
+function formatAnalogAnchorLabel(copy: Copy, label: string, lookback: AnalogPathSummary): string {
+  const anchor = lookback.candles[lookback.candles.length - 1];
+  const anchorPrice = anchor ? ` · ${formatUsd(anchor.close)}` : "";
+  return `${copy.macro.anchor} ${formatAnalogAnchorDate(label)}${anchorPrice}`;
+}
+
+function mergeAnalogWindows(lookback: AnalogPathSummary, forward: AnalogPathSummary | null): AnalogPathSummary {
+  if (!forward) {
+    return lookback;
+  }
+  const candles = [...lookback.candles, ...forward.candles].filter(
+    (candle, index, all) => all.findIndex((item) => item.ts_ms === candle.ts_ms) === index,
+  );
+  const first = candles[0];
+  const last = candles[candles.length - 1];
+  if (!first || !last || first.open <= 0) {
+    return lookback;
+  }
+  const path = candles.map((candle) => ({
+    offset_days: Math.round((candle.ts_ms - first.ts_ms) / 86_400_000),
+    return_pct: candle.close / first.open - 1,
+  }));
+  return {
+    start_ts_ms: first.ts_ms,
+    end_ts_ms: last.ts_ms,
+    final_return_pct: last.close / first.open - 1,
+    max_drawdown_pct: Math.min(...candles.map((candle) => candle.low / first.open - 1)),
+    max_runup_pct: Math.max(...candles.map((candle) => candle.high / first.open - 1)),
+    candles,
+    path,
+  };
 }
 
 function summarizeKlinePrices(window: AnalogPathSummary): string | null {
@@ -798,16 +966,20 @@ function Ahr999CompositeChart({
   allPoints,
   copy,
   onRangeChange,
+  onToggleSeries,
   points,
   rangeEndTsMs,
   rangeStartTsMs,
+  visibleSeries,
 }: {
   allPoints: Ahr999HistoryPoint[];
   copy: Copy;
   onRangeChange: (startDate: string, endDate: string) => void;
+  onToggleSeries: (series: AhrSeriesId) => void;
   points: Ahr999HistoryPoint[];
   rangeEndTsMs: number;
   rangeStartTsMs: number;
+  visibleSeries: Record<AhrSeriesId, boolean>;
 }) {
   if (points.length === 0 || allPoints.length === 0) {
     return null;
@@ -820,6 +992,7 @@ function Ahr999CompositeChart({
     endIndex: number;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const width = 1240;
   const height = 540;
   const leftAxisWidth = 88;
@@ -854,6 +1027,18 @@ function Ahr999CompositeChart({
   ]);
   const rangeStartIndex = findPointIndexByTs(allPoints, rangeStartTsMs);
   const rangeEndIndex = findPointIndexByTs(allPoints, rangeEndTsMs);
+  const hoverPoint = hoverIndex === null ? null : points[hoverIndex] ?? null;
+  const hoverX = hoverPoint ? xCoord(hoverPoint.ts_ms) : null;
+  const hoverY = hoverPoint
+    ? yCoordLog(hoverPoint.value, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)
+    : null;
+  const legendItems: Array<{ id: AhrSeriesId; label: string; color: string }> = [
+    { id: "cost200", label: copy.macro.cost200Label, color: "#d4d8e2" },
+    { id: "btc", label: copy.macro.btcPriceLabel, color: "#e5b84d" },
+    { id: "ahr", label: copy.macro.ahr999IndexLabel, color: "#5b8cff" },
+    { id: "buy", label: copy.macro.buyBottomLabel, color: "#ff5576" },
+    { id: "fixed", label: copy.macro.fixedInvestLabel, color: "#68c36d" },
+  ];
 
   function xCoord(tsMs: number) {
     if (maxTsMs === minTsMs) {
@@ -867,6 +1052,22 @@ function Ahr999CompositeChart({
       return plotLeft + plotWidth / 2;
     }
     return plotLeft + ((tsMs - allMinTsMs) / (allMaxTsMs - allMinTsMs)) * plotWidth;
+  }
+
+  function handleChartPointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (dragging) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX =
+      rect.width > 0 ? ((event.clientX - rect.left) / rect.width) * width : event.clientX;
+    const pointerY =
+      rect.height > 0 ? ((event.clientY - rect.top) / rect.height) * height : event.clientY;
+    if (pointerX < plotLeft || pointerX > plotRight || pointerY < chartTop || pointerY > plotBottom) {
+      setHoverIndex(null);
+      return;
+    }
+    setHoverIndex(findNearestAhrPointIndex(points, pointerX, xCoord));
   }
 
   function updateOverviewRange(startIndex: number, endIndex: number) {
@@ -958,27 +1159,36 @@ function Ahr999CompositeChart({
   return (
     <div className={dragging ? "macro-ahr-composite is-dragging" : "macro-ahr-composite"} ref={containerRef}>
       <div className="macro-ahr-legend">
-        {[
-          { label: copy.macro.cost200Label, color: "#d4d8e2" },
-          { label: copy.macro.btcPriceLabel, color: "#e5b84d" },
-          { label: copy.macro.ahr999IndexLabel, color: "#5b8cff" },
-          { label: copy.macro.buyBottomLabel, color: "#ff5576" },
-          { label: copy.macro.fixedInvestLabel, color: "#68c36d" },
-        ].map((item) => (
-          <span key={item.label}>
+        {legendItems.map((item) => (
+          <button
+            aria-pressed={visibleSeries[item.id]}
+            className={visibleSeries[item.id] ? "" : "is-muted"}
+            key={item.id}
+            onClick={() => onToggleSeries(item.id)}
+            type="button"
+          >
             <i style={{ backgroundColor: item.color }} />
             {item.label}
-          </span>
+          </button>
         ))}
       </div>
-      <svg className="macro-ahr-svg" role="img" viewBox={`0 0 ${width} ${height}`}>
-        <rect
-          className="macro-ahr-zone-fill"
-          height={plotBottom - yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-          width={plotWidth}
-          x={plotLeft}
-          y={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-        />
+      <svg
+        aria-label="AHR999 chart"
+        className="macro-ahr-svg"
+        onPointerLeave={() => setHoverIndex(null)}
+        onPointerMove={handleChartPointerMove}
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        {visibleSeries.buy ? (
+          <rect
+            className="macro-ahr-zone-fill"
+            height={plotBottom - yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+            width={plotWidth}
+            x={plotLeft}
+            y={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+          />
+        ) : null}
         {gridYs.map((y, index) => (
           <line
             className={index === 0 || index === gridYs.length - 1 ? "macro-chart-gridline--axis" : "macro-chart-gridline"}
@@ -1007,79 +1217,143 @@ function Ahr999CompositeChart({
             </text>
           </g>
         ))}
-        <line
-          className="macro-reference-line macro-reference-line--buy"
-          x1={plotLeft}
-          x2={plotRight}
-          y1={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-          y2={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-        />
-        <line
-          className="macro-reference-line macro-reference-line--fixed"
-          x1={plotLeft}
-          x2={plotRight}
-          y1={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-          y2={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-        />
-        <text
-          className="macro-reference-label"
-          x={plotRight - 8}
-          y={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom) - 6}
-        >
-          0.45
-        </text>
-        <text
-          className="macro-reference-label"
-          x={plotRight - 8}
-          y={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom) - 6}
-        >
-          1.2
-        </text>
+        {visibleSeries.buy ? (
+          <>
+            <line
+              className="macro-reference-line macro-reference-line--buy"
+              x1={plotLeft}
+              x2={plotRight}
+              y1={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+              y2={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+            />
+            <text
+              className="macro-reference-label"
+              x={plotRight - 8}
+              y={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom) - 6}
+            >
+              0.45
+            </text>
+          </>
+        ) : null}
+        {visibleSeries.fixed ? (
+          <>
+            <line
+              className="macro-reference-line macro-reference-line--fixed"
+              x1={plotLeft}
+              x2={plotRight}
+              y1={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+              y2={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+            />
+            <text
+              className="macro-reference-label"
+              x={plotRight - 8}
+              y={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom) - 6}
+            >
+              1.2
+            </text>
+          </>
+        ) : null}
         <path
           className="macro-ahr-line macro-ahr-line--cost"
+          aria-hidden={!visibleSeries.cost200}
+          aria-label={`${copy.macro.cost200Label} series`}
           d={linePath(
             points.map((point) => ({
               x: xCoord(point.ts_ms),
               y: yCoordLog(point.gma200, priceDomain.min, priceDomain.max, chartTop, plotBottom),
             })),
           )}
+          opacity={visibleSeries.cost200 ? undefined : 0}
         />
         <path
           className="macro-ahr-line macro-ahr-line--btc"
+          aria-hidden={!visibleSeries.btc}
+          aria-label={`${copy.macro.btcPriceLabel} series`}
           d={linePath(
             points.map((point) => ({
               x: xCoord(point.ts_ms),
               y: yCoordLog(point.btc_price, priceDomain.min, priceDomain.max, chartTop, plotBottom),
             })),
           )}
+          opacity={visibleSeries.btc ? undefined : 0}
         />
         <path
           className="macro-ahr-line macro-ahr-line--ahr"
+          aria-hidden={!visibleSeries.ahr}
+          aria-label={`${copy.macro.ahr999IndexLabel} series`}
           d={linePath(
             points.map((point) => ({
               x: xCoord(point.ts_ms),
               y: yCoordLog(point.value, ahrDomain.min, ahrDomain.max, chartTop, plotBottom),
             })),
           )}
+          opacity={visibleSeries.ahr ? undefined : 0}
         />
-        <circle
-          className="macro-ahr-point macro-ahr-point--btc"
-          cx={xCoord(points[points.length - 1].ts_ms)}
-          cy={yCoordLog(points[points.length - 1].btc_price, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
-          r={4}
-        />
-        <circle
-          className="macro-ahr-point macro-ahr-point--cost"
-          cx={xCoord(points[points.length - 1].ts_ms)}
-          cy={yCoordLog(points[points.length - 1].gma200, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
-          r={3.6}
-        />
-        <circle
-          className="macro-ahr-point macro-ahr-point--ahr"
-          cx={xCoord(points[points.length - 1].ts_ms)}
-          cy={yCoordLog(points[points.length - 1].value, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
-          r={4}
-        />
+        {visibleSeries.btc ? (
+          <circle
+            className="macro-ahr-point macro-ahr-point--btc"
+            cx={xCoord(points[points.length - 1].ts_ms)}
+            cy={yCoordLog(points[points.length - 1].btc_price, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
+            r={4}
+          />
+        ) : null}
+        {visibleSeries.cost200 ? (
+          <circle
+            className="macro-ahr-point macro-ahr-point--cost"
+            cx={xCoord(points[points.length - 1].ts_ms)}
+            cy={yCoordLog(points[points.length - 1].gma200, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
+            r={3.6}
+          />
+        ) : null}
+        {visibleSeries.ahr ? (
+          <circle
+            className="macro-ahr-point macro-ahr-point--ahr"
+            cx={xCoord(points[points.length - 1].ts_ms)}
+            cy={yCoordLog(points[points.length - 1].value, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+            r={4}
+          />
+        ) : null}
+        {hoverPoint && hoverX !== null && hoverY !== null ? (
+          <g className="macro-ahr-hover-layer">
+            <line className="macro-ahr-crosshair" x1={hoverX} x2={hoverX} y1={chartTop} y2={plotBottom} />
+            <line className="macro-ahr-crosshair" x1={plotLeft} x2={plotRight} y1={hoverY} y2={hoverY} />
+            {visibleSeries.cost200 ? (
+              <circle
+                className="macro-ahr-hover-dot macro-ahr-point--cost"
+                cx={hoverX}
+                cy={yCoordLog(hoverPoint.gma200, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
+                r={6}
+              />
+            ) : null}
+            {visibleSeries.btc ? (
+              <circle
+                className="macro-ahr-hover-dot macro-ahr-point--btc"
+                cx={hoverX}
+                cy={yCoordLog(hoverPoint.btc_price, priceDomain.min, priceDomain.max, chartTop, plotBottom)}
+                r={6}
+              />
+            ) : null}
+            {visibleSeries.ahr ? (
+              <circle className="macro-ahr-hover-dot macro-ahr-point--ahr" cx={hoverX} cy={hoverY} r={6} />
+            ) : null}
+            {visibleSeries.buy ? (
+              <circle
+                className="macro-ahr-hover-dot macro-ahr-point--buy"
+                cx={hoverX}
+                cy={yCoordLog(0.45, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+                r={6}
+              />
+            ) : null}
+            {visibleSeries.fixed ? (
+              <circle
+                className="macro-ahr-hover-dot macro-ahr-point--fixed"
+                cx={hoverX}
+                cy={yCoordLog(1.2, ahrDomain.min, ahrDomain.max, chartTop, plotBottom)}
+                r={6}
+              />
+            ) : null}
+          </g>
+        ) : null}
         {leftTicks.map((tick, index) => (
           <text
             key={`left-${index}`}
@@ -1154,6 +1428,53 @@ function Ahr999CompositeChart({
           {formatChartDate(allMaxTsMs)}
         </text>
       </svg>
+      {hoverPoint && hoverX !== null ? (
+        <div
+          className="macro-ahr-tooltip"
+          data-testid="ahr999-tooltip"
+          style={{
+            left: `${Math.min(82, Math.max(14, (hoverX / width) * 100))}%`,
+            top: `${((chartTop + 72) / height) * 100}%`,
+          }}
+        >
+          <strong>{hoverPoint.date}</strong>
+          {visibleSeries.cost200 ? (
+            <span>
+              <i className="macro-ahr-point--cost" />
+              {copy.macro.cost200Label}
+              <b>{formatUsd(hoverPoint.gma200)}</b>
+            </span>
+          ) : null}
+          {visibleSeries.btc ? (
+            <span>
+              <i className="macro-ahr-point--btc" />
+              {copy.macro.btcPriceLabel}
+              <b>{formatUsd(hoverPoint.btc_price)}</b>
+            </span>
+          ) : null}
+          {visibleSeries.ahr ? (
+            <span>
+              <i className="macro-ahr-point--ahr" />
+              {copy.macro.ahr999IndexLabel}
+              <b>{hoverPoint.value.toFixed(2)}</b>
+            </span>
+          ) : null}
+          {visibleSeries.buy ? (
+            <span>
+              <i className="macro-ahr-point--buy" />
+              {copy.macro.buyBottomLabel}
+              <b>0.45</b>
+            </span>
+          ) : null}
+          {visibleSeries.fixed ? (
+            <span>
+              <i className="macro-ahr-point--fixed" />
+              {copy.macro.fixedInvestLabel}
+              <b>1.20</b>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1250,6 +1571,23 @@ function findPointIndexByTs(points: Ahr999HistoryPoint[], tsMs: number) {
   let nearestDistance = Number.POSITIVE_INFINITY;
   points.forEach((point, index) => {
     const distance = Math.abs(point.ts_ms - tsMs);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+  return nearestIndex;
+}
+
+function findNearestAhrPointIndex(
+  points: Ahr999HistoryPoint[],
+  pointerX: number,
+  xCoord: (tsMs: number) => number,
+) {
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  points.forEach((point, index) => {
+    const distance = Math.abs(xCoord(point.ts_ms) - pointerX);
     if (distance < nearestDistance) {
       nearestDistance = distance;
       nearestIndex = index;

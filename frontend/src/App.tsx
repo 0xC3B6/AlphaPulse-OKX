@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   closePaperPosition,
   connectEvents,
+  fetchBtcMacro,
   fetchSnapshot,
   openPaperOrder,
 } from "./api";
@@ -16,6 +17,7 @@ import { defaultLanguage, translations } from "./i18n";
 import type { Copy, Language } from "./i18n";
 import type {
   BackendEvent,
+  BtcMacroSnapshot,
   DashboardSnapshot,
   PaperAccountSnapshot,
   PaperSide,
@@ -50,6 +52,9 @@ const emptySnapshot: DashboardSnapshot = {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
+  const [macroSnapshot, setMacroSnapshot] = useState<BtcMacroSnapshot | null>(null);
+  const [macroLoading, setMacroLoading] = useState(false);
+  const [macroError, setMacroError] = useState<string | null>(null);
   const [backendState, setBackendState] = useState<"connected" | "disconnected">(
     "disconnected",
   );
@@ -59,6 +64,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tradingViewSymbol, setTradingViewSymbol] = useState<SymbolSnapshot | null>(null);
   const [orderMargin, setOrderMargin] = useState("100");
   const [orderLeverage, setOrderLeverage] = useState("10");
   const [tradeBusy, setTradeBusy] = useState(false);
@@ -67,6 +73,7 @@ export default function App() {
     "Notification" in window ? Notification.permission : "unsupported",
   );
   const notified = useRef(new Map<string, string>());
+  const macroRequest = useRef<Promise<void> | null>(null);
   const copy = translations[language];
 
   useEffect(() => {
@@ -109,6 +116,31 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    void loadMacro();
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== "radar") {
+      setTradingViewSymbol(null);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!tradingViewSymbol) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setTradingViewSymbol(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [tradingViewSymbol]);
 
   useEffect(() => {
     if (import.meta.env.MODE === "test" || typeof WebSocket === "undefined") {
@@ -167,6 +199,36 @@ export default function App() {
     setNotificationPermission(permission);
   }
 
+  function loadMacro(force = false): Promise<void> {
+    if (macroRequest.current && !force) {
+      return macroRequest.current;
+    }
+
+    setMacroLoading(true);
+    setMacroError(null);
+
+    let request: Promise<void>;
+    request = fetchBtcMacro()
+      .then((data) => {
+        if (macroRequest.current === request) {
+          setMacroSnapshot(data);
+        }
+      })
+      .catch((requestError) => {
+        if (macroRequest.current === request) {
+          setMacroError(requestError instanceof Error ? requestError.message : String(requestError));
+        }
+      })
+      .finally(() => {
+        if (macroRequest.current === request) {
+          macroRequest.current = null;
+          setMacroLoading(false);
+        }
+      });
+    macroRequest.current = request;
+    return request;
+  }
+
   async function submitPaperOrder(side: PaperSide) {
     if (!selected) {
       return;
@@ -206,6 +268,11 @@ export default function App() {
     } finally {
       setTradeBusy(false);
     }
+  }
+
+  function openTradingView(symbol: SymbolSnapshot) {
+    setSelectedId(symbol.inst_id);
+    setTradingViewSymbol(symbol);
   }
 
   return (
@@ -312,7 +379,16 @@ export default function App() {
       </section>
 
       {viewMode === "macro" ? (
-        <MacroPanel copy={copy} themeMode={themeMode} />
+        <MacroPanel
+          copy={copy}
+          error={macroError}
+          loading={macroLoading}
+          onRefresh={() => {
+            void loadMacro(true);
+          }}
+          snapshot={macroSnapshot}
+          themeMode={themeMode}
+        />
       ) : filteredSymbols.length === 0 ? (
         <section className="empty-state">
           <h2>{copy.empty.title}</h2>
@@ -342,8 +418,24 @@ export default function App() {
                     onClick={() => setSelectedId(symbol.inst_id)}
                   >
                     <td>
-                      <strong>{symbol.inst_id}</strong>
-                      <span>{formatTags(symbol.pool_tags, copy)}</span>
+                      <div className="symbol-cell">
+                        <div className="symbol-cell-main">
+                          <strong>{symbol.inst_id}</strong>
+                          <span>{formatTags(symbol.pool_tags, copy)}</span>
+                        </div>
+                        <button
+                          aria-label={formatTemplate(copy.actions.openTradingViewChart, symbol.inst_id)}
+                          className="symbol-tv-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openTradingView(symbol);
+                          }}
+                          title={copy.actions.openTradingView}
+                          type="button"
+                        >
+                          TV
+                        </button>
+                      </div>
                     </td>
                     <td>{formatPrice(symbol.price)}</td>
                     <td>{formatPct(symbol.change_5m_pct)}</td>
@@ -362,6 +454,7 @@ export default function App() {
               <SymbolDetail
                 copy={copy}
                 onClosePaper={submitPaperClose}
+                onOpenTradingView={openTradingView}
                 onLeverageChange={setOrderLeverage}
                 onMarginChange={setOrderMargin}
                 onOpenPaper={submitPaperOrder}
@@ -377,6 +470,15 @@ export default function App() {
           </aside>
         </section>
       )}
+      {viewMode === "radar" && tradingViewSymbol ? (
+        <TradingViewModal
+          copy={copy}
+          language={language}
+          onClose={() => setTradingViewSymbol(null)}
+          symbol={tradingViewSymbol}
+          themeMode={themeMode}
+        />
+      ) : null}
     </main>
   );
 }
@@ -400,6 +502,7 @@ function readStoredLanguage(): Language {
 function SymbolDetail({
   copy,
   onClosePaper,
+  onOpenTradingView,
   onLeverageChange,
   onMarginChange,
   onOpenPaper,
@@ -413,6 +516,7 @@ function SymbolDetail({
 }: {
   copy: Copy;
   onClosePaper: () => void;
+  onOpenTradingView: (symbol: SymbolSnapshot) => void;
   onLeverageChange: (value: string) => void;
   onMarginChange: (value: string) => void;
   onOpenPaper: (side: PaperSide) => void;
@@ -431,9 +535,19 @@ function SymbolDetail({
 
   return (
     <>
-      <header>
-        <h2>{symbol.inst_id}</h2>
-        <p>{symbol.trigger_reason || copy.detail.noActiveTrigger}</p>
+      <header className="detail-header">
+        <div>
+          <h2>{symbol.inst_id}</h2>
+          <p>{symbol.trigger_reason || copy.detail.noActiveTrigger}</p>
+        </div>
+        <button
+          aria-label={formatTemplate(copy.actions.openTradingViewChart, symbol.inst_id)}
+          className="detail-tv-button"
+          onClick={() => onOpenTradingView(symbol)}
+          type="button"
+        >
+          {copy.actions.openTradingView}
+        </button>
       </header>
       <dl className="detail-list">
         <div>
@@ -616,6 +730,60 @@ function SymbolDetail({
   );
 }
 
+function TradingViewModal({
+  copy,
+  language,
+  onClose,
+  symbol,
+  themeMode,
+}: {
+  copy: Copy;
+  language: Language;
+  onClose: () => void;
+  symbol: SymbolSnapshot;
+  themeMode: ThemeMode;
+}) {
+  const tradingViewSymbol = resolveTradingViewSymbol(symbol.inst_id);
+  const title = `${symbol.inst_id} TradingView`;
+  return (
+    <div className="tv-modal-backdrop" onClick={onClose}>
+      <section
+        aria-label={title}
+        aria-modal="true"
+        className="tv-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <header>
+          <div>
+            <h2>{symbol.inst_id}</h2>
+            <p>{tradingViewSymbol ?? copy.detail.tradingViewUnavailable}</p>
+          </div>
+          <button
+            aria-label={copy.actions.closeTradingView}
+            className="tv-modal-close"
+            onClick={onClose}
+            type="button"
+          >
+            x
+          </button>
+        </header>
+        <div className="tv-modal-frame-wrap">
+          {tradingViewSymbol ? (
+            <iframe
+              allow="fullscreen"
+              src={buildTradingViewEmbedUrl(tradingViewSymbol, themeMode, language)}
+              title={title}
+            />
+          ) : (
+            <div className="tv-modal-empty">{copy.detail.tradingViewUnavailable}</div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function upsertSymbol(
   snapshot: DashboardSnapshot,
   symbol: SymbolSnapshot,
@@ -711,6 +879,41 @@ function pnlClass(value: number): string {
     return "negative";
   }
   return "";
+}
+
+function formatTemplate(template: string, symbol: string): string {
+  return template.replace("{symbol}", symbol);
+}
+
+function resolveTradingViewSymbol(instId: string): string | null {
+  const normalized = instId.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  const swapMatch = normalized.match(/^([A-Z0-9]+)-USDT-SWAP$/);
+  if (swapMatch) {
+    return `OKX:${swapMatch[1]}USDT.P`;
+  }
+
+  const spotMatch = normalized.match(/^([A-Z0-9]+)-USDT$/);
+  if (spotMatch) {
+    return `OKX:${spotMatch[1]}USDT`;
+  }
+
+  const compact = normalized.replace(/-/g, "");
+  return compact.length > 0 ? `OKX:${compact}` : null;
+}
+
+function buildTradingViewEmbedUrl(symbol: string, themeMode: ThemeMode, language: Language): string {
+  const params = new URLSearchParams({
+    symbol,
+    interval: "15",
+    theme: themeMode === "light" ? "light" : "dark",
+    style: "1",
+    locale: language === "zh" ? "zh_CN" : "en",
+    enable_publishing: "0",
+    allow_symbol_change: "0",
+    hide_top_toolbar: "0",
+    withdateranges: "1",
+  });
+  return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
 }
 
 function formatTimestamp(value: number | null): string {
