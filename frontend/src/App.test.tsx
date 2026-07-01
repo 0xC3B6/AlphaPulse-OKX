@@ -471,6 +471,81 @@ describe("App", () => {
     expect(macroRequests).toBe(1);
   });
 
+  it("shows a compact macro summary on the radar console", async () => {
+    mockSnapshot();
+
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    const summary = await screen.findByTestId("macro-summary-strip");
+
+    expect(summary).toHaveTextContent("BTC 大周期摘要");
+    expect(summary).toHaveTextContent("熊市反弹");
+    expect(summary).toHaveTextContent("$60,000.00");
+    expect(summary).toHaveTextContent("80/100");
+    expect(summary).toHaveTextContent("-40.00%");
+    expect(summary).toHaveTextContent("55.00%");
+  });
+
+  it("keeps the radar workspace usable when the macro summary request fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/macro/btc")) {
+          return {
+            ok: false,
+            json: async () => ({ message: "macro unavailable" }),
+          };
+        }
+        if (String(input).includes("/chart")) {
+          return {
+            ok: true,
+            json: async () => chart,
+          };
+        }
+        return {
+          ok: true,
+          json: async () => snapshot,
+        };
+      }),
+    );
+
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    const summary = await screen.findByTestId("macro-summary-strip");
+    expect(summary).toHaveTextContent("大周期数据不可用");
+    expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
+  });
+
+  it("selects symbols from the dense radar table", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
+
+    const detail = screen.getByTestId("symbol-detail-panel");
+    expect(detail).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(detail).toHaveTextContent("range long 82: near support");
+  });
+
+  it("opens TradingView from a table button without changing the selected detail symbol", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("DOGE-USDT-SWAP");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "打开 LAB-USDT-SWAP TradingView 图表" })[0]);
+
+    expect(screen.getByRole("dialog", { name: "LAB-USDT-SWAP TradingView" })).toBeInTheDocument();
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("DOGE-USDT-SWAP");
+  });
+
   it("renders AHR999 history guidance and paginated rows", async () => {
     mockSnapshot();
 
