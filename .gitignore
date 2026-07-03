@@ -27,6 +27,7 @@ target/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.npm-cache/
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts

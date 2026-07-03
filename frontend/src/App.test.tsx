@@ -21,6 +21,81 @@ const paper: PaperAccountSnapshot = {
   trades: [],
 };
 
+const activePaper: PaperAccountSnapshot = {
+  ...paper,
+  realized_pnl: 207.58,
+  unrealized_pnl: 42.86,
+  equity: 10250.44,
+  used_margin: 459.44,
+  available_balance: 9791,
+  positions: [
+    {
+      inst_id: "LAB-USDT-SWAP",
+      side: "long",
+      qty: 58.1395348837,
+      entry_price: 17.2,
+      mark_price: 17.9,
+      margin: 100,
+      leverage: 10,
+      notional: 1000,
+      unrealized_pnl: 40.7,
+      pnl_pct: 0.407,
+      opened_at_ms: 1782400000000,
+    },
+    {
+      inst_id: "DOGE-USDT-SWAP",
+      side: "short",
+      qty: 1000,
+      entry_price: 0.18,
+      mark_price: 0.17784,
+      margin: 180,
+      leverage: 1,
+      notional: 180,
+      unrealized_pnl: 2.16,
+      pnl_pct: 0.012,
+      opened_at_ms: 1782400000000,
+    },
+  ],
+  trades: [
+    {
+      id: 3,
+      inst_id: "BREV-USDT-SWAP",
+      side: "short",
+      action: "close",
+      price: 0.083787,
+      qty: 2000,
+      margin: 100,
+      notional: 167.57,
+      realized_pnl: 236.94,
+      ts_ms: 1782400000000,
+    },
+    {
+      id: 2,
+      inst_id: "NES-USDT-SWAP",
+      side: "short",
+      action: "close",
+      price: 0.218644,
+      qty: 1000,
+      margin: 100,
+      notional: 218.64,
+      realized_pnl: -58.22,
+      ts_ms: 1782396400000,
+    },
+    {
+      id: 1,
+      inst_id: "LAB-USDT-SWAP",
+      side: "long",
+      action: "open",
+      price: 17.2,
+      qty: 58.1395348837,
+      margin: 100,
+      notional: 1000,
+      realized_pnl: 0,
+      ts_ms: 1782392800000,
+    },
+  ],
+};
+
 const snapshot: DashboardSnapshot = {
   last_scan_at_ms: 1782400000000,
   websocket_connected: true,
@@ -372,6 +447,65 @@ describe("App", () => {
     });
   });
 
+  it("uses four top-level task rail pages and keeps radar filters inside Monitor", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    const taskRail = screen.getByRole("navigation", { name: "主导航" });
+    expect(taskRail).toHaveTextContent("监控");
+    expect(taskRail).toHaveTextContent("交易");
+    expect(taskRail).toHaveTextContent("复盘");
+    expect(taskRail).toHaveTextContent("宏观");
+    expect(screen.getByRole("button", { name: "监控" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "交易" }));
+
+    expect(screen.getByRole("heading", { name: "交易" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "趋势" })).not.toBeInTheDocument();
+    expect(screen.getByText("当前持仓")).toBeInTheDocument();
+  });
+
+  it("shows all current positions on the Trade page and preloads the selected Monitor symbol", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
+    fireEvent.click(screen.getByRole("button", { name: "去交易" }));
+
+    expect(screen.getByRole("heading", { name: "交易" })).toBeInTheDocument();
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("LAB-USDT-SWAP");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(screen.getByLabelText("交易合约")).toHaveValue("DOGE-USDT-SWAP");
+    expect(screen.getByText("全部当前持仓")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeInTheDocument();
+  });
+
+  it("shows Review performance and trade records without Monitor filters", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+
+    expect(screen.getByRole("heading", { name: "复盘" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "趋势" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("review-page")).toHaveTextContent("已实现盈亏");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("+207.58 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("胜率");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("50.00%");
+    expect(screen.getByText("策略版本数据暂不可用")).toBeInTheDocument();
+    expect(screen.getByText(/BREV-USDT-SWAP/)).toBeInTheDocument();
+  });
+
   it("opens a TradingView chart modal from the radar only", async () => {
     mockSnapshot();
     render(<App />);
@@ -391,7 +525,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭 TradingView" }));
     expect(screen.queryByRole("dialog", { name: "LAB-USDT-SWAP TradingView" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
     expect(screen.queryByRole("button", { name: /TradingView/ })).not.toBeInTheDocument();
   });
 
@@ -473,7 +607,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(await screen.findByText("BTC 大周期")).toBeInTheDocument();
     expect(screen.getByTestId("macro-regime-card")).toHaveTextContent("熊市反弹");
@@ -489,7 +623,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect((await screen.findAllByText("交易许可")).length).toBeGreaterThan(0);
     expect(screen.getByTestId("macro-permission-card")).toHaveTextContent("降风险");
@@ -532,7 +666,7 @@ describe("App", () => {
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
     await waitFor(() => expect(macroRequests).toBe(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(screen.queryByTestId("macro-loading")).not.toBeInTheDocument();
     expect(await screen.findByText("BTC 大周期")).toBeInTheDocument();
@@ -620,7 +754,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(await screen.findByText("AHR999 历史")).toBeInTheDocument();
     expect(screen.getAllByText("Ahr999 Index").length).toBeGreaterThan(0);
@@ -672,7 +806,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(await screen.findByText("AHR999 历史")).toBeInTheDocument();
     fireEvent.pointerMove(screen.getByLabelText("AHR999 chart"), {
@@ -697,7 +831,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(await screen.findByText("历史 K 线对比")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "90D" })).toHaveClass("active");
@@ -735,7 +869,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "大周期" }));
+    fireEvent.click(screen.getByRole("button", { name: "宏观" }));
 
     expect(await screen.findByTestId("macro-loading")).toHaveClass("macro-loading");
     expect(screen.getByText("加载大周期数据中")).toBeInTheDocument();
@@ -813,6 +947,7 @@ describe("App", () => {
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
 
+    fireEvent.click(screen.getByRole("button", { name: "交易" }));
     fireEvent.click(screen.getByRole("button", { name: "模拟买入 / 开多" }));
 
     expect(await screen.findByRole("button", { name: "模拟平仓" })).toBeInTheDocument();

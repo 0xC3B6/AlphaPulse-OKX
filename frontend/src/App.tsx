@@ -8,13 +8,14 @@ import {
 } from "./api";
 import { ConsoleShell } from "./ConsoleShell";
 import { MacroPanel } from "./MacroPanel";
-import { MacroSummaryStrip } from "./MacroSummaryStrip";
+import { MonitorPage } from "./MonitorPage";
 import {
   sendBrowserNotification,
   shouldNotify,
 } from "./notifications";
-import { RadarWorkspace } from "./RadarWorkspace";
+import { ReviewPage } from "./ReviewPage";
 import "./styles.css";
+import { TradePage } from "./TradePage";
 import { TradingViewModal } from "./TradingViewModal";
 import { defaultLanguage, translations } from "./i18n";
 import type { Language } from "./i18n";
@@ -65,12 +66,13 @@ export default function App() {
     "disconnected",
   );
   const [streamState, setStreamState] = useState<"connected" | "idle">("idle");
-  const [viewMode, setViewMode] = useState<ViewMode>("radar");
+  const [viewMode, setViewMode] = useState<ViewMode>("monitor");
   const [filter, setFilter] = useState<Filter>("all");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tradingViewSymbol, setTradingViewSymbol] = useState<SymbolSnapshot | null>(null);
+  const [orderInstrument, setOrderInstrument] = useState("");
   const [orderMargin, setOrderMargin] = useState("100");
   const [orderLeverage, setOrderLeverage] = useState("10");
   const [tradeBusy, setTradeBusy] = useState(false);
@@ -111,6 +113,7 @@ export default function App() {
         setSnapshot(data);
         setBackendState("connected");
         setSelectedId((current) => current ?? data.symbols[0]?.inst_id ?? null);
+        setOrderInstrument((current) => current || data.symbols[0]?.inst_id || "");
       })
       .catch(() => {
         if (active) {
@@ -128,7 +131,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (viewMode !== "radar") {
+    if (viewMode !== "monitor") {
       setTradingViewSymbol(null);
     }
   }, [viewMode]);
@@ -158,6 +161,7 @@ export default function App() {
       if (event.type === "snapshot") {
         setSnapshot(event.data);
         setSelectedId((current) => current ?? event.data.symbols[0]?.inst_id ?? null);
+        setOrderInstrument((current) => current || event.data.symbols[0]?.inst_id || "");
         return;
       }
       if (event.type === "paper_updated") {
@@ -194,6 +198,10 @@ export default function App() {
   const selected =
     filteredSymbols.find((symbol) => symbol.inst_id === selectedId) ??
     filteredSymbols[0] ??
+    null;
+  const selectedTradePosition =
+    snapshot.paper.positions.find((position) => position.inst_id === orderInstrument) ??
+    snapshot.paper.positions[0] ??
     null;
 
   async function requestNotifications() {
@@ -235,8 +243,12 @@ export default function App() {
     return request;
   }
 
-  async function submitPaperOrder(side: PaperSide) {
-    if (!selected) {
+  async function submitPaperOrder(side: PaperSide, instId = orderInstrument || selected?.inst_id) {
+    const target =
+      snapshot.symbols.find((symbol) => symbol.inst_id === instId) ??
+      selected ??
+      null;
+    if (!target) {
       return;
     }
 
@@ -246,7 +258,7 @@ export default function App() {
     setTradeError(null);
     try {
       const paper = await openPaperOrder({
-        inst_id: selected.inst_id,
+        inst_id: target.inst_id,
         side,
         margin,
         leverage,
@@ -259,15 +271,15 @@ export default function App() {
     }
   }
 
-  async function submitPaperClose() {
-    if (!selected) {
+  async function submitPaperClose(instId = selectedTradePosition?.inst_id ?? selected?.inst_id) {
+    if (!instId) {
       return;
     }
 
     setTradeBusy(true);
     setTradeError(null);
     try {
-      const paper = await closePaperPosition(selected.inst_id);
+      const paper = await closePaperPosition(instId);
       setSnapshot((current) => ({ ...current, paper }));
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : String(error));
@@ -278,6 +290,12 @@ export default function App() {
 
   function openTradingView(symbol: SymbolSnapshot) {
     setTradingViewSymbol(symbol);
+  }
+
+  function tradeSymbol(symbol: SymbolSnapshot) {
+    setSelectedId(symbol.inst_id);
+    setOrderInstrument(symbol.inst_id);
+    setViewMode("trade");
   }
 
   return (
@@ -307,36 +325,43 @@ export default function App() {
           snapshot={macroSnapshot}
           themeMode={themeMode}
         />
+      ) : viewMode === "trade" ? (
+        <TradePage
+          copy={copy}
+          onClosePaper={submitPaperClose}
+          onInstrumentChange={setOrderInstrument}
+          onLeverageChange={setOrderLeverage}
+          onMarginChange={setOrderMargin}
+          onOpenPaper={submitPaperOrder}
+          onSelectPosition={setOrderInstrument}
+          orderInstrument={orderInstrument}
+          orderLeverage={orderLeverage}
+          orderMargin={orderMargin}
+          paper={snapshot.paper}
+          selectedPosition={selectedTradePosition}
+          symbols={snapshot.symbols}
+          tradeBusy={tradeBusy}
+          tradeError={tradeError}
+        />
+      ) : viewMode === "review" ? (
+        <ReviewPage copy={copy} paper={snapshot.paper} />
       ) : (
-        <>
-          <MacroSummaryStrip
-            copy={copy}
-            error={macroError}
-            loading={macroLoading}
-            snapshot={macroSnapshot}
-          />
-          <RadarWorkspace
-            copy={copy}
-            filter={filter}
-            filteredSymbols={filteredSymbols}
-            onClosePaper={submitPaperClose}
-            onFilterChange={setFilter}
-            onLeverageChange={setOrderLeverage}
-            onMarginChange={setOrderMargin}
-            onOpenPaper={submitPaperOrder}
-            onOpenTradingView={openTradingView}
-            onSelectSymbol={setSelectedId}
-            orderLeverage={orderLeverage}
-            orderMargin={orderMargin}
-            paper={snapshot.paper}
-            selected={selected}
-            themeMode={themeMode}
-            tradeBusy={tradeBusy}
-            tradeError={tradeError}
-          />
-        </>
+        <MonitorPage
+          copy={copy}
+          filter={filter}
+          filteredSymbols={filteredSymbols}
+          macroError={macroError}
+          macroLoading={macroLoading}
+          macroSnapshot={macroSnapshot}
+          onFilterChange={setFilter}
+          onOpenTradingView={openTradingView}
+          onSelectSymbol={setSelectedId}
+          onTradeSymbol={tradeSymbol}
+          selected={selected}
+          themeMode={themeMode}
+        />
       )}
-      {viewMode === "radar" && tradingViewSymbol ? (
+      {viewMode === "monitor" && tradingViewSymbol ? (
         <TradingViewModal
           copy={copy}
           language={language}

@@ -1,48 +1,45 @@
 import type { Copy } from "./i18n";
+import { MacroSummaryStrip } from "./MacroSummaryStrip";
 import { RadarTable } from "./RadarTable";
 import { SymbolDetailPanel } from "./SymbolDetailPanel";
-import type { PaperAccountSnapshot, PaperSide, SymbolSnapshot } from "./types";
+import type { BtcMacroSnapshot, SymbolSnapshot } from "./types";
 import type { Filter, ThemeMode } from "./uiFormat";
 
-export function RadarWorkspace({
+export function MonitorPage({
   copy,
   filter,
   filteredSymbols,
-  onClosePaper,
+  macroError,
+  macroLoading,
+  macroSnapshot,
   onFilterChange,
-  onLeverageChange,
-  onMarginChange,
-  onOpenPaper,
   onOpenTradingView,
   onSelectSymbol,
-  orderLeverage,
-  orderMargin,
-  paper,
+  onTradeSymbol,
   selected,
   themeMode,
-  tradeBusy,
-  tradeError,
 }: {
   copy: Copy;
   filter: Filter;
   filteredSymbols: SymbolSnapshot[];
-  onClosePaper: () => void;
+  macroError: string | null;
+  macroLoading: boolean;
+  macroSnapshot: BtcMacroSnapshot | null;
   onFilterChange: (filter: Filter) => void;
-  onLeverageChange: (value: string) => void;
-  onMarginChange: (value: string) => void;
-  onOpenPaper: (side: PaperSide) => void;
   onOpenTradingView: (symbol: SymbolSnapshot) => void;
   onSelectSymbol: (symbolId: string) => void;
-  orderLeverage: string;
-  orderMargin: string;
-  paper: PaperAccountSnapshot;
+  onTradeSymbol: (symbol: SymbolSnapshot) => void;
   selected: SymbolSnapshot | null;
   themeMode: ThemeMode;
-  tradeBusy: boolean;
-  tradeError: string | null;
 }) {
   return (
     <>
+      <MacroSummaryStrip
+        copy={copy}
+        error={macroError}
+        loading={macroLoading}
+        snapshot={macroSnapshot}
+      />
       <section className="toolbar radar-filterbar" aria-label={copy.aria.radarControls}>
         <div className="toolbar-group" role="group" aria-label={copy.aria.opportunityFilters}>
           {[
@@ -70,7 +67,7 @@ export function RadarWorkspace({
           <p>{copy.empty.body}</p>
         </section>
       ) : (
-        <section className="radar-grid radar-workspace">
+        <section className="radar-grid radar-workspace monitor-page">
           <RadarTable
             copy={copy}
             onOpenTradingView={onOpenTradingView}
@@ -82,18 +79,10 @@ export function RadarWorkspace({
             {selected ? (
               <SymbolDetailPanel
                 copy={copy}
-                onClosePaper={onClosePaper}
-                onLeverageChange={onLeverageChange}
-                onMarginChange={onMarginChange}
-                onOpenPaper={onOpenPaper}
                 onOpenTradingView={onOpenTradingView}
-                orderLeverage={orderLeverage}
-                orderMargin={orderMargin}
-                paper={paper}
+                onTradeSymbol={onTradeSymbol}
                 symbol={selected}
                 themeMode={themeMode}
-                tradeBusy={tradeBusy}
-                tradeError={tradeError}
               />
             ) : null}
           </aside>

@@ -50,8 +50,12 @@ describe("console palette", () => {
     }
 
     expect(css).toContain(".console-topbar");
+    expect(css).toContain(".task-rail");
+    expect(css).toContain(".task-rail-button");
     expect(css).toContain(".macro-summary-strip");
     expect(css).toContain(".radar-workspace");
+    expect(css).toContain(".trade-page");
+    expect(css).toContain(".review-page");
     expect(css).toContain("@media (max-width: 960px)");
   });
 

@@ -1,9 +1,9 @@
 import type { Copy } from "./i18n";
-import type { MacroRegime, Score, SymbolSnapshot } from "./types";
+import type { MacroRegime, PaperAccountSnapshot, Score, SymbolSnapshot } from "./types";
 
 export type Filter = "all" | "trend" | "range" | "hot" | "fixed";
 export type ThemeMode = "light" | "dark" | "system";
-export type ViewMode = "radar" | "macro";
+export type ViewMode = "monitor" | "trade" | "review" | "macro";
 
 export function matchesFilter(symbol: SymbolSnapshot, filter: Filter): boolean {
   if (filter === "trend") {
@@ -136,4 +136,32 @@ export function formatRegime(regime: MacroRegime, copy: Copy): string {
 
 export function formatSnake(value: string): string {
   return value.replace(/_/g, " ");
+}
+
+export function summarizePaperReview(paper: PaperAccountSnapshot) {
+  const closedTrades = paper.trades.filter((trade) => trade.action === "close");
+  const wins = closedTrades.filter((trade) => trade.realized_pnl > 0);
+  const losses = closedTrades.filter((trade) => trade.realized_pnl < 0);
+  const winTotal = wins.reduce((total, trade) => total + trade.realized_pnl, 0);
+  const lossTotal = losses.reduce((total, trade) => total + trade.realized_pnl, 0);
+  const maxWin = wins.length > 0 ? Math.max(...wins.map((trade) => trade.realized_pnl)) : 0;
+  const maxLoss = losses.length > 0 ? Math.min(...losses.map((trade) => trade.realized_pnl)) : 0;
+
+  return {
+    averageLoss: losses.length > 0 ? lossTotal / losses.length : 0,
+    averageWin: wins.length > 0 ? winTotal / wins.length : 0,
+    closedCount: closedTrades.length,
+    maxLoss,
+    maxWin,
+    profitFactor: lossTotal < 0 ? winTotal / Math.abs(lossTotal) : null,
+    realizedPath: closedTrades
+    .slice()
+    .reverse()
+    .reduce<Array<{ id: number; value: number }>>((points, trade) => {
+        const previous = points.length === 0 ? 0 : points[points.length - 1].value;
+        points.push({ id: trade.id, value: previous + trade.realized_pnl });
+        return points;
+      }, []),
+    winRate: closedTrades.length > 0 ? wins.length / closedTrades.length : 0,
+  };
 }

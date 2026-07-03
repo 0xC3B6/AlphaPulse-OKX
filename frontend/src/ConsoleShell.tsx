@@ -51,6 +51,12 @@ export function ConsoleShell({
     themeOptions.find(([value]) => value === themeMode)?.[1] ?? "System";
   const selectedLanguageLabel =
     languageOptions.find(([value]) => value === language)?.[1] ?? "ZH";
+  const taskItems: Array<[ViewMode, string]> = [
+    ["monitor", copy.views.monitor],
+    ["trade", copy.views.trade],
+    ["review", copy.views.review],
+    ["macro", copy.views.macro],
+  ];
   const statusItems = [
     { label: copy.status.backend, value: formatState(backendState, copy), tone: backendState },
     { label: copy.status.stream, value: formatState(streamState, copy), tone: streamState },
@@ -64,95 +70,99 @@ export function ConsoleShell({
   ];
 
   return (
-    <main className="app-shell console-shell">
-      <header className="console-topbar">
-        <div className="console-brand">
-          <h1>AlphaPulse OKX</h1>
-          <p>{copy.subtitle}</p>
+    <main className="app-shell console-shell task-console-shell">
+      <nav className="task-rail" aria-label={copy.aria.taskNavigation}>
+        <div className="task-rail-brand">
+          <strong>AlphaPulse</strong>
+          <span>OKX</span>
         </div>
-        <div className="console-nav" role="group" aria-label={copy.aria.viewMode}>
-          {[
-            ["radar", copy.views.radar],
-            ["macro", copy.views.macro],
-          ].map(([value, label]) => (
+        <div className="task-rail-items">
+          {taskItems.map(([value, label]) => (
             <button
-              className={viewMode === value ? "active" : ""}
+              aria-current={viewMode === value ? "page" : undefined}
+              className={`task-rail-button ${viewMode === value ? "active" : ""}`}
               key={value}
-              onClick={() => onViewModeChange(value as ViewMode)}
+              onClick={() => onViewModeChange(value)}
               type="button"
             >
               {label}
             </button>
           ))}
         </div>
-        <dl className="console-status" aria-label={copy.aria.connectionStatus}>
-          {statusItems.map((item) => (
-            <div className={`status-pill status-pill-${item.tone}`} key={item.label}>
-              <dt>{item.label}</dt>
-              <dd>{item.value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="console-actions">
-          <div className="console-menu">
-            <button
-              aria-haspopup="menu"
-              aria-label={`${copy.aria.themeMode}: ${selectedThemeLabel}`}
-              className="console-menu-trigger"
-              title={copy.aria.themeMode}
-              type="button"
-            >
-              <span aria-hidden="true" className="console-menu-icon">
-                ◐
-              </span>
-              <span>{selectedThemeLabel}</span>
-            </button>
-            <div className="console-menu-popover" role="menu">
-              {themeOptions.map(([value, label]) => (
-                <button
-                  aria-checked={themeMode === value}
-                  className={themeMode === value ? "active" : ""}
-                  key={value}
-                  onClick={() => onThemeModeChange(value)}
-                  role="menuitemradio"
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+      </nav>
+      <section className="console-main">
+        <header className="console-topbar">
+          <div className="console-page-title">
+            <span>AlphaPulse OKX</span>
+            <h1>{copy.views[viewMode]}</h1>
+            <p>{copy.pageDescriptions[viewMode]}</p>
           </div>
-          <div className="console-menu">
-            <button
-              aria-haspopup="menu"
-              aria-label={`${copy.aria.languageMode}: ${selectedLanguageLabel}`}
-              className="console-menu-trigger console-language-trigger"
-              title={copy.aria.languageMode}
-              type="button"
-            >
-              {selectedLanguageLabel}
-            </button>
-            <div className="console-menu-popover" role="menu">
-              {languageOptions.map(([value, label]) => (
-                <button
-                  aria-checked={language === value}
-                  className={language === value ? "active" : ""}
-                  key={value}
-                  onClick={() => onLanguageChange(value)}
-                  role="menuitemradio"
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
+          <dl className="console-status" aria-label={copy.aria.connectionStatus}>
+            {statusItems.map((item) => (
+              <div className={`status-pill status-pill-${item.tone}`} key={item.label}>
+                <dt>{item.label}</dt>
+                <dd>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="console-actions">
+            <div className="console-menu">
+              <button
+                aria-haspopup="menu"
+                aria-label={`${copy.aria.themeMode}: ${selectedThemeLabel}`}
+                className="console-menu-trigger"
+                title={copy.aria.themeMode}
+                type="button"
+              >
+                <span>{selectedThemeLabel}</span>
+              </button>
+              <div className="console-menu-popover" role="menu">
+                {themeOptions.map(([value, label]) => (
+                  <button
+                    aria-checked={themeMode === value}
+                    className={themeMode === value ? "active" : ""}
+                    key={value}
+                    onClick={() => onThemeModeChange(value)}
+                    role="menuitemradio"
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <div className="console-menu">
+              <button
+                aria-haspopup="menu"
+                aria-label={`${copy.aria.languageMode}: ${selectedLanguageLabel}`}
+                className="console-menu-trigger console-language-trigger"
+                title={copy.aria.languageMode}
+                type="button"
+              >
+                {selectedLanguageLabel}
+              </button>
+              <div className="console-menu-popover" role="menu">
+                {languageOptions.map(([value, label]) => (
+                  <button
+                    aria-checked={language === value}
+                    className={language === value ? "active" : ""}
+                    key={value}
+                    onClick={() => onLanguageChange(value)}
+                    role="menuitemradio"
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={onRequestNotifications} type="button">
+              {copy.actions.enableNotifications}
+            </button>
           </div>
-          <button onClick={onRequestNotifications} type="button">
-            {copy.actions.enableNotifications}
-          </button>
-        </div>
-      </header>
-      {children}
+        </header>
+        {children}
+      </section>
     </main>
   );
 }
