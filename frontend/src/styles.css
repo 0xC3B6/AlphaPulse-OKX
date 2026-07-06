@@ -2277,16 +2277,31 @@ input {
   align-items: center;
 }
 
-.page-local-tabs span {
+.page-local-tabs span,
+.page-local-tabs button {
+  appearance: none;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--button-bg);
   color: var(--text-muted);
+  cursor: pointer;
   padding: 7px 10px;
   font-size: 12px;
   font-weight: 800;
 }
 
-.page-local-tabs span.active {
+.page-local-tabs button:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.page-local-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.page-local-tabs span.active,
+.page-local-tabs button.active {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-contrast);
@@ -2389,6 +2404,169 @@ input {
   overflow-x: auto;
 }
 
+.review-strategy-card,
+.review-history-panel {
+  min-width: 0;
+}
+
+.review-strategy-table-wrap {
+  overflow-x: auto;
+}
+
+.review-strategy-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.review-strategy-table th,
+.review-strategy-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.review-strategy-table th {
+  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.review-strategy-table td {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.review-strategy-table tbody tr {
+  cursor: pointer;
+}
+
+.review-strategy-table tbody tr:hover td,
+.review-strategy-table tbody tr.active td {
+  background: var(--row-active);
+}
+
+.review-strategy-table tbody tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.review-history-panel {
+  grid-column: 1 / -1;
+}
+
+.panel-heading.compact {
+  padding: 0 0 10px;
+}
+
+.review-history-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(160px, 1fr) minmax(160px, 1fr) minmax(160px, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.review-history-filter-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.review-history-filter-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.review-history-filter-grid input,
+.review-history-filter-grid select {
+  min-width: 0;
+  width: 100%;
+}
+
+.review-history-filters {
+  margin: 8px 0 12px;
+}
+
+.review-history-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-history-list li {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--app-bg);
+  padding: 12px;
+}
+
+.review-history-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-history-heading span {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+}
+
+.review-history-heading em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.review-history-list dl {
+  display: grid;
+  gap: 8px 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 10px 0 0;
+}
+
+.review-history-list dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.review-history-list dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 2px 6px;
+}
+
+.tag-chip-warning {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 .review-curve,
 .review-empty-chart {
   display: block;
@@ -2412,6 +2590,86 @@ input {
   stroke-linejoin: round;
   stroke-width: 2.4;
   vector-effect: non-scaling-stroke;
+}
+
+.paper-strategy-curve {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.paper-strategy-curve-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.paper-strategy-curve-metrics div {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--button-bg);
+  padding: 10px;
+}
+
+.paper-strategy-curve-metrics dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.paper-strategy-curve-metrics dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.paper-strategy-curve-svg {
+  display: block;
+  width: 100%;
+  height: 220px;
+  margin-top: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.paper-strategy-curve-grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.paper-strategy-curve-zero {
+  stroke: var(--text-muted);
+  stroke-dasharray: 5 5;
+  stroke-width: 1;
+}
+
+.paper-strategy-curve-line {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.paper-strategy-curve-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.paper-strategy-curve-dot.positive {
+  fill: var(--positive);
+}
+
+.paper-strategy-curve-dot.negative {
+  fill: var(--negative);
+}
+
+.paper-strategy-curve-label {
+  fill: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .positive {
@@ -2469,6 +2727,10 @@ input {
     grid-template-columns: 1fr;
   }
 
+  .review-history-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .review-unavailable {
     grid-row: auto;
   }
@@ -2484,6 +2746,11 @@ input {
   }
 
   .macro-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-history-filter-grid,
+  .paper-strategy-curve-metrics {
     grid-template-columns: 1fr;
   }
 

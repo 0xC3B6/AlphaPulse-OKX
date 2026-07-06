@@ -124,13 +124,50 @@ export interface PaperOrderRequest {
 export interface PaperAccountSnapshot {
   mode: "paper";
   initial_balance: number;
+  fee_rate?: number;
+  slippage_rate?: number;
+  total_fees?: number;
+  total_trades?: number;
+  closed_position_count?: number;
+  winning_closed_position_count?: number;
+  losing_closed_position_count?: number;
+  win_rate?: number | null;
+  average_holding_duration_ms?: number | null;
+  average_closed_position_pnl?: number | null;
+  average_winning_pnl?: number | null;
+  average_losing_pnl?: number | null;
+  profit_factor?: number | null;
+  largest_winning_pnl?: number | null;
+  largest_losing_pnl?: number | null;
+  strategy_stats?: PaperStrategyStats[];
   realized_pnl: number;
   unrealized_pnl: number;
   equity: number;
   used_margin: number;
   available_balance: number;
   positions: PaperPositionSnapshot[];
+  position_history?: PaperClosedPositionSnapshot[];
   trades: PaperTrade[];
+}
+
+export interface PaperStrategyStats {
+  strategy_name: string;
+  strategy_version: string;
+  total_trades: number;
+  closed_position_count: number;
+  winning_closed_position_count: number;
+  losing_closed_position_count: number;
+  win_rate: number | null;
+  realized_pnl: number;
+  total_fees: number;
+  first_trade_ts_ms: number | null;
+  last_trade_ts_ms: number | null;
+  running_duration_ms: number | null;
+  average_holding_duration_ms: number | null;
+  average_position_pnl: number | null;
+  profit_factor: number | null;
+  largest_winning_pnl: number | null;
+  largest_losing_pnl: number | null;
 }
 
 export interface PaperPositionSnapshot {
@@ -145,6 +182,38 @@ export interface PaperPositionSnapshot {
   unrealized_pnl: number;
   pnl_pct: number;
   opened_at_ms: number;
+  source?: string;
+  strategy_name?: string;
+  strategy_version?: string;
+  reason?: string;
+  tags?: TradeTag[];
+}
+
+export interface PaperClosedPositionSnapshot {
+  id: number;
+  inst_id: string;
+  side: PaperSide;
+  qty: number;
+  entry_price: number;
+  exit_price: number;
+  margin: number;
+  leverage: number;
+  notional: number;
+  fees: number;
+  realized_pnl: number;
+  pnl_pct: number;
+  opened_at_ms: number;
+  closed_at_ms: number;
+  duration_ms: number;
+  source: string;
+  strategy_name?: string;
+  strategy_version?: string;
+  reason: string;
+  close_source: string;
+  close_reason: string;
+  tags?: TradeTag[];
+  open_tags?: TradeTag[];
+  close_tags?: TradeTag[];
 }
 
 export interface PaperTrade {
@@ -152,11 +221,26 @@ export interface PaperTrade {
   inst_id: string;
   side: PaperSide;
   action: PaperTradeAction;
+  source?: string;
+  strategy_name?: string;
+  strategy_version?: string;
+  reason?: string;
   price: number;
   qty: number;
   margin: number;
   notional: number;
+  fee?: number;
+  slippage_rate?: number;
+  tags?: TradeTag[];
   realized_pnl: number;
+  ts_ms: number;
+}
+
+export interface TradeTag {
+  kind: string;
+  label: string;
+  score_impact: number;
+  reason: string;
   ts_ms: number;
 }
 

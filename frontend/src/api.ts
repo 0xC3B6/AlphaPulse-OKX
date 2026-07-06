@@ -6,6 +6,7 @@ import type {
   PaperAccountSnapshot,
   PaperOrderRequest,
 } from "./types";
+import { connectWebSocketWithReconnect, type RealtimeConnection } from "./realtime";
 
 const backendBaseUrl = "http://127.0.0.1:8787";
 
@@ -55,12 +56,24 @@ export async function closePaperPosition(
   );
 }
 
-export function connectEvents(onEvent: (event: BackendEvent) => void): WebSocket {
-  const socket = new WebSocket("ws://127.0.0.1:8787/ws");
-  socket.addEventListener("message", (message) => {
-    onEvent(JSON.parse(String(message.data)) as BackendEvent);
+export function connectEvents(
+  onEvent: (event: BackendEvent) => void,
+  lifecycle: {
+    onClose?: () => void;
+    onError?: () => void;
+    onOpen?: () => void;
+  } = {},
+): RealtimeConnection {
+  return connectWebSocketWithReconnect({
+    createSocket: () => new WebSocket("ws://127.0.0.1:8787/ws"),
+    onClose: lifecycle.onClose,
+    onError: lifecycle.onError,
+    onMessage: (message) => {
+      onEvent(JSON.parse(String((message as MessageEvent).data)) as BackendEvent);
+    },
+    onOpen: lifecycle.onOpen,
+    retryDelayMs: 1_500,
   });
-  return socket;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {

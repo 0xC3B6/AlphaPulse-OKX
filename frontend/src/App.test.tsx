@@ -28,6 +28,40 @@ const activePaper: PaperAccountSnapshot = {
   equity: 10250.44,
   used_margin: 459.44,
   available_balance: 9791,
+  total_fees: 4.2,
+  total_trades: 3,
+  closed_position_count: 2,
+  winning_closed_position_count: 1,
+  losing_closed_position_count: 1,
+  win_rate: 0.5,
+  average_holding_duration_ms: 1800000,
+  average_closed_position_pnl: 89.36,
+  average_winning_pnl: 236.94,
+  average_losing_pnl: -58.22,
+  profit_factor: 4.07,
+  largest_winning_pnl: 236.94,
+  largest_losing_pnl: -58.22,
+  strategy_stats: [
+    {
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      total_trades: 3,
+      closed_position_count: 2,
+      winning_closed_position_count: 1,
+      losing_closed_position_count: 1,
+      win_rate: 0.5,
+      realized_pnl: 178.72,
+      total_fees: 4.2,
+      first_trade_ts_ms: 1782392800000,
+      last_trade_ts_ms: 1782400000000,
+      running_duration_ms: 7200000,
+      average_holding_duration_ms: 1800000,
+      average_position_pnl: 89.36,
+      profit_factor: 4.07,
+      largest_winning_pnl: 236.94,
+      largest_losing_pnl: -58.22,
+    },
+  ],
   positions: [
     {
       inst_id: "LAB-USDT-SWAP",
@@ -66,6 +100,10 @@ const activePaper: PaperAccountSnapshot = {
       qty: 2000,
       margin: 100,
       notional: 167.57,
+      source: "scalping_optimization_design",
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      reason: "scalping v0.1.3 take profit 132.68%",
       realized_pnl: 236.94,
       ts_ms: 1782400000000,
     },
@@ -78,6 +116,10 @@ const activePaper: PaperAccountSnapshot = {
       qty: 1000,
       margin: 100,
       notional: 218.64,
+      source: "scalping_optimization_design",
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      reason: "scalping v0.1.3 stop loss -30.12%",
       realized_pnl: -58.22,
       ts_ms: 1782396400000,
     },
@@ -90,8 +132,60 @@ const activePaper: PaperAccountSnapshot = {
       qty: 58.1395348837,
       margin: 100,
       notional: 1000,
+      source: "scalping_optimization_design",
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      reason: "scalping v0.1.3 trend long 82",
       realized_pnl: 0,
       ts_ms: 1782392800000,
+    },
+  ],
+  position_history: [
+    {
+      id: 2,
+      inst_id: "BREV-USDT-SWAP",
+      side: "short",
+      qty: 2000,
+      entry_price: 0.089722,
+      exit_price: 0.083787,
+      margin: 100,
+      leverage: 20,
+      notional: 167.57,
+      fees: 2.1,
+      realized_pnl: 236.94,
+      pnl_pct: 2.3694,
+      opened_at_ms: 1782392800000,
+      closed_at_ms: 1782400000000,
+      duration_ms: 7200000,
+      source: "scalping_optimization_design",
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      reason: "scalping v0.1.3 multiday extension reversal short 90",
+      close_source: "scalping_optimization_design",
+      close_reason: "scalping v0.1.3 take profit 132.68%",
+    },
+    {
+      id: 1,
+      inst_id: "NES-USDT-SWAP",
+      side: "short",
+      qty: 1000,
+      entry_price: 0.215357,
+      exit_price: 0.218644,
+      margin: 100,
+      leverage: 20,
+      notional: 218.64,
+      fees: 2.1,
+      realized_pnl: -58.22,
+      pnl_pct: -0.5822,
+      opened_at_ms: 1782392800000,
+      closed_at_ms: 1782396400000,
+      duration_ms: 3600000,
+      source: "scalping_optimization_design",
+      strategy_name: "Scalping Optimization Design",
+      strategy_version: "v0.1.3",
+      reason: "scalping v0.1.3 multiday extension reversal short 88",
+      close_source: "scalping_optimization_design",
+      close_reason: "scalping v0.1.3 stop loss -30.12%",
     },
   ],
 };
@@ -500,10 +594,39 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "趋势" })).not.toBeInTheDocument();
     expect(screen.getByTestId("review-page")).toHaveTextContent("已实现盈亏");
     expect(screen.getByTestId("review-page")).toHaveTextContent("+207.58 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("初始资金");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("10,000.00 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("权益");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("10,250.44 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("可用");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("9,791.00 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("占用保证金");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("459.44 USDT");
     expect(screen.getByTestId("review-page")).toHaveTextContent("胜率");
     expect(screen.getByTestId("review-page")).toHaveTextContent("50.00%");
-    expect(screen.getByText("策略版本数据暂不可用")).toBeInTheDocument();
-    expect(screen.getByText(/BREV-USDT-SWAP/)).toBeInTheDocument();
+    expect(screen.getByTestId("review-page")).toHaveTextContent("亏损单");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("平均持仓");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("30m");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("平均单笔盈亏");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("+89.36 USDT");
+    expect(screen.getByTestId("review-page")).not.toHaveTextContent("暂不可用");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("Scalping Optimization Design");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("历史持仓");
+
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+    fireEvent.click(screen.getByRole("row", { name: /Scalping Optimization Design v0\.1\.3/ }));
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("v0.1.3");
+
+    fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
+    expect(screen.getByLabelText("历史持仓币种")).toBeInTheDocument();
+    expect(screen.getByLabelText("历史持仓开始日期")).toBeInTheDocument();
+    expect(screen.getByLabelText("历史持仓结束日期")).toBeInTheDocument();
+    expect(screen.getByLabelText("历史持仓版本")).toBeInTheDocument();
+    expect(screen.getByTestId("review-page")).toHaveTextContent("scalping v0.1.3 take profit 132.68%");
+    expect(screen.getAllByText(/BREV-USDT-SWAP/).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("历史持仓币种"), { target: { value: "nes" } });
+    expect(screen.getByTestId("review-page")).toHaveTextContent("NES-USDT-SWAP");
+    expect(screen.getByTestId("review-page")).not.toHaveTextContent("BREV-USDT-SWAP");
   });
 
   it("opens a TradingView chart modal from the radar only", async () => {

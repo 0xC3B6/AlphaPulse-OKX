@@ -156,31 +156,34 @@ export default function App() {
       return;
     }
 
-    const socket = connectEvents((event: BackendEvent) => {
-      setStreamState("connected");
-      if (event.type === "snapshot") {
-        setSnapshot(event.data);
-        setSelectedId((current) => current ?? event.data.symbols[0]?.inst_id ?? null);
-        setOrderInstrument((current) => current || event.data.symbols[0]?.inst_id || "");
-        return;
-      }
-      if (event.type === "paper_updated") {
-        setSnapshot((current) => ({ ...current, paper: event.data }));
-        return;
-      }
+    const connection = connectEvents(
+      (event: BackendEvent) => {
+        setStreamState("connected");
+        if (event.type === "snapshot") {
+          setSnapshot(event.data);
+          setSelectedId((current) => current ?? event.data.symbols[0]?.inst_id ?? null);
+          setOrderInstrument((current) => current || event.data.symbols[0]?.inst_id || "");
+          return;
+        }
+        if (event.type === "paper_updated") {
+          setSnapshot((current) => ({ ...current, paper: event.data }));
+          return;
+        }
 
-      setSnapshot((current) => upsertSymbol(current, event.data));
-      setSelectedId((current) => current ?? event.data.inst_id);
-      if (shouldNotify(event.data, notified.current, 80)) {
-        sendBrowserNotification(event.data);
-      }
-    });
+        setSnapshot((current) => upsertSymbol(current, event.data));
+        setSelectedId((current) => current ?? event.data.inst_id);
+        if (shouldNotify(event.data, notified.current, 80)) {
+          sendBrowserNotification(event.data);
+        }
+      },
+      {
+        onClose: () => setStreamState("idle"),
+        onError: () => setStreamState("idle"),
+        onOpen: () => setStreamState("connected"),
+      },
+    );
 
-    socket.addEventListener("open", () => setStreamState("connected"));
-    socket.addEventListener("close", () => setStreamState("idle"));
-    socket.addEventListener("error", () => setStreamState("idle"));
-
-    return () => socket.close();
+    return () => connection.close();
   }, []);
 
   const sortedSymbols = useMemo(

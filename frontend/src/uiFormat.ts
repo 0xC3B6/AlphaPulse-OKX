@@ -148,6 +148,7 @@ export function summarizePaperReview(paper: PaperAccountSnapshot) {
   const maxLoss = losses.length > 0 ? Math.min(...losses.map((trade) => trade.realized_pnl)) : 0;
 
   return {
+    averageClosedPnl: closedTrades.length > 0 ? (winTotal + lossTotal) / closedTrades.length : 0,
     averageLoss: losses.length > 0 ? lossTotal / losses.length : 0,
     averageWin: wins.length > 0 ? winTotal / wins.length : 0,
     closedCount: closedTrades.length,
