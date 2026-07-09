@@ -62,6 +62,13 @@ jobs:
           cp deploy/nginx.alphapulse-okx.conf release/deploy/
           tar -czf alphapulse-okx.tar.gz -C release .
 
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphapulse-okx-release
+          path: alphapulse-okx.tar.gz
+          if-no-files-found: error
+
       - name: Install SSH key
         env:
           DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
@@ -73,6 +80,7 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/alphapulse-okx-deploy
           chmod 600 ~/.ssh/alphapulse-okx-deploy
+          ssh-keygen -lf ~/.ssh/alphapulse-okx-deploy
           ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy to server
