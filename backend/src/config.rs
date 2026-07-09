@@ -68,12 +68,26 @@ impl AppConfig {
     {
         let mut config = Self::default();
         for (key, value) in pairs {
-            if key.as_ref() == "COINGLASS_API_KEY" {
-                let value = value.into();
-                let trimmed = value.trim();
-                if !trimmed.is_empty() {
-                    config.coinglass_api_key = Some(trimmed.to_string());
+            let value = value.into();
+            match key.as_ref() {
+                "ALPHAPULSE_HOST" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.host = trimmed.to_string();
+                    }
                 }
+                "ALPHAPULSE_PORT" => {
+                    if let Ok(port) = value.trim().parse::<u16>() {
+                        config.port = port;
+                    }
+                }
+                "COINGLASS_API_KEY" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.coinglass_api_key = Some(trimmed.to_string());
+                    }
+                }
+                _ => {}
             }
         }
         config

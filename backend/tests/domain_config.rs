@@ -26,6 +26,17 @@ fn default_config_matches_v1_decisions() {
 }
 
 #[test]
+fn config_can_override_local_bind_host_and_port_from_env_pairs() {
+    let config = AppConfig::from_env_pairs([
+        ("ALPHAPULSE_HOST", "127.0.0.1"),
+        ("ALPHAPULSE_PORT", "8788"),
+    ]);
+
+    assert_eq!(config.host, "127.0.0.1");
+    assert_eq!(config.port, 8788);
+}
+
+#[test]
 fn domain_types_serialize_with_stable_names() {
     let score = Score {
         value: 84,
