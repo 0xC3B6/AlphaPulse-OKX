@@ -169,7 +169,7 @@ pub struct PaperPositionSnapshot {
     pub config_hash: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperTrade {
     pub id: u64,
     pub inst_id: String,
@@ -197,7 +197,7 @@ pub struct PaperTrade {
     pub ts_ms: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperClosedPositionSnapshot {
     pub id: u64,
     pub inst_id: String,
@@ -236,7 +236,7 @@ pub struct PaperClosedPositionSnapshot {
     pub r_multiple: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperStrategyStats {
     pub strategy_name: String,
     pub strategy_version: String,
@@ -275,7 +275,7 @@ pub enum PaperError {
     PositionNotFound(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperState {
     initial_balance: f64,
     realized_pnl: f64,
@@ -289,7 +289,7 @@ pub struct PaperState {
     total_fees: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PaperPosition {
     inst_id: String,
     side: PaperSide,
@@ -302,7 +302,7 @@ struct PaperPosition {
     metadata: PaperMetadata,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PaperMetadata {
     source: String,
     strategy_name: String,

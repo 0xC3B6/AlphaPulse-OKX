@@ -4,7 +4,7 @@ AlphaPulse-OKX is a local OKX USDT perpetual futures radar for market scanning, 
 
 AlphaPulse-OKX 是一个本地运行的 OKX USDT 永续合约雷达，用于行情扫描、机会排序、宏观周期观察和纸面交易复盘。
 
-- **Current version / 当前版本:** `v0.1.3 Optimized front end`
+- **Current version / 当前版本:** `v0.1.4 preview`
 - **Runtime / 运行方式:** local only / 仅本地运行
 - **Trading mode / 交易模式:** paper trading only / 仅纸面交易
 
@@ -42,16 +42,16 @@ AlphaPulse-OKX 通过 OKX 公开行情数据构建本地实时雷达，覆盖 US
 - It does not require an OKX API key. / 不需要 OKX API Key。
 - It does not place, close, or automate real exchange orders. / 不会真实开仓、平仓或自动交易。
 - It is not financial advice. Signals are for observation and review only. / 不提供投资建议，所有信号仅用于辅助观察和复盘。
-- Paper-trading state is local runtime state, not an exchange-side account. / 纸面交易状态是本地运行态，不是交易所账户状态。
+- Paper-trading state is local simulated state, not an exchange-side account. When `DATABASE_URL` is configured it is persisted to PostgreSQL and cached through Redis. / 纸面交易状态是本地模拟状态，不是交易所账户状态。配置 `DATABASE_URL` 后会持久化到 PostgreSQL，并通过 Redis 缓存实时快照。
 
 ## Tech Stack / 技术栈
 
 | Layer | Stack |
 | --- | --- |
-| Backend | Rust, Axum, Tokio, OKX public REST/WebSocket market data |
+| Backend | Rust, Tokio, Axum, serde/serde_json, sqlx, PostgreSQL, Redis, tracing, rust_decimal, chrono |
 | Frontend | React, TypeScript, Vite, Lightweight Charts, Recharts, Tailwind CSS, lucide-react |
-| Runtime | Backend on `127.0.0.1:8787`, frontend on `127.0.0.1:5173` |
-| Data | OKX public market data, optional Coinglass macro valuation data |
+| Runtime | Backend on `127.0.0.1:8787`, frontend on `127.0.0.1:5173`, optional PostgreSQL on `5432`, optional Redis on `6379` |
+| Data | OKX public market data, PostgreSQL persistence for strategy/paper state, Redis live snapshot cache, optional Coinglass macro valuation data |
 
 ## Quick Start / 快速开始
 
@@ -59,6 +59,7 @@ Requirements / 依赖：
 
 - Rust stable toolchain / Rust stable 工具链
 - Node.js current LTS and npm / Node.js 当前 LTS 与 npm
+- Docker Desktop or Docker Engine for local PostgreSQL/Redis / 本地 PostgreSQL/Redis 建议使用 Docker
 - Network access to OKX public market data / 可访问 OKX 公开行情数据
 
 Optional macro valuation data uses `COINGLASS_API_KEY`. The app can run without it, but some external valuation metrics may be unavailable.
@@ -67,7 +68,12 @@ Optional macro valuation data uses `COINGLASS_API_KEY`. The app can run without 
 
 ```bash
 cp .env.example .env.local
+docker compose up -d postgres redis
 ```
+
+The backend runs without `DATABASE_URL` and `REDIS_URL`, but that is an in-memory fallback. For paper trading history, keep PostgreSQL enabled. Set `ALPHAPULSE_REQUIRE_DATABASE=true` when you want startup to fail instead of silently falling back to memory.
+
+后端在不配置 `DATABASE_URL` 和 `REDIS_URL` 时仍可运行，但这是内存降级模式。需要保留纸面交易历史时应启用 PostgreSQL。设置 `ALPHAPULSE_REQUIRE_DATABASE=true` 后，如果数据库不可用，后端会启动失败而不是静默降级。
 
 Start the backend / 启动后端：
 
@@ -131,6 +137,24 @@ The backend listens on `http://127.0.0.1:8787`.
 | `POST` | `/api/paper/positions/:inst_id/close` | Close a paper position / 平纸面仓位 |
 | `GET` | `/ws` | Realtime WebSocket stream / 实时 WebSocket 数据流 |
 
+## Persistence / 持久化
+
+The backend now supports PostgreSQL persistence and Redis caching:
+
+- PostgreSQL tables are created at startup when `DATABASE_URL` is configured.
+- `VersionedPaperState` is snapshotted to `app_state_snapshots` and restored on restart.
+- Strategy versions, strategy runs, open positions, fills, closed trades, equity snapshots, risk guard events, and event logs are written into dedicated tables.
+- Redis stores the latest dashboard snapshot under `alphapulse:dashboard:snapshot` with `ALPHAPULSE_REDIS_TTL_SECS`.
+- WebSocket uses REST snapshot + WS delta recovery. The server sends heartbeat pings; the frontend reconnects with backoff and refreshes `/api/snapshot` after reconnect.
+
+后端现在支持 PostgreSQL 持久化和 Redis 缓存：
+
+- 配置 `DATABASE_URL` 后，启动时自动创建 PostgreSQL 表。
+- `VersionedPaperState` 会写入 `app_state_snapshots`，重启后恢复。
+- 策略版本、运行、当前持仓、成交、平仓历史、权益快照、风控事件和事件日志会写入独立表。
+- Redis 使用 `alphapulse:dashboard:snapshot` 缓存最新 dashboard 快照，TTL 由 `ALPHAPULSE_REDIS_TTL_SECS` 控制。
+- WebSocket 采用 REST snapshot + WS delta 恢复模式。后端发送 heartbeat ping；前端断线退避重连，并在重连后重新拉取 `/api/snapshot`。
+
 ## Verification / 验证
 
 Backend / 后端：
@@ -162,6 +186,22 @@ npm run build
 ```
 
 ## Release Notes / 版本说明
+
+### `v0.1.4 preview`
+
+- Added preview persistence support with PostgreSQL snapshots and Redis dashboard caching.
+- Added startup configuration for database-required mode, Redis TTL, and local Docker services.
+- Added deploy documentation for systemd, Nginx, and the manual GitHub Actions deploy flow.
+- Improved realtime recovery with snapshot refresh after WebSocket reconnect.
+- Expanded tests around persistence, domain configuration, strategy versions, and frontend reconnect/review behavior.
+
+### 中文说明
+
+- 增加 PostgreSQL 快照和 Redis dashboard 缓存的预览版持久化能力。
+- 增加数据库强制模式、Redis TTL 和本地 Docker 服务相关配置。
+- 补充 systemd、Nginx 和 GitHub Actions 手动部署流程文档。
+- 优化 WebSocket 重连后的 snapshot 恢复逻辑。
+- 补充持久化、域名配置、策略版本、前端重连和 Review 行为相关测试。
 
 ### `v0.1.3 Optimized front end`
 

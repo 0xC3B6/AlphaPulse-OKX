@@ -5,6 +5,7 @@ pub mod indicators;
 pub mod macro_cycle;
 pub mod okx;
 pub mod paper;
+pub mod persistence;
 pub mod quality;
 pub mod runtime;
 pub mod scoring;

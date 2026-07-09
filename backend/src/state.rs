@@ -7,6 +7,7 @@ use tokio::sync::{broadcast, RwLock};
 use crate::{
     domain::SymbolSnapshot,
     paper::{PaperAccountSnapshot, PaperError, PaperOrderRequest},
+    persistence::PersistenceLayer,
     strategy::{
         StrategyCenterSnapshot, StrategyError, StrategyVersionSnapshot, VersionedPaperState,
         V3_VERSION_CODE,
@@ -35,6 +36,7 @@ pub enum BackendEvent {
 pub struct RadarState {
     inner: Arc<RwLock<RadarStateInner>>,
     events: broadcast::Sender<BackendEvent>,
+    persistence: PersistenceLayer,
 }
 
 #[derive(Debug, Default)]
@@ -47,15 +49,23 @@ struct RadarStateInner {
 
 impl Default for RadarState {
     fn default() -> Self {
-        let (events, _) = broadcast::channel(256);
-        Self {
-            inner: Arc::new(RwLock::new(RadarStateInner::default())),
-            events,
-        }
+        Self::with_persistence(PersistenceLayer::disabled(), VersionedPaperState::default())
     }
 }
 
 impl RadarState {
+    pub fn with_persistence(persistence: PersistenceLayer, paper: VersionedPaperState) -> Self {
+        let (events, _) = broadcast::channel(256);
+        Self {
+            inner: Arc::new(RwLock::new(RadarStateInner {
+                paper,
+                ..RadarStateInner::default()
+            })),
+            events,
+            persistence,
+        }
+    }
+
     pub async fn snapshot(&self) -> DashboardSnapshot {
         let inner = self.inner.read().await;
         DashboardSnapshot {
@@ -101,6 +111,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: strategy_update,
         });
+        self.persist_current_state("symbol_updated").await;
     }
 
     pub async fn upsert_symbol_without_strategy(&self, symbol: SymbolSnapshot) {
@@ -111,6 +122,7 @@ impl RadarState {
         let _ = self
             .events
             .send(BackendEvent::SymbolUpdated { data: symbol });
+        self.persist_current_state("symbol_updated").await;
     }
 
     pub async fn update_symbol_price(
@@ -142,6 +154,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: strategy_update,
         });
+        self.persist_current_state("symbol_price_updated").await;
         Some(updated)
     }
 
@@ -175,6 +188,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: strategy_snapshot,
         });
+        self.persist_current_state("paper_order_opened").await;
         Ok(snapshot)
     }
 
@@ -208,12 +222,15 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: strategy_snapshot,
         });
+        self.persist_current_state("paper_position_closed").await;
         Ok(snapshot)
     }
 
     pub async fn mark_scan(&self, ts_ms: i64) {
         let mut inner = self.inner.write().await;
         inner.last_scan_at_ms = Some(ts_ms);
+        drop(inner);
+        self.persist_current_state("scan_marked").await;
     }
 
     pub async fn start_strategy_version(
@@ -230,6 +247,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: snapshot.clone(),
         });
+        self.persist_current_state("strategy_run_started").await;
         Ok(snapshot)
     }
 
@@ -247,6 +265,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: snapshot.clone(),
         });
+        self.persist_current_state("strategy_run_stopped").await;
         Ok(snapshot)
     }
 
@@ -264,6 +283,7 @@ impl RadarState {
         let _ = self.events.send(BackendEvent::StrategyUpdated {
             data: snapshot.clone(),
         });
+        self.persist_current_state("strategy_run_reset").await;
         Ok(snapshot)
     }
 
@@ -274,5 +294,38 @@ impl RadarState {
 
     pub fn subscribe(&self) -> broadcast::Receiver<BackendEvent> {
         self.events.subscribe()
+    }
+
+    async fn persist_current_state(&self, event_type: &str) {
+        if !self.persistence.is_postgres_enabled() && !self.persistence.is_redis_enabled() {
+            return;
+        }
+        let (paper_state, snapshot) = {
+            let inner = self.inner.read().await;
+            (
+                inner.paper.clone(),
+                DashboardSnapshot {
+                    symbols: inner.symbols.values().cloned().collect(),
+                    last_scan_at_ms: inner.last_scan_at_ms,
+                    websocket_connected: inner.websocket_connected,
+                    paper: inner.paper.default_paper_snapshot(&inner.symbols),
+                    strategy_center: inner.paper.center_snapshot(&inner.symbols),
+                },
+            )
+        };
+        if let Err(error) = self
+            .persistence
+            .persist_versioned_paper_state(&paper_state)
+            .await
+        {
+            tracing::error!(?error, "failed to persist paper state");
+        }
+        if let Err(error) = self
+            .persistence
+            .persist_dashboard_snapshot(event_type, &snapshot)
+            .await
+        {
+            tracing::error!(?error, "failed to persist dashboard snapshot");
+        }
     }
 }

@@ -121,17 +121,23 @@ export function connectEvents(
     onClose?: () => void;
     onError?: () => void;
     onOpen?: () => void;
+    onReconnectAttempt?: (delayMs: number) => void;
+    onStale?: () => void;
   } = {},
 ): RealtimeConnection {
   return connectWebSocketWithReconnect({
     createSocket: () => new WebSocket(resolveWebSocketUrl("/ws")),
+    maxRetryDelayMs: 15_000,
     onClose: lifecycle.onClose,
     onError: lifecycle.onError,
     onMessage: (message) => {
       onEvent(JSON.parse(String((message as MessageEvent).data)) as BackendEvent);
     },
     onOpen: lifecycle.onOpen,
+    onReconnectAttempt: lifecycle.onReconnectAttempt,
+    onStale: lifecycle.onStale,
     retryDelayMs: 1_500,
+    staleTimeoutMs: 45_000,
   });
 }
 

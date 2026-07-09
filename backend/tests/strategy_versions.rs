@@ -76,6 +76,37 @@ fn prices(inst_id: &str, price: f64) -> BTreeMap<String, SymbolSnapshot> {
     prices
 }
 
+fn auto_open_symbol(inst_id: &str, price: f64) -> SymbolSnapshot {
+    SymbolSnapshot {
+        inst_id: inst_id.to_string(),
+        price,
+        change_5m_pct: 0.01,
+        change_15m_pct: 0.02,
+        change_1h_pct: 0.03,
+        change_24h_pct: None,
+        change_48h_pct: None,
+        change_72h_pct: None,
+        intraday_low_break_count: 0,
+        high_volatility_flag: false,
+        trend_score: Score {
+            value: 0,
+            direction: Direction::Neutral,
+            reasons: Vec::new(),
+        },
+        range_score: Score {
+            value: 90,
+            direction: Direction::Long,
+            reasons: vec!["clear recent range".to_string()],
+        },
+        pool_tags: vec!["dynamic".to_string()],
+        trigger_reason: format!("{inst_id} range long 90"),
+        funding_rate: None,
+        fvgs: Vec::new(),
+        levels: Vec::new(),
+        updated_at_ms: 1,
+    }
+}
+
 #[test]
 fn attribution_keeps_high_pf_with_small_sample_as_insufficient() {
     let trades = (0..5)
@@ -322,4 +353,21 @@ fn reset_one_version_keeps_other_version_account_intact() {
     assert_eq!(v3.paper.positions[0].version_code, V3_VERSION_CODE);
     assert!(v4.paper.positions.is_empty());
     assert_ne!(v4.run.run_id, v4_before);
+}
+
+#[test]
+fn auto_strategy_caps_open_positions_per_version_at_five() {
+    let mut state = VersionedPaperState::default();
+    let mut prices = BTreeMap::new();
+
+    for index in 0..6 {
+        let symbol = auto_open_symbol(&format!("CAP-{index}-USDT-SWAP"), 10.0 + index as f64);
+        prices.insert(symbol.inst_id.clone(), symbol.clone());
+        state.process_market_update(&symbol, &prices, 1_000 + index as i64);
+    }
+
+    let v3 = state.version_snapshot(V3_VERSION_CODE, &prices).unwrap();
+    let v4 = state.version_snapshot(V4_VERSION_CODE, &prices).unwrap();
+    assert_eq!(v3.paper.positions.len(), 5);
+    assert_eq!(v4.paper.positions.len(), 5);
 }

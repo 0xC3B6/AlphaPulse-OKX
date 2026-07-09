@@ -5,6 +5,11 @@ pub struct AppConfig {
     pub host: String,
     pub port: u16,
     pub coinglass_api_key: Option<String>,
+    pub database_url: Option<String>,
+    pub redis_url: Option<String>,
+    pub require_database: bool,
+    pub redis_ttl_secs: u64,
+    pub websocket_heartbeat_secs: u64,
     pub scan_interval_secs: u64,
     pub dynamic_pool_size: usize,
     pub trend_alert_threshold: u8,
@@ -23,6 +28,11 @@ impl Default for AppConfig {
             host: "127.0.0.1".to_string(),
             port: 8787,
             coinglass_api_key: None,
+            database_url: None,
+            redis_url: None,
+            require_database: false,
+            redis_ttl_secs: 30,
+            websocket_heartbeat_secs: 15,
             scan_interval_secs: 30,
             dynamic_pool_size: 40,
             trend_alert_threshold: 80,
@@ -85,6 +95,34 @@ impl AppConfig {
                     let trimmed = value.trim();
                     if !trimmed.is_empty() {
                         config.coinglass_api_key = Some(trimmed.to_string());
+                    }
+                }
+                "DATABASE_URL" | "ALPHAPULSE_DATABASE_URL" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.database_url = Some(trimmed.to_string());
+                    }
+                }
+                "REDIS_URL" | "ALPHAPULSE_REDIS_URL" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.redis_url = Some(trimmed.to_string());
+                    }
+                }
+                "ALPHAPULSE_REQUIRE_DATABASE" => {
+                    config.require_database = matches!(
+                        value.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    );
+                }
+                "ALPHAPULSE_REDIS_TTL_SECS" => {
+                    if let Ok(ttl) = value.trim().parse::<u64>() {
+                        config.redis_ttl_secs = ttl.max(1);
+                    }
+                }
+                "ALPHAPULSE_WS_HEARTBEAT_SECS" => {
+                    if let Ok(interval) = value.trim().parse::<u64>() {
+                        config.websocket_heartbeat_secs = interval.max(1);
                     }
                 }
                 _ => {}

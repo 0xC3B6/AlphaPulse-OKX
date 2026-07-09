@@ -1,6 +1,6 @@
 [Unit]
 Description=AlphaPulse OKX backend
-After=network-online.target
+After=network-online.target postgresql.service redis-server.service
 Wants=network-online.target
 
 [Service]

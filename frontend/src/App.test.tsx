@@ -1053,6 +1053,86 @@ describe("App", () => {
     expect(await screen.findByText("v0.1.4-paper-2")).toBeInTheDocument();
   });
 
+  it("shows Review live strategy comparison when no closed position history exists", async () => {
+    const openOnlyPaper: PaperAccountSnapshot = {
+      ...paper,
+      available_balance: 9540.56,
+      equity: 9987.5,
+      positions: activePaper.positions,
+      total_trades: 1,
+      trades: [activePaper.trades[2]],
+      unrealized_pnl: -12.5,
+      used_margin: 459.44,
+    };
+    const openOnlyStrategyCenter: StrategyCenterSnapshot = {
+      ...strategyCenter,
+      versions: strategyCenter.versions.map((version) =>
+        version.version.version_code === "v0.1.4"
+          ? {
+              ...version,
+              overview: {
+                ...version.overview,
+                closed_trades: 0,
+                current_equity: 9895,
+                realized_pnl: 0,
+                return_pct: -0.0105,
+                unrealized_pnl: -105,
+              },
+              paper: {
+                ...version.paper,
+                equity: 9895,
+                position_history: [],
+                realized_pnl: 0,
+                trades: [activePaper.trades[2]],
+                unrealized_pnl: -105,
+              },
+              equity: [
+                {
+                  drawdown: 0,
+                  equity: 10000,
+                  open_positions_count: 1,
+                  realized_pnl: 0,
+                  run_id: "v0.1.4-paper-1",
+                  timestamp_ms: 1782390000000,
+                  unrealized_pnl: 0,
+                  version_code: "v0.1.4",
+                },
+                {
+                  drawdown: -0.0105,
+                  equity: 9895,
+                  open_positions_count: 1,
+                  realized_pnl: 0,
+                  run_id: "v0.1.4-paper-1",
+                  timestamp_ms: 1782400000000,
+                  unrealized_pnl: -105,
+                  version_code: "v0.1.4",
+                },
+              ],
+            }
+          : version,
+      ),
+    };
+    mockSnapshot({ ...snapshot, paper: openOnlyPaper, strategy_center: openOnlyStrategyCenter });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("Risk Guard Edition");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("Scalping Base");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("9,895.00 USDT");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("1 open");
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("v0.1.4 权益曲线");
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("-105.00 USDT");
+
+    fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
+
+    expect(screen.getByTestId("review-page")).toHaveTextContent("暂无已平仓历史");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("当前持仓 2");
+  });
+
   it("shows Review performance and trade records without Monitor filters", async () => {
     mockSnapshot({ ...snapshot, paper: activePaper });
 

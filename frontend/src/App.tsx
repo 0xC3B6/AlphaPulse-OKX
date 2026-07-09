@@ -72,7 +72,7 @@ export default function App() {
   const [backendState, setBackendState] = useState<"connected" | "disconnected">(
     "disconnected",
   );
-  const [streamState, setStreamState] = useState<"connected" | "idle">("idle");
+  const [streamState, setStreamState] = useState<"connected" | "idle" | "reconnecting" | "stale">("idle");
   const [viewMode, setViewMode] = useState<ViewMode>("monitor");
   const [filter, setFilter] = useState<Filter>("all");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
@@ -185,9 +185,20 @@ export default function App() {
         }
       },
       {
-        onClose: () => setStreamState("idle"),
-        onError: () => setStreamState("idle"),
-        onOpen: () => setStreamState("connected"),
+        onClose: () => setStreamState("reconnecting"),
+        onError: () => setStreamState("reconnecting"),
+        onOpen: () => {
+          setStreamState("connected");
+          fetchSnapshot()
+            .then((data) => {
+              setSnapshot(data);
+              setBackendState("connected");
+              setOrderInstrument((current) => current || data.symbols[0]?.inst_id || "");
+            })
+            .catch(() => setBackendState("disconnected"));
+        },
+        onReconnectAttempt: () => setStreamState("reconnecting"),
+        onStale: () => setStreamState("stale"),
       },
     );
 
@@ -388,7 +399,7 @@ export default function App() {
             symbols={sortedSymbols}
           />
       ) : viewMode === "review" ? (
-        <ReviewPage copy={copy} paper={snapshot.paper} />
+        <ReviewPage copy={copy} paper={snapshot.paper} strategyCenter={snapshot.strategy_center} />
       ) : (
         <MonitorPage
           copy={copy}

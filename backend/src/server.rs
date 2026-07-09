@@ -11,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use chrono::Utc;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -22,6 +23,7 @@ use crate::{
     macro_cycle,
     okx::rest::OkxRestClient,
     paper::{PaperError, PaperOrderRequest},
+    persistence::PersistenceLayer,
     runtime,
     state::{BackendEvent, RadarState},
     strategy::{StrategyError, StrategyVersionSnapshot},
@@ -34,6 +36,7 @@ struct AppCtx {
     rest: OkxRestClient,
     valuation: CoinglassValuationClient,
     macro_cache: Arc<Mutex<macro_cycle::BtcMacroSnapshotCache>>,
+    websocket_heartbeat: Duration,
 }
 
 pub fn build_router(config: AppConfig, state: RadarState) -> Router {
@@ -44,6 +47,7 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
         macro_cache: Arc::new(Mutex::new(macro_cycle::BtcMacroSnapshotCache::new(
             Duration::from_secs(60),
         ))),
+        websocket_heartbeat: Duration::from_secs(config.websocket_heartbeat_secs),
     };
     Router::new()
         .route("/api/health", get(health))
@@ -116,7 +120,23 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
 }
 
 pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
-    let state = RadarState::default();
+    let persistence = PersistenceLayer::connect(&config).await?;
+    persistence.initialize().await?;
+    let restored_paper = persistence
+        .load_versioned_paper_state()
+        .await?
+        .unwrap_or_default();
+    if persistence.is_postgres_enabled() {
+        tracing::info!("PostgreSQL persistence enabled");
+    } else {
+        tracing::warn!("PostgreSQL persistence disabled; paper state is in-memory only");
+    }
+    if persistence.is_redis_enabled() {
+        tracing::info!("Redis cache enabled");
+    } else {
+        tracing::warn!("Redis cache disabled");
+    }
+    let state = RadarState::with_persistence(persistence, restored_paper);
     let scanner_config = config.clone();
     let scanner_state = state.clone();
     tokio::spawn(async move {
@@ -341,25 +361,54 @@ async fn strategy_version_risk_events(
 }
 
 async fn ws_handler(State(ctx): State<AppCtx>, ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| ws_loop(socket, ctx.state))
+    ws.on_upgrade(move |socket| ws_loop(socket, ctx.state, ctx.websocket_heartbeat))
 }
 
-async fn ws_loop(mut socket: WebSocket, state: RadarState) {
+async fn ws_loop(socket: WebSocket, state: RadarState, heartbeat_interval: Duration) {
+    let (mut sender, mut receiver) = socket.split();
     let snapshot = state.snapshot().await;
-    let _ = socket
+    let _ = sender
         .send(Message::Text(
             serde_json::to_string(&BackendEvent::Snapshot { data: snapshot }).unwrap(),
         ))
         .await;
 
     let mut rx = state.subscribe();
-    while let Ok(event) = rx.recv().await {
-        if socket
-            .send(Message::Text(serde_json::to_string(&event).unwrap()))
-            .await
-            .is_err()
-        {
-            break;
+    let mut heartbeat = tokio::time::interval(heartbeat_interval);
+    loop {
+        tokio::select! {
+            _ = heartbeat.tick() => {
+                if sender.send(Message::Ping(Vec::new())).await.is_err() {
+                    break;
+                }
+            }
+            received = receiver.next() => {
+                match received {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => {
+                        tracing::warn!(?error, "websocket receive failed");
+                        break;
+                    }
+                }
+            }
+            event = rx.recv() => {
+                match event {
+                    Ok(event) => {
+                        if sender
+                            .send(Message::Text(serde_json::to_string(&event).unwrap()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(?error, "websocket event channel closed");
+                        break;
+                    }
+                }
+            }
         }
     }
 }

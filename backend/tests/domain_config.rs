@@ -37,6 +37,32 @@ fn config_can_override_local_bind_host_and_port_from_env_pairs() {
 }
 
 #[test]
+fn config_can_enable_postgres_redis_and_ws_heartbeat_from_env_pairs() {
+    let config = AppConfig::from_env_pairs([
+        (
+            "DATABASE_URL",
+            "postgres://alpha:secret@127.0.0.1:5432/alphapulse",
+        ),
+        ("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        ("ALPHAPULSE_REQUIRE_DATABASE", "true"),
+        ("ALPHAPULSE_REDIS_TTL_SECS", "45"),
+        ("ALPHAPULSE_WS_HEARTBEAT_SECS", "10"),
+    ]);
+
+    assert_eq!(
+        config.database_url.as_deref(),
+        Some("postgres://alpha:secret@127.0.0.1:5432/alphapulse"),
+    );
+    assert_eq!(
+        config.redis_url.as_deref(),
+        Some("redis://127.0.0.1:6379/0")
+    );
+    assert!(config.require_database);
+    assert_eq!(config.redis_ttl_secs, 45);
+    assert_eq!(config.websocket_heartbeat_secs, 10);
+}
+
+#[test]
 fn domain_types_serialize_with_stable_names() {
     let score = Score {
         value: 84,

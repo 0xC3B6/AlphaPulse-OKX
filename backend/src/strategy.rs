@@ -16,6 +16,7 @@ pub const V4_VERSION_CODE: &str = "v0.1.4";
 
 const MAX_RISK_EVENTS: usize = 300;
 const MAX_EQUITY_SNAPSHOTS: usize = 1_000;
+const MAX_AUTO_OPEN_POSITIONS_PER_VERSION: usize = 5;
 const DEFAULT_MARGIN: f64 = 100.0;
 const DEFAULT_LEVERAGE: f64 = 10.0;
 const AUTO_OPEN_SCORE: u8 = 80;
@@ -220,7 +221,7 @@ pub struct RiskGuardEvent {
     pub final_order_intent: Option<OrderIntent>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskGuard {
     cooldown_ms: i64,
     stop_losses: VecDeque<StopLossRecord>,
@@ -699,7 +700,7 @@ fn average(values: impl Iterator<Item = f64>) -> Option<f64> {
     (count > 0).then_some(total / count as f64)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyEquitySnapshot {
     pub run_id: String,
     pub version_code: String,
@@ -762,7 +763,7 @@ pub enum StrategyError {
     Paper(#[from] PaperError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct VersionPaperAccount {
     version: StrategyVersion,
     run: StrategyRun,
@@ -773,7 +774,7 @@ struct VersionPaperAccount {
     max_drawdown: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionedPaperState {
     accounts: BTreeMap<String, VersionPaperAccount>,
     run_sequences: BTreeMap<String, u64>,
@@ -955,6 +956,7 @@ impl VersionedPaperState {
             };
             if account.run.status != StrategyRunStatus::Running
                 || account.paper.has_position(&symbol.inst_id)
+                || account.open_position_count(prices) >= MAX_AUTO_OPEN_POSITIONS_PER_VERSION
             {
                 continue;
             }
@@ -1188,6 +1190,10 @@ impl VersionPaperAccount {
         }
     }
 
+    fn open_position_count(&self, prices: &BTreeMap<String, SymbolSnapshot>) -> usize {
+        self.paper.snapshot(prices).positions.len()
+    }
+
     fn snapshot(
         &self,
         prices: &BTreeMap<String, SymbolSnapshot>,
@@ -1306,6 +1312,7 @@ fn v3_version(now_ms: i64) -> StrategyVersion {
         "base": "scalping_optimization_design",
         "version": V3_VERSION_CODE,
         "auto_open_score": AUTO_OPEN_SCORE,
+        "max_auto_open_positions": MAX_AUTO_OPEN_POSITIONS_PER_VERSION,
         "paper_only": true
     });
     StrategyVersion {
@@ -1324,6 +1331,7 @@ fn v4_version(now_ms: i64) -> StrategyVersion {
     let config_json = serde_json::json!({
         "base": V3_VERSION_CODE,
         "version": V4_VERSION_CODE,
+        "max_auto_open_positions": MAX_AUTO_OPEN_POSITIONS_PER_VERSION,
         "risk_guard": {
             "extreme_dump_gate": true,
             "same_symbol_cooldown_ms": 7200000,

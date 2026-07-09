@@ -51,7 +51,7 @@ export function ConsoleShell({
   onThemeModeChange: (themeMode: ThemeMode) => void;
   onViewModeChange: (viewMode: ViewMode) => void;
   positionCount: number;
-  streamState: "connected" | "idle";
+  streamState: "connected" | "idle" | "reconnecting" | "stale";
   symbolCount: number;
   tickerSymbols: SymbolSnapshot[];
   themeMode: ThemeMode;
@@ -119,6 +119,10 @@ export function ConsoleShell({
   const connectionLabel =
     backendState === "connected" && streamState === "connected"
       ? "WS Connected"
+      : backendState === "connected" && streamState === "reconnecting"
+        ? "WS Reconnecting"
+        : backendState === "connected" && streamState === "stale"
+          ? "WS Stale"
       : backendState === "connected"
         ? "API Connected"
         : "Disconnected";
