@@ -6,7 +6,11 @@ use tokio::sync::{broadcast, RwLock};
 
 use crate::{
     domain::SymbolSnapshot,
-    paper::{PaperAccountSnapshot, PaperError, PaperOrderRequest, PaperState},
+    paper::{PaperAccountSnapshot, PaperError, PaperOrderRequest},
+    strategy::{
+        StrategyCenterSnapshot, StrategyError, StrategyVersionSnapshot, VersionedPaperState,
+        V3_VERSION_CODE,
+    },
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,6 +19,7 @@ pub struct DashboardSnapshot {
     pub last_scan_at_ms: Option<i64>,
     pub websocket_connected: bool,
     pub paper: PaperAccountSnapshot,
+    pub strategy_center: StrategyCenterSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,6 +28,7 @@ pub enum BackendEvent {
     Snapshot { data: DashboardSnapshot },
     SymbolUpdated { data: SymbolSnapshot },
     PaperUpdated { data: PaperAccountSnapshot },
+    StrategyUpdated { data: StrategyCenterSnapshot },
 }
 
 #[derive(Clone)]
@@ -36,7 +42,7 @@ struct RadarStateInner {
     symbols: BTreeMap<String, SymbolSnapshot>,
     last_scan_at_ms: Option<i64>,
     websocket_connected: bool,
-    paper: PaperState,
+    paper: VersionedPaperState,
 }
 
 impl Default for RadarState {
@@ -56,16 +62,48 @@ impl RadarState {
             symbols: inner.symbols.values().cloned().collect(),
             last_scan_at_ms: inner.last_scan_at_ms,
             websocket_connected: inner.websocket_connected,
-            paper: inner.paper.snapshot(&inner.symbols),
+            paper: inner.paper.default_paper_snapshot(&inner.symbols),
+            strategy_center: inner.paper.center_snapshot(&inner.symbols),
         }
     }
 
     pub async fn paper_snapshot(&self) -> PaperAccountSnapshot {
         let inner = self.inner.read().await;
-        inner.paper.snapshot(&inner.symbols)
+        inner.paper.default_paper_snapshot(&inner.symbols)
+    }
+
+    pub async fn strategy_center_snapshot(&self) -> StrategyCenterSnapshot {
+        let inner = self.inner.read().await;
+        inner.paper.center_snapshot(&inner.symbols)
+    }
+
+    pub async fn strategy_version_snapshot(
+        &self,
+        version_code: &str,
+    ) -> Result<StrategyVersionSnapshot, StrategyError> {
+        let inner = self.inner.read().await;
+        inner.paper.version_snapshot(version_code, &inner.symbols)
     }
 
     pub async fn upsert_symbol(&self, symbol: SymbolSnapshot) {
+        let strategy_update = {
+            let mut inner = self.inner.write().await;
+            inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
+            let prices = inner.symbols.clone();
+            inner
+                .paper
+                .process_market_update(&symbol, &prices, symbol.updated_at_ms);
+            inner.paper.center_snapshot(&inner.symbols)
+        };
+        let _ = self
+            .events
+            .send(BackendEvent::SymbolUpdated { data: symbol });
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: strategy_update,
+        });
+    }
+
+    pub async fn upsert_symbol_without_strategy(&self, symbol: SymbolSnapshot) {
         {
             let mut inner = self.inner.write().await;
             inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
@@ -81,17 +119,19 @@ impl RadarState {
         price: f64,
         updated_at_ms: i64,
     ) -> Option<SymbolSnapshot> {
-        let (updated, paper_update) = {
+        let (updated, paper_update, strategy_update) = {
             let mut inner = self.inner.write().await;
             let symbol = inner.symbols.get_mut(inst_id)?;
             symbol.price = price;
             symbol.updated_at_ms = updated_at_ms;
             let updated = symbol.clone();
-            let paper_update = inner
+            let prices = inner.symbols.clone();
+            inner
                 .paper
-                .has_open_positions()
-                .then(|| inner.paper.snapshot(&inner.symbols));
-            (updated, paper_update)
+                .process_market_update(&updated, &prices, updated_at_ms);
+            let paper_update = inner.paper.default_paper_snapshot(&inner.symbols);
+            let strategy_update = inner.paper.center_snapshot(&inner.symbols);
+            (updated, Some(paper_update), strategy_update)
         };
         let _ = self.events.send(BackendEvent::SymbolUpdated {
             data: updated.clone(),
@@ -99,6 +139,9 @@ impl RadarState {
         if let Some(paper) = paper_update {
             let _ = self.events.send(BackendEvent::PaperUpdated { data: paper });
         }
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: strategy_update,
+        });
         Some(updated)
     }
 
@@ -106,26 +149,31 @@ impl RadarState {
         &self,
         order: PaperOrderRequest,
     ) -> Result<PaperAccountSnapshot, PaperError> {
-        let snapshot = {
+        let (snapshot, strategy_snapshot) = {
             let mut inner = self.inner.write().await;
-            let inst_id = order.inst_id.clone();
-            let price = inner
-                .symbols
-                .get(&inst_id)
-                .map(|symbol| symbol.price)
-                .filter(|price| *price > 0.0 && price.is_finite())
-                .ok_or_else(|| PaperError::PriceUnavailable(inst_id.clone()))?;
-            let available_balance = inner.paper.snapshot(&inner.symbols).available_balance;
-            inner.paper.open(
-                order,
-                price,
-                available_balance,
-                Utc::now().timestamp_millis(),
-            )?;
-            inner.paper.snapshot(&inner.symbols)
+            let prices = inner.symbols.clone();
+            inner
+                .paper
+                .open_order(
+                    V3_VERSION_CODE,
+                    order,
+                    &prices,
+                    Utc::now().timestamp_millis(),
+                )
+                .map_err(|error| match error {
+                    StrategyError::Paper(error) => error,
+                    StrategyError::UnknownVersion(version) => PaperError::PriceUnavailable(version),
+                })?;
+            (
+                inner.paper.default_paper_snapshot(&inner.symbols),
+                inner.paper.center_snapshot(&inner.symbols),
+            )
         };
         let _ = self.events.send(BackendEvent::PaperUpdated {
             data: snapshot.clone(),
+        });
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: strategy_snapshot,
         });
         Ok(snapshot)
     }
@@ -134,21 +182,31 @@ impl RadarState {
         &self,
         inst_id: &str,
     ) -> Result<PaperAccountSnapshot, PaperError> {
-        let snapshot = {
+        let (snapshot, strategy_snapshot) = {
             let mut inner = self.inner.write().await;
-            let price = inner
-                .symbols
-                .get(inst_id)
-                .map(|symbol| symbol.price)
-                .filter(|price| *price > 0.0 && price.is_finite())
-                .ok_or_else(|| PaperError::PriceUnavailable(inst_id.to_string()))?;
+            let prices = inner.symbols.clone();
             inner
                 .paper
-                .close(inst_id, price, Utc::now().timestamp_millis())?;
-            inner.paper.snapshot(&inner.symbols)
+                .close_position(
+                    V3_VERSION_CODE,
+                    inst_id,
+                    &prices,
+                    Utc::now().timestamp_millis(),
+                )
+                .map_err(|error| match error {
+                    StrategyError::Paper(error) => error,
+                    StrategyError::UnknownVersion(version) => PaperError::PriceUnavailable(version),
+                })?;
+            (
+                inner.paper.default_paper_snapshot(&inner.symbols),
+                inner.paper.center_snapshot(&inner.symbols),
+            )
         };
         let _ = self.events.send(BackendEvent::PaperUpdated {
             data: snapshot.clone(),
+        });
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: strategy_snapshot,
         });
         Ok(snapshot)
     }
@@ -156,6 +214,57 @@ impl RadarState {
     pub async fn mark_scan(&self, ts_ms: i64) {
         let mut inner = self.inner.write().await;
         inner.last_scan_at_ms = Some(ts_ms);
+    }
+
+    pub async fn start_strategy_version(
+        &self,
+        version_code: &str,
+    ) -> Result<StrategyCenterSnapshot, StrategyError> {
+        let snapshot = {
+            let mut inner = self.inner.write().await;
+            inner
+                .paper
+                .start_version(version_code, Utc::now().timestamp_millis())?;
+            inner.paper.center_snapshot(&inner.symbols)
+        };
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: snapshot.clone(),
+        });
+        Ok(snapshot)
+    }
+
+    pub async fn stop_strategy_version(
+        &self,
+        version_code: &str,
+    ) -> Result<StrategyCenterSnapshot, StrategyError> {
+        let snapshot = {
+            let mut inner = self.inner.write().await;
+            inner
+                .paper
+                .stop_version(version_code, Utc::now().timestamp_millis())?;
+            inner.paper.center_snapshot(&inner.symbols)
+        };
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: snapshot.clone(),
+        });
+        Ok(snapshot)
+    }
+
+    pub async fn reset_strategy_version(
+        &self,
+        version_code: &str,
+    ) -> Result<StrategyCenterSnapshot, StrategyError> {
+        let snapshot = {
+            let mut inner = self.inner.write().await;
+            inner
+                .paper
+                .reset_version(version_code, Utc::now().timestamp_millis())?;
+            inner.paper.center_snapshot(&inner.symbols)
+        };
+        let _ = self.events.send(BackendEvent::StrategyUpdated {
+            data: snapshot.clone(),
+        });
+        Ok(snapshot)
     }
 
     pub async fn set_websocket_connected(&self, connected: bool) {

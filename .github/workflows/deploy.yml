@@ -1,0 +1,119 @@
+name: Build and Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test backend
+        run: cargo test -p alphapulse_okx_backend
+
+      - name: Build backend
+        run: cargo build --release -p alphapulse_okx_backend
+
+      - name: Test frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package release
+        run: |
+          set -euo pipefail
+          rm -rf release alphapulse-okx.tar.gz
+          mkdir -p release/bin release/frontend release/deploy
+          cp target/release/alphapulse_okx_backend release/bin/
+          cp -R frontend/dist/. release/frontend/
+          cp deploy/alphapulse-okx.service release/deploy/
+          cp deploy/nginx.alphapulse-okx.conf release/deploy/
+          tar -czf alphapulse-okx.tar.gz -C release .
+
+      - name: Install SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/alphapulse-okx-deploy
+          chmod 600 ~/.ssh/alphapulse-okx-deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          set -euo pipefail
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy alphapulse-okx.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/alphapulse-okx.tar.gz"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy "$DEPLOY_USER@$DEPLOY_HOST" "APP_SHA=$GITHUB_SHA bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR=/opt/alphapulse-okx
+          SERVICE_USER=alphapulse
+          RELEASE="$APP_DIR/releases/$APP_SHA"
+
+          if ! command -v nginx >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y nginx ca-certificates
+          fi
+
+          if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
+            useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
+          fi
+
+          mkdir -p "$APP_DIR/releases"
+          rm -rf "$RELEASE"
+          mkdir -p "$RELEASE"
+          tar -xzf /tmp/alphapulse-okx.tar.gz -C "$RELEASE"
+          ln -sfn "$RELEASE" "$APP_DIR/current"
+
+          install -m 0644 "$RELEASE/deploy/alphapulse-okx.service" /etc/systemd/system/alphapulse-okx.service
+          install -m 0644 "$RELEASE/deploy/nginx.alphapulse-okx.conf" /etc/nginx/sites-available/alphapulse-okx
+          ln -sfn /etc/nginx/sites-available/alphapulse-okx /etc/nginx/sites-enabled/alphapulse-okx
+          rm -f /etc/nginx/sites-enabled/default
+
+          touch /etc/alphapulse-okx.env
+          chmod 640 /etc/alphapulse-okx.env
+          chown "root:$SERVICE_USER" /etc/alphapulse-okx.env
+          chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+
+          systemctl daemon-reload
+          systemctl enable --now nginx
+          systemctl enable alphapulse-okx
+          systemctl restart alphapulse-okx
+          nginx -t
+          systemctl reload nginx
+          systemctl --no-pager --full status alphapulse-okx
+          REMOTE

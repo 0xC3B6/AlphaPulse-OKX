@@ -5,10 +5,38 @@ import type {
   DashboardSnapshot,
   PaperAccountSnapshot,
   PaperOrderRequest,
+  StrategyCenterSnapshot,
 } from "./types";
 import { connectWebSocketWithReconnect, type RealtimeConnection } from "./realtime";
 
-const backendBaseUrl = "http://127.0.0.1:8787";
+const backendBaseUrl = normalizeBackendBaseUrl(import.meta.env.VITE_BACKEND_BASE_URL ?? "");
+
+type BrowserLocation = Pick<Location, "host" | "protocol">;
+
+function normalizeBackendBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, "");
+}
+
+export function resolveApiUrl(path: string, baseUrl = backendBaseUrl): string {
+  const normalizedBaseUrl = normalizeBackendBaseUrl(baseUrl);
+  return `${normalizedBaseUrl}${path}`;
+}
+
+export function resolveWebSocketUrl(
+  path: string,
+  baseUrl = backendBaseUrl,
+  location: BrowserLocation = window.location,
+): string {
+  const normalizedBaseUrl = normalizeBackendBaseUrl(baseUrl);
+  if (normalizedBaseUrl.length === 0) {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${location.host}${path}`;
+  }
+
+  const url = new URL(`${normalizedBaseUrl}${path}`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
 
 export async function fetchSnapshot(): Promise<DashboardSnapshot> {
   return requestJson<DashboardSnapshot>("/api/snapshot");
@@ -20,6 +48,10 @@ export async function fetchBtcMacro(): Promise<BtcMacroSnapshot> {
 
 export async function fetchPaperAccount(): Promise<PaperAccountSnapshot> {
   return requestJson<PaperAccountSnapshot>("/api/paper");
+}
+
+export async function fetchStrategyVersions(): Promise<StrategyCenterSnapshot> {
+  return requestJson<StrategyCenterSnapshot>("/api/strategy/versions");
 }
 
 export async function fetchSymbolChart(
@@ -56,6 +88,33 @@ export async function closePaperPosition(
   );
 }
 
+export async function startStrategyVersion(
+  versionCode: string,
+): Promise<StrategyCenterSnapshot> {
+  return requestJson<StrategyCenterSnapshot>(
+    `/api/strategy/versions/${encodeURIComponent(versionCode)}/start`,
+    { method: "POST" },
+  );
+}
+
+export async function stopStrategyVersion(
+  versionCode: string,
+): Promise<StrategyCenterSnapshot> {
+  return requestJson<StrategyCenterSnapshot>(
+    `/api/strategy/versions/${encodeURIComponent(versionCode)}/stop`,
+    { method: "POST" },
+  );
+}
+
+export async function resetStrategyVersion(
+  versionCode: string,
+): Promise<StrategyCenterSnapshot> {
+  return requestJson<StrategyCenterSnapshot>(
+    `/api/strategy/versions/${encodeURIComponent(versionCode)}/reset`,
+    { method: "POST" },
+  );
+}
+
 export function connectEvents(
   onEvent: (event: BackendEvent) => void,
   lifecycle: {
@@ -65,7 +124,7 @@ export function connectEvents(
   } = {},
 ): RealtimeConnection {
   return connectWebSocketWithReconnect({
-    createSocket: () => new WebSocket("ws://127.0.0.1:8787/ws"),
+    createSocket: () => new WebSocket(resolveWebSocketUrl("/ws")),
     onClose: lifecycle.onClose,
     onError: lifecycle.onError,
     onMessage: (message) => {
@@ -77,7 +136,7 @@ export function connectEvents(
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${backendBaseUrl}${path}`, init);
+  const response = await fetch(resolveApiUrl(path), init);
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }

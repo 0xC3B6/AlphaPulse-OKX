@@ -5,6 +5,9 @@ import {
   fetchBtcMacro,
   fetchSnapshot,
   openPaperOrder,
+  resetStrategyVersion,
+  startStrategyVersion,
+  stopStrategyVersion,
 } from "./api";
 import { ConsoleShell } from "./ConsoleShell";
 import { MacroPanel } from "./MacroPanel";
@@ -34,6 +37,7 @@ import type {
   DashboardSnapshot,
   PaperAccountSnapshot,
   PaperSide,
+  StrategyCenterSnapshot,
   SymbolSnapshot,
 } from "./types";
 
@@ -57,6 +61,7 @@ const emptySnapshot: DashboardSnapshot = {
   last_scan_at_ms: null,
   websocket_connected: false,
   paper: emptyPaperAccount,
+  strategy_center: undefined,
 };
 
 export default function App() {
@@ -167,6 +172,10 @@ export default function App() {
         }
         if (event.type === "paper_updated") {
           setSnapshot((current) => ({ ...current, paper: event.data }));
+          return;
+        }
+        if (event.type === "strategy_updated") {
+          setSnapshot((current) => applyStrategyCenter(current, event.data));
           return;
         }
 
@@ -293,6 +302,21 @@ export default function App() {
     }
   }
 
+  async function submitStrategyStart(versionCode: string) {
+    const center = await startStrategyVersion(versionCode);
+    setSnapshot((current) => applyStrategyCenter(current, center));
+  }
+
+  async function submitStrategyStop(versionCode: string) {
+    const center = await stopStrategyVersion(versionCode);
+    setSnapshot((current) => applyStrategyCenter(current, center));
+  }
+
+  async function submitStrategyReset(versionCode: string) {
+    const center = await resetStrategyVersion(versionCode);
+    setSnapshot((current) => applyStrategyCenter(current, center));
+  }
+
   function openTradingView(symbol: SymbolSnapshot) {
     setTradingViewSymbol(symbol);
   }
@@ -353,12 +377,16 @@ export default function App() {
           tradeError={tradeError}
         />
       ) : viewMode === "strategy" ? (
-        <StrategyPage
-          copy={copy}
-          lastScanAt={snapshot.last_scan_at_ms}
-          paper={snapshot.paper}
-          symbols={sortedSymbols}
-        />
+          <StrategyPage
+            copy={copy}
+            lastScanAt={snapshot.last_scan_at_ms}
+            onResetStrategyVersion={submitStrategyReset}
+            onStartStrategyVersion={submitStrategyStart}
+            onStopStrategyVersion={submitStrategyStop}
+            paper={snapshot.paper}
+            strategyCenter={snapshot.strategy_center}
+            symbols={sortedSymbols}
+          />
       ) : viewMode === "review" ? (
         <ReviewPage copy={copy} paper={snapshot.paper} />
       ) : (
@@ -414,4 +442,18 @@ function upsertSymbol(
   const symbols = snapshot.symbols.filter((item) => item.inst_id !== symbol.inst_id);
   symbols.push(symbol);
   return { ...snapshot, symbols };
+}
+
+function applyStrategyCenter(
+  snapshot: DashboardSnapshot,
+  strategyCenter: StrategyCenterSnapshot,
+): DashboardSnapshot {
+  const defaultVersion =
+    strategyCenter.versions.find((version) => version.version.version_code === "v0.1.3") ??
+    strategyCenter.versions[0];
+  return {
+    ...snapshot,
+    paper: defaultVersion?.paper ?? snapshot.paper,
+    strategy_center: strategyCenter,
+  };
 }

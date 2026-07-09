@@ -10,5 +10,6 @@ pub mod runtime;
 pub mod scoring;
 pub mod server;
 pub mod state;
+pub mod strategy;
 pub mod universe;
 pub mod valuation;

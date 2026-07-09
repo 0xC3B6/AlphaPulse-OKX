@@ -15,7 +15,7 @@ import type {
   PaperClosedPositionSnapshot,
   PaperStrategyStats,
   PaperTrade,
-  TradeTag,
+  TradeTagLike,
 } from "./types";
 import {
   formatPct,
@@ -1171,21 +1171,25 @@ function MetricCard({
   );
 }
 
-function TagChips({ tags }: { tags: TradeTag[] }) {
+function TagChips({ tags }: { tags: TradeTagLike[] }) {
   if (tags.length === 0) {
     return null;
   }
   return (
     <span className="tag-chip-row">
-      {tags.map((tag, index) => (
-        <span
-          className={tag.score_impact < 0 ? "tag-chip tag-chip-warning" : "tag-chip"}
-          key={`${tag.kind}-${tag.ts_ms}-${index}`}
-          title={tag.reason}
-        >
-          {tag.label || tag.kind.replace(/_/g, " ")}
-        </span>
-      ))}
+      {tags.map((tag, index) => {
+        const label = tradeTagLabel(tag);
+        const isWarning = typeof tag !== "string" && tag.score_impact < 0;
+        return (
+          <span
+            className={isWarning ? "tag-chip tag-chip-warning" : "tag-chip"}
+            key={typeof tag === "string" ? `${tag}-${index}` : `${tag.kind}-${tag.ts_ms}-${index}`}
+            title={typeof tag === "string" ? label : tag.reason}
+          >
+            {label}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -1458,7 +1462,7 @@ function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
     ...(position.tags ?? []),
     ...(position.close_tags ?? []),
   ]
-    .map((tag) => tag.label.trim())
+    .map((tag) => tradeTagLabel(tag).trim())
     .find((label) => label.length > 0);
   if (tagLabel !== undefined) {
     return tagLabel;
@@ -1490,6 +1494,10 @@ function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
     return position.side === "short" ? "Trend Short" : "Trend Long";
   }
   return "Scalping Signal";
+}
+
+function tradeTagLabel(tag: TradeTagLike): string {
+  return typeof tag === "string" ? tag : tag.label;
 }
 
 function signalConfidence(

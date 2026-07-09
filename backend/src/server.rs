@@ -24,6 +24,7 @@ use crate::{
     paper::{PaperError, PaperOrderRequest},
     runtime,
     state::{BackendEvent, RadarState},
+    strategy::{StrategyError, StrategyVersionSnapshot},
     valuation::CoinglassValuationClient,
 };
 
@@ -54,6 +55,59 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
         .route(
             "/api/paper/positions/:inst_id/close",
             post(close_paper_position),
+        )
+        .route("/api/strategy/versions", get(strategy_versions))
+        .route(
+            "/api/strategy/versions/:version_code",
+            get(strategy_version),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/start",
+            post(start_strategy_version),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/stop",
+            post(stop_strategy_version),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/reset",
+            post(reset_strategy_version),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/overview",
+            get(strategy_version_overview),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/equity",
+            get(strategy_version_equity),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/positions",
+            get(strategy_version_positions),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/trades",
+            get(strategy_version_trades),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/attribution/signals",
+            get(strategy_version_signal_attribution),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/attribution/tags",
+            get(strategy_version_tag_attribution),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/attribution/combos",
+            get(strategy_version_combo_attribution),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/attribution/symbols",
+            get(strategy_version_symbol_attribution),
+        )
+        .route(
+            "/api/strategy/versions/:version_code/risk-guard/events",
+            get(strategy_version_risk_events),
         )
         .route("/ws", get(ws_handler))
         .layer(CorsLayer::permissive())
@@ -159,6 +213,133 @@ async fn close_paper_position(
     Ok(Json(paper))
 }
 
+async fn strategy_versions(State(ctx): State<AppCtx>) -> impl IntoResponse {
+    Json(ctx.state.strategy_center_snapshot().await)
+}
+
+async fn strategy_version(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state.strategy_version_snapshot(&version_code).await?,
+    ))
+}
+
+async fn start_strategy_version(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(ctx.state.start_strategy_version(&version_code).await?))
+}
+
+async fn stop_strategy_version(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(ctx.state.stop_strategy_version(&version_code).await?))
+}
+
+async fn reset_strategy_version(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(ctx.state.reset_strategy_version(&version_code).await?))
+}
+
+async fn strategy_version_overview(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let version = ctx.state.strategy_version_snapshot(&version_code).await?;
+    Ok(Json(version.overview))
+}
+
+async fn strategy_version_equity(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let version = ctx.state.strategy_version_snapshot(&version_code).await?;
+    Ok(Json(version.equity))
+}
+
+async fn strategy_version_positions(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let version = ctx.state.strategy_version_snapshot(&version_code).await?;
+    Ok(Json(version.paper.positions))
+}
+
+async fn strategy_version_trades(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+    Query(query): Query<TradesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let version = ctx.state.strategy_version_snapshot(&version_code).await?;
+    Ok(Json(filter_trades(version, query)))
+}
+
+async fn strategy_version_signal_attribution(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state
+            .strategy_version_snapshot(&version_code)
+            .await?
+            .signal_attribution,
+    ))
+}
+
+async fn strategy_version_tag_attribution(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state
+            .strategy_version_snapshot(&version_code)
+            .await?
+            .tag_attribution,
+    ))
+}
+
+async fn strategy_version_combo_attribution(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state
+            .strategy_version_snapshot(&version_code)
+            .await?
+            .combo_attribution,
+    ))
+}
+
+async fn strategy_version_symbol_attribution(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state
+            .strategy_version_snapshot(&version_code)
+            .await?
+            .symbol_attribution,
+    ))
+}
+
+async fn strategy_version_risk_events(
+    State(ctx): State<AppCtx>,
+    Path(version_code): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        ctx.state
+            .strategy_version_snapshot(&version_code)
+            .await?
+            .risk_guard_events,
+    ))
+}
+
 async fn ws_handler(State(ctx): State<AppCtx>, ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| ws_loop(socket, ctx.state))
 }
@@ -193,6 +374,67 @@ struct ChartQuery {
     timeframe: Option<Timeframe>,
     limit: Option<usize>,
     filled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TradesQuery {
+    symbol: Option<String>,
+    side: Option<String>,
+    primary_signal: Option<String>,
+    tag: Option<String>,
+    exit_reason: Option<String>,
+    start_time: Option<i64>,
+    end_time: Option<i64>,
+}
+
+fn filter_trades(
+    version: StrategyVersionSnapshot,
+    query: TradesQuery,
+) -> Vec<crate::paper::PaperClosedPositionSnapshot> {
+    version
+        .paper
+        .position_history
+        .into_iter()
+        .filter(|trade| {
+            query
+                .symbol
+                .as_ref()
+                .is_none_or(|symbol| trade.inst_id.eq_ignore_ascii_case(symbol))
+        })
+        .filter(|trade| {
+            query.side.as_ref().is_none_or(|side| {
+                matches!(
+                    (side.as_str(), trade.side),
+                    ("long", crate::paper::PaperSide::Long)
+                        | ("short", crate::paper::PaperSide::Short)
+                )
+            })
+        })
+        .filter(|trade| {
+            query
+                .primary_signal
+                .as_ref()
+                .is_none_or(|signal| trade.primary_signal == *signal)
+        })
+        .filter(|trade| {
+            query
+                .tag
+                .as_ref()
+                .is_none_or(|tag| trade.tags.iter().any(|trade_tag| trade_tag == tag))
+        })
+        .filter(|trade| {
+            query
+                .exit_reason
+                .as_ref()
+                .is_none_or(|reason| trade.close_reason.contains(reason))
+        })
+        .filter(|trade| {
+            query
+                .start_time
+                .is_none_or(|start| trade.closed_at_ms >= start)
+        })
+        .filter(|trade| query.end_time.is_none_or(|end| trade.closed_at_ms <= end))
+        .collect()
 }
 
 #[derive(Debug)]
@@ -233,6 +475,15 @@ impl From<PaperError> for ApiError {
         Self {
             status,
             message: error.to_string(),
+        }
+    }
+}
+
+impl From<StrategyError> for ApiError {
+    fn from(error: StrategyError) -> Self {
+        match error {
+            StrategyError::UnknownVersion(message) => Self::not_found(message),
+            StrategyError::Paper(error) => error.into(),
         }
     }
 }

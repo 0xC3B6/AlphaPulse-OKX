@@ -1,13 +1,24 @@
 import { useMemo, useState } from "react";
 import type { Copy } from "./i18n";
-import type { PaperAccountSnapshot, Score, SymbolSnapshot } from "./types";
+import type {
+  AttributionRow,
+  PaperAccountSnapshot,
+  RiskGuardEvent,
+  Score,
+  StrategyCenterSnapshot,
+  StrategyVersionSnapshot,
+  SymbolSnapshot,
+} from "./types";
 import {
   formatPct,
   formatPrice,
   formatSignalDirection,
+  formatSignedUsdt,
   formatTags,
   formatTimestamp,
+  formatUsdt,
   maxScore,
+  pnlClass,
 } from "./uiFormat";
 
 interface StrategyCandidate {
@@ -39,12 +50,20 @@ const strategyTabs: Array<{ id: StrategyTab; label: string }> = [
 export function StrategyPage({
   copy,
   lastScanAt,
+  onResetStrategyVersion,
+  onStartStrategyVersion,
+  onStopStrategyVersion,
   paper,
+  strategyCenter,
   symbols,
 }: {
   copy: Copy;
   lastScanAt: number | null;
+  onResetStrategyVersion: (versionCode: string) => Promise<void>;
+  onStartStrategyVersion: (versionCode: string) => Promise<void>;
+  onStopStrategyVersion: (versionCode: string) => Promise<void>;
   paper: PaperAccountSnapshot;
+  strategyCenter?: StrategyCenterSnapshot;
   symbols: SymbolSnapshot[];
 }) {
   const candidates = useMemo(() => buildCandidates(symbols, paper), [paper, symbols]);
@@ -53,9 +72,27 @@ export function StrategyPage({
   const longCount = activeCandidates.filter((candidate) => candidate.primaryScore.direction === "long").length;
   const shortCount = activeCandidates.filter((candidate) => candidate.primaryScore.direction === "short").length;
   const [activeTab, setActiveTab] = useState<StrategyTab>("attribution");
+  const [selectedVersionCode, setSelectedVersionCode] = useState<string | null>(null);
+  const selectedVersion =
+    strategyCenter?.versions.find(
+      (version) =>
+        version.version.version_code ===
+        (selectedVersionCode ?? strategyCenter.versions[0]?.version.version_code),
+    ) ?? strategyCenter?.versions[0] ?? null;
 
   return (
     <section className="strategy-page page-surface" data-testid="strategy-page">
+      {strategyCenter ? (
+        <StrategyVersionCenter
+          center={strategyCenter}
+          onReset={onResetStrategyVersion}
+          onSelectVersion={setSelectedVersionCode}
+          onStart={onStartStrategyVersion}
+          onStop={onStopStrategyVersion}
+          selectedVersion={selectedVersion}
+        />
+      ) : null}
+
       <section className="page-local-tabs" role="tablist" aria-label={copy.views.strategy}>
         {strategyTabs.map((tab) => (
           <button
@@ -199,6 +236,300 @@ export function StrategyPage({
       ) : null}
     </section>
   );
+}
+
+function StrategyVersionCenter({
+  center,
+  onReset,
+  onSelectVersion,
+  onStart,
+  onStop,
+  selectedVersion,
+}: {
+  center: StrategyCenterSnapshot;
+  onReset: (versionCode: string) => Promise<void>;
+  onSelectVersion: (versionCode: string) => void;
+  onStart: (versionCode: string) => Promise<void>;
+  onStop: (versionCode: string) => Promise<void>;
+  selectedVersion: StrategyVersionSnapshot | null;
+}) {
+  const versions = center.versions;
+
+  return (
+    <section className="strategy-version-center detail-section" data-testid="strategy-version-center">
+      <header className="panel-heading compact">
+        <div>
+          <h2>Strategy Version Runner</h2>
+          <p>v0.1.3 / v0.1.4 paper accounts share market data but keep isolated positions, PnL and risk logs.</p>
+        </div>
+        <span className="strategy-center-updated">{formatTimestamp(center.last_updated_ms)}</span>
+      </header>
+
+      {versions.length === 0 ? (
+        <p className="muted panel-empty">暂无策略版本</p>
+      ) : (
+        <div className="strategy-version-table-wrap">
+          <table className="strategy-version-table">
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Mode</th>
+                <th>Equity</th>
+                <th>PnL</th>
+                <th>Risk</th>
+                <th>Trades</th>
+                <th>Config</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {versions.map((version) => {
+                const isSelected =
+                  selectedVersion?.version.version_code === version.version.version_code;
+                return (
+                  <tr className={isSelected ? "active" : ""} key={version.version.version_code}>
+                    <td>
+                      <button
+                        aria-label={`查看 ${version.version.version_code}`}
+                        className="strategy-version-select"
+                        onClick={() => onSelectVersion(version.version.version_code)}
+                        type="button"
+                      >
+                        <strong>{version.version.version_code}</strong>
+                        <span>{version.version.name}</span>
+                      </button>
+                    </td>
+                    <td>
+                      <span className={`strategy-status-pill ${version.run.status === "running" ? "active" : ""}`}>
+                        {version.run.mode} {version.run.status}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{formatUsdt(version.overview.current_equity)}</strong>
+                      <span className={pnlClass(version.overview.return_pct)}>
+                        {formatPct(version.overview.return_pct)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={pnlClass(version.overview.realized_pnl)}>
+                        {formatSignedUsdt(version.overview.realized_pnl)}
+                      </span>
+                      <small>{formatSignedUsdt(version.overview.unrealized_pnl)} UPNL</small>
+                    </td>
+                    <td>
+                      <span>PF {formatNullableRatio(version.overview.profit_factor)}</span>
+                      <span>DD {formatPct(version.overview.max_drawdown)}</span>
+                    </td>
+                    <td>
+                      <span>{version.overview.closed_trades} closed</span>
+                      <span>{version.overview.open_positions} open</span>
+                    </td>
+                    <td>
+                      <code>{version.overview.config_hash}</code>
+                    </td>
+                    <td>
+                      <div className="strategy-version-actions">
+                        {version.run.status === "running" ? (
+                          <button onClick={() => void onStop(version.version.version_code)} type="button">
+                            停止 {version.version.version_code}
+                          </button>
+                        ) : (
+                          <button onClick={() => void onStart(version.version.version_code)} type="button">
+                            启动 {version.version.version_code}
+                          </button>
+                        )}
+                        <button onClick={() => void onReset(version.version.version_code)} type="button">
+                          重置 {version.version.version_code}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedVersion ? <StrategyVersionDetail version={selectedVersion} /> : null}
+    </section>
+  );
+}
+
+function StrategyVersionDetail({ version }: { version: StrategyVersionSnapshot }) {
+  return (
+    <section className="strategy-version-detail" data-testid="strategy-version-detail">
+      <header>
+        <div>
+          <h3>
+            {version.version.version_code} · {version.version.name}
+          </h3>
+          <span>{version.run.run_id}</span>
+        </div>
+        <p>{version.version.description}</p>
+      </header>
+
+      <div className="strategy-version-detail-grid">
+        <DetailMetric label="Equity" value={formatUsdt(version.overview.current_equity)} />
+        <DetailMetric label="Return" value={formatPct(version.overview.return_pct)} />
+        <DetailMetric label="PF" value={formatNullableRatio(version.overview.profit_factor)} />
+        <DetailMetric label="Win" value={formatNullablePct(version.overview.win_rate)} />
+        <DetailMetric label="Fee" value={formatUsdt(version.overview.total_fee)} />
+        <DetailMetric label="Runtime" value={formatDuration(version.overview.run_time_ms)} />
+      </div>
+
+      <div className="strategy-version-panels">
+        <AttributionMiniTable title="Signal Attribution" rows={version.signal_attribution} />
+        <AttributionMiniTable title="Tag Attribution" rows={version.tag_attribution} />
+        <AttributionMiniTable title="Combo Attribution" rows={version.combo_attribution} />
+        <AttributionMiniTable title="Symbol Attribution" rows={version.symbol_attribution} />
+        <PositionsMiniTable version={version} />
+        <RiskGuardLog events={version.risk_guard_events} />
+        <section className="strategy-config-panel">
+          <h4>Config</h4>
+          <pre>{JSON.stringify(version.version.config_json, null, 2)}</pre>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function AttributionMiniTable({ rows, title }: { rows: AttributionRow[]; title: string }) {
+  return (
+    <section className="strategy-attribution-mini">
+      <h4>{title}</h4>
+      {rows.length === 0 ? (
+        <p className="muted">暂无归因样本</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>N</th>
+              <th>PF</th>
+              <th>PnL</th>
+              <th>SL</th>
+              <th>Suggestion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 5).map((row) => (
+              <tr key={row.key}>
+                <td>{row.key}</td>
+                <td>{row.sample_count}</td>
+                <td>{formatNullableRatio(row.profit_factor)}</td>
+                <td className={pnlClass(row.net_pnl)}>{formatSignedUsdt(row.net_pnl)}</td>
+                <td>{formatNullablePct(row.stop_loss_rate)}</td>
+                <td>{row.confidence} / {row.suggestion}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function PositionsMiniTable({ version }: { version: StrategyVersionSnapshot }) {
+  return (
+    <section className="strategy-positions-mini">
+      <h4>Open Positions</h4>
+      {version.paper.positions.length === 0 ? (
+        <p className="muted">暂无当前持仓</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Margin</th>
+              <th>PnL</th>
+              <th>Signal</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {version.paper.positions.map((position) => (
+              <tr key={`${position.run_id}-${position.inst_id}`}>
+                <td>{position.inst_id}</td>
+                <td>{position.side}</td>
+                <td>{formatUsdt(position.margin)}</td>
+                <td className={pnlClass(position.unrealized_pnl)}>
+                  {formatSignedUsdt(position.unrealized_pnl)}
+                </td>
+                <td>{position.primary_signal ?? "-"}</td>
+                <td>{(position.risk_flags ?? []).join(", ") || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function RiskGuardLog({ events }: { events: RiskGuardEvent[] }) {
+  return (
+    <section className="strategy-risk-log">
+      <h4>Risk Guard Log</h4>
+      {events.length === 0 ? (
+        <p className="muted">暂无风控拦截</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Symbol</th>
+              <th>Signal</th>
+              <th>Reason</th>
+              <th>Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.slice(0, 8).map((event) => (
+              <tr key={event.id}>
+                <td>{formatTimestamp(event.timestamp_ms)}</td>
+                <td>{event.symbol}</td>
+                <td>{event.original_signal}</td>
+                <td>{event.reason}</td>
+                <td>{event.risk_flags.join(", ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function formatNullableRatio(value: number | null | undefined): string {
+  return value === null || value === undefined ? "-" : value.toFixed(2);
+}
+
+function formatNullablePct(value: number | null | undefined): string {
+  return value === null || value === undefined ? "-" : formatPct(value);
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60_000) {
+    return `${Math.max(0, Math.round(ms / 1_000))}s`;
+  }
+  if (ms < 3_600_000) {
+    return `${Math.round(ms / 60_000)}m`;
+  }
+  if (ms < 86_400_000) {
+    return `${Math.round(ms / 3_600_000)}h`;
+  }
+  return `${Math.round(ms / 86_400_000)}d`;
 }
 
 function buildCandidates(

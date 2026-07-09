@@ -84,11 +84,14 @@ export function TradePage({
               <thead>
                 <tr>
                   <th>{copy.table.symbol}</th>
+                  <th>Version</th>
                   <th>{copy.paper.side}</th>
                   <th>{copy.paper.leverage}</th>
                   <th>{copy.paper.margin}</th>
                   <th>{copy.paper.pnl}</th>
                   <th>{copy.paper.mark}</th>
+                  <th>Signal</th>
+                  <th>Risk</th>
                 </tr>
               </thead>
               <tbody>
@@ -99,6 +102,7 @@ export function TradePage({
                     onClick={() => onSelectPosition(position.inst_id)}
                   >
                     <td>{position.inst_id}</td>
+                    <td>{position.version_code ?? position.strategy_version ?? "v0.1.3"}</td>
                     <td>{copy.directions[position.side]}</td>
                     <td>{position.leverage.toFixed(1)}x</td>
                     <td>{formatUsdt(position.margin)}</td>
@@ -106,6 +110,8 @@ export function TradePage({
                       {formatSignedUsdt(position.unrealized_pnl)} / {formatPct(position.pnl_pct)}
                     </td>
                     <td>{formatPrice(position.mark_price)}</td>
+                    <td>{position.primary_signal ?? position.reason ?? "-"}</td>
+                    <td>{(position.risk_flags ?? []).join(", ") || position.risk_guard_decision || "-"}</td>
                   </tr>
                 ))}
               </tbody>

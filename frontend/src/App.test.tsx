@@ -7,8 +7,10 @@ import type {
   ChartSnapshot,
   DashboardSnapshot,
   FvgZone,
+  OrderIntent,
   PaperAccountSnapshot,
   PaperClosedPositionSnapshot,
+  StrategyCenterSnapshot,
   SymbolSnapshot,
 } from "./types";
 
@@ -197,6 +199,7 @@ const snapshot: DashboardSnapshot = {
   last_scan_at_ms: 1782400000000,
   websocket_connected: true,
   paper,
+  strategy_center: undefined,
   symbols: [
     {
       inst_id: "LAB-USDT-SWAP",
@@ -255,6 +258,194 @@ const snapshot: DashboardSnapshot = {
       fvgs: [],
       levels: [],
       updated_at_ms: 1782400000000,
+    },
+  ],
+};
+
+const v4RiskIntent: OrderIntent = {
+  version_code: "v0.1.4",
+  run_id: "v0.1.4-paper-1",
+  symbol: "LAB-USDT-SWAP",
+  side: "long",
+  action: "open",
+  margin: 100,
+  leverage: 10,
+  score: 88,
+  primary_signal: "range_long",
+  reason: "range long 88 near support",
+  tags: ["long", "range_long", "altcoin"],
+  stop_loss: 9,
+  take_profit: 12,
+  expire_at: null,
+  risk_flags: [],
+  risk_guard_decision: null,
+  config_hash: "v4-test",
+};
+
+const strategyCenter: StrategyCenterSnapshot = {
+  last_updated_ms: 1782400000000,
+  versions: [
+    {
+      version: {
+        version_code: "v0.1.3",
+        name: "Scalping Base",
+        description: "Scalping Optimization Design v0.1.3 baseline",
+        status: "active",
+        config_json: { version: "v0.1.3" },
+        config_hash: "v3-test",
+        created_at_ms: 1782390000000,
+        updated_at_ms: 1782400000000,
+      },
+      run: {
+        run_id: "v0.1.3-paper-1",
+        version_code: "v0.1.3",
+        mode: "paper",
+        status: "running",
+        initial_equity: 10000,
+        current_equity: 11816,
+        realized_pnl: 1800,
+        unrealized_pnl: 16,
+        fee_total: 12,
+        max_drawdown: -0.11,
+        start_time_ms: 1782390000000,
+        end_time_ms: null,
+        fee_model: "paper_zero_fee",
+        slippage_model: "paper_mark_price",
+        config_snapshot: { version: "v0.1.3" },
+      },
+      overview: {
+        version_code: "v0.1.3",
+        name: "Scalping Base",
+        status: "active",
+        mode: "paper",
+        run_id: "v0.1.3-paper-1",
+        run_time_ms: 10000000,
+        initial_equity: 10000,
+        current_equity: 11816,
+        realized_pnl: 1800,
+        unrealized_pnl: 16,
+        return_pct: 0.1816,
+        max_drawdown: -0.11,
+        win_rate: 0.52,
+        profit_factor: 1.18,
+        closed_trades: 304,
+        open_positions: 2,
+        total_fee: 12,
+        config_hash: "v3-test",
+        last_updated_ms: 1782400000000,
+      },
+      paper: { ...paper, equity: 11816, realized_pnl: 1800, unrealized_pnl: 16 },
+      equity: [],
+      signal_attribution: [
+        {
+          key: "range_long",
+          sample_count: 30,
+          profit_factor: 1.18,
+          net_pnl: 180,
+          win_rate: 0.53,
+          avg_pnl: 6,
+          avg_win: 18,
+          avg_loss: -9,
+          max_loss: -48,
+          stop_loss_rate: 0.32,
+          take_profit_rate: 0.41,
+          confidence: "medium",
+          suggestion: "observe",
+        },
+      ],
+      tag_attribution: [],
+      combo_attribution: [],
+      symbol_attribution: [],
+      risk_guard_events: [],
+    },
+    {
+      version: {
+        version_code: "v0.1.4",
+        name: "Risk Guard Edition",
+        description: "v0.1.4 + extreme dump filter + same-symbol cooldown + account kill switch + symbol quarantine",
+        status: "testing",
+        config_json: { version: "v0.1.4", risk_guard: true },
+        config_hash: "v4-test",
+        created_at_ms: 1782390000000,
+        updated_at_ms: 1782400000000,
+      },
+      run: {
+        run_id: "v0.1.4-paper-1",
+        version_code: "v0.1.4",
+        mode: "paper",
+        status: "running",
+        initial_equity: 10000,
+        current_equity: 10820,
+        realized_pnl: 820,
+        unrealized_pnl: 0,
+        fee_total: 7,
+        max_drawdown: -0.04,
+        start_time_ms: 1782390000000,
+        end_time_ms: null,
+        fee_model: "paper_zero_fee",
+        slippage_model: "paper_mark_price",
+        config_snapshot: { version: "v0.1.4" },
+      },
+      overview: {
+        version_code: "v0.1.4",
+        name: "Risk Guard Edition",
+        status: "testing",
+        mode: "paper",
+        run_id: "v0.1.4-paper-1",
+        run_time_ms: 10000000,
+        initial_equity: 10000,
+        current_equity: 10820,
+        realized_pnl: 820,
+        unrealized_pnl: 0,
+        return_pct: 0.082,
+        max_drawdown: -0.04,
+        win_rate: 0.58,
+        profit_factor: 1.35,
+        closed_trades: 120,
+        open_positions: 1,
+        total_fee: 7,
+        config_hash: "v4-test",
+        last_updated_ms: 1782400000000,
+      },
+      paper: { ...paper, equity: 10820, realized_pnl: 820 },
+      equity: [],
+      signal_attribution: [],
+      tag_attribution: [],
+      combo_attribution: [],
+      symbol_attribution: [
+        {
+          key: "LAB-USDT-SWAP",
+          sample_count: 10,
+          profit_factor: 0.7,
+          net_pnl: -120,
+          win_rate: 0.3,
+          avg_pnl: -12,
+          avg_win: 16,
+          avg_loss: -24,
+          max_loss: -80,
+          stop_loss_rate: 0.7,
+          take_profit_rate: 0.2,
+          confidence: "low",
+          suggestion: "downgrade",
+        },
+      ],
+      risk_guard_events: [
+        {
+          id: 1,
+          run_id: "v0.1.4-paper-1",
+          version_code: "v0.1.4",
+          timestamp_ms: 1782400000000,
+          symbol: "LAB-USDT-SWAP",
+          side: "long",
+          original_signal: "range_long",
+          score: 88,
+          action: "blocked",
+          reason: "blocked_by_extreme_dump_gate",
+          risk_flags: ["extreme_dump", "ban_normal_long"],
+          original_order_intent: v4RiskIntent,
+          final_order_intent: null,
+        },
+      ],
     },
   ],
 };
@@ -799,6 +990,67 @@ describe("App", () => {
     expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("LAB-USDT-SWAP");
     expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("DOGE-USDT-SWAP");
     expect(screen.queryByTestId("strategy-feature-panel")).not.toBeInTheDocument();
+  });
+
+  it("shows Strategy Center version comparison, v4 detail, and reset action", async () => {
+    const resetResponse: StrategyCenterSnapshot = {
+      ...strategyCenter,
+      versions: strategyCenter.versions.map((version) =>
+        version.version.version_code === "v0.1.4"
+          ? {
+              ...version,
+              run: { ...version.run, run_id: "v0.1.4-paper-2" },
+              overview: { ...version.overview, run_id: "v0.1.4-paper-2", current_equity: 10000, return_pct: 0 },
+              paper: { ...version.paper, equity: 10000, realized_pnl: 0, positions: [], trades: [] },
+              risk_guard_events: [],
+            }
+          : version,
+      ),
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => ({
+      ok: true,
+      json: async () => {
+        const url = String(input);
+        if (url.includes("/chart")) {
+          return chart;
+        }
+        if (url.includes("/macro/btc")) {
+          return macro;
+        }
+        if (url.endsWith("/api/strategy/versions/v0.1.4/reset") && init?.method === "POST") {
+          return resetResponse;
+        }
+        return { ...snapshot, paper: activePaper, strategy_center: strategyCenter };
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "策略" }));
+
+    const center = screen.getByTestId("strategy-version-center");
+    expect(center).toHaveTextContent("Strategy Version Runner");
+    expect(center).toHaveTextContent("v0.1.3");
+    expect(center).toHaveTextContent("Scalping Base");
+    expect(center).toHaveTextContent("v0.1.4");
+    expect(center).toHaveTextContent("Risk Guard Edition");
+    expect(center).toHaveTextContent("PF 1.35");
+    expect(center).toHaveTextContent("DD -4.00%");
+
+    fireEvent.click(within(center).getByRole("button", { name: "查看 v0.1.4" }));
+    expect(screen.getByTestId("strategy-version-detail")).toHaveTextContent("v0.1.4-paper-1");
+    expect(screen.getByTestId("strategy-version-detail")).toHaveTextContent("blocked_by_extreme_dump_gate");
+    expect(screen.getByTestId("strategy-version-detail")).toHaveTextContent("extreme_dump");
+    expect(screen.getByTestId("strategy-version-detail")).toHaveTextContent("range_long");
+    expect(screen.getByTestId("strategy-version-detail")).toHaveTextContent("LAB-USDT-SWAP");
+
+    fireEvent.click(within(center).getByRole("button", { name: "重置 v0.1.4" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/api/strategy/versions/v0.1.4/reset"))).toBe(true);
+    });
+    expect(await screen.findByText("v0.1.4-paper-2")).toBeInTheDocument();
   });
 
   it("shows Review performance and trade records without Monitor filters", async () => {

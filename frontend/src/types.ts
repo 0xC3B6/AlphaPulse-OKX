@@ -51,6 +51,11 @@ export interface SymbolSnapshot {
   change_5m_pct: number;
   change_15m_pct: number;
   change_1h_pct: number;
+  change_24h_pct?: number | null;
+  change_48h_pct?: number | null;
+  change_72h_pct?: number | null;
+  intraday_low_break_count?: number;
+  high_volatility_flag?: boolean;
   trend_score: Score;
   range_score: Score;
   pool_tags: string[];
@@ -103,12 +108,14 @@ export interface DashboardSnapshot {
   last_scan_at_ms: number | null;
   websocket_connected: boolean;
   paper: PaperAccountSnapshot;
+  strategy_center?: StrategyCenterSnapshot;
 }
 
 export type BackendEvent =
   | { type: "snapshot"; data: DashboardSnapshot }
   | { type: "symbol_updated"; data: SymbolSnapshot }
-  | { type: "paper_updated"; data: PaperAccountSnapshot };
+  | { type: "paper_updated"; data: PaperAccountSnapshot }
+  | { type: "strategy_updated"; data: StrategyCenterSnapshot };
 
 export type PaperSide = "long" | "short";
 
@@ -185,8 +192,15 @@ export interface PaperPositionSnapshot {
   source?: string;
   strategy_name?: string;
   strategy_version?: string;
+  version_code?: string;
+  run_id?: string;
+  primary_signal?: string;
   reason?: string;
-  tags?: TradeTag[];
+  tags?: TradeTagLike[];
+  risk_flags?: string[];
+  risk_guard_decision?: string | null;
+  strategy_reason?: string;
+  config_hash?: string;
 }
 
 export interface PaperClosedPositionSnapshot {
@@ -208,12 +222,23 @@ export interface PaperClosedPositionSnapshot {
   source: string;
   strategy_name?: string;
   strategy_version?: string;
+  version_code?: string;
+  run_id?: string;
+  primary_signal?: string;
   reason: string;
   close_source: string;
   close_reason: string;
-  tags?: TradeTag[];
-  open_tags?: TradeTag[];
-  close_tags?: TradeTag[];
+  tags?: TradeTagLike[];
+  open_tags?: TradeTagLike[];
+  close_tags?: TradeTagLike[];
+  risk_flags?: string[];
+  risk_guard_decision?: string | null;
+  strategy_reason?: string;
+  config_hash?: string;
+  max_adverse_excursion?: number | null;
+  max_favorable_excursion?: number | null;
+  planned_risk_usdt?: number | null;
+  r_multiple?: number | null;
 }
 
 export interface PaperTrade {
@@ -224,6 +249,9 @@ export interface PaperTrade {
   source?: string;
   strategy_name?: string;
   strategy_version?: string;
+  version_code?: string;
+  run_id?: string;
+  primary_signal?: string;
   reason?: string;
   price: number;
   qty: number;
@@ -231,10 +259,16 @@ export interface PaperTrade {
   notional: number;
   fee?: number;
   slippage_rate?: number;
-  tags?: TradeTag[];
+  tags?: TradeTagLike[];
+  risk_flags?: string[];
+  risk_guard_decision?: string | null;
+  strategy_reason?: string;
+  config_hash?: string;
   realized_pnl: number;
   ts_ms: number;
 }
+
+export type TradeTagLike = TradeTag | string;
 
 export interface TradeTag {
   kind: string;
@@ -242,6 +276,151 @@ export interface TradeTag {
   score_impact: number;
   reason: string;
   ts_ms: number;
+}
+
+export type StrategyVersionStatus = "active" | "testing" | "archived" | "disabled";
+export type StrategyRunMode = "paper" | "shadow" | "live" | "disabled";
+export type StrategyRunStatus = "running" | "stopped" | "reset" | "archived";
+export type OrderAction = "open" | "close" | "reduce";
+export type AttributionConfidence = "insufficient_sample" | "low" | "medium" | "high";
+export type AttributionSuggestion =
+  | "insufficient_sample"
+  | "quality"
+  | "keep"
+  | "observe"
+  | "fragile"
+  | "downgrade";
+
+export interface StrategyVersion {
+  version_code: string;
+  name: string;
+  description: string;
+  status: StrategyVersionStatus;
+  config_json: unknown;
+  config_hash: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface StrategyRun {
+  run_id: string;
+  version_code: string;
+  mode: StrategyRunMode;
+  status: StrategyRunStatus;
+  initial_equity: number;
+  current_equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  fee_total: number;
+  max_drawdown: number;
+  start_time_ms: number;
+  end_time_ms: number | null;
+  fee_model: string;
+  slippage_model: string;
+  config_snapshot: unknown;
+}
+
+export interface OrderIntent {
+  version_code: string;
+  run_id: string;
+  symbol: string;
+  side: PaperSide;
+  action: OrderAction;
+  margin: number;
+  leverage: number;
+  score: number;
+  primary_signal: string;
+  reason: string;
+  tags: readonly string[];
+  stop_loss: number | null;
+  take_profit: number | null;
+  expire_at: number | null;
+  risk_flags: readonly string[];
+  risk_guard_decision: string | null;
+  config_hash: string;
+}
+
+export interface RiskGuardEvent {
+  id: number;
+  run_id: string;
+  version_code: string;
+  timestamp_ms: number;
+  symbol: string;
+  side: PaperSide;
+  original_signal: string;
+  score: number;
+  action: string;
+  reason: string;
+  risk_flags: string[];
+  original_order_intent: OrderIntent;
+  final_order_intent: OrderIntent | null;
+}
+
+export interface AttributionRow {
+  key: string;
+  sample_count: number;
+  profit_factor: number | null;
+  net_pnl: number;
+  win_rate: number | null;
+  avg_pnl: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  max_loss: number | null;
+  stop_loss_rate: number | null;
+  take_profit_rate: number | null;
+  confidence: AttributionConfidence;
+  suggestion: AttributionSuggestion;
+}
+
+export interface StrategyEquitySnapshot {
+  run_id: string;
+  version_code: string;
+  timestamp_ms: number;
+  equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  drawdown: number;
+  open_positions_count: number;
+}
+
+export interface StrategyVersionOverview {
+  version_code: string;
+  name: string;
+  status: StrategyVersionStatus;
+  mode: StrategyRunMode;
+  run_id: string;
+  run_time_ms: number;
+  initial_equity: number;
+  current_equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  return_pct: number;
+  max_drawdown: number;
+  win_rate: number | null;
+  profit_factor: number | null;
+  closed_trades: number;
+  open_positions: number;
+  total_fee: number;
+  config_hash: string;
+  last_updated_ms: number;
+}
+
+export interface StrategyVersionSnapshot {
+  version: StrategyVersion;
+  run: StrategyRun;
+  overview: StrategyVersionOverview;
+  paper: PaperAccountSnapshot;
+  equity: StrategyEquitySnapshot[];
+  signal_attribution: AttributionRow[];
+  tag_attribution: AttributionRow[];
+  combo_attribution: AttributionRow[];
+  symbol_attribution: AttributionRow[];
+  risk_guard_events: RiskGuardEvent[];
+}
+
+export interface StrategyCenterSnapshot {
+  versions: StrategyVersionSnapshot[];
+  last_updated_ms: number;
 }
 
 export interface BtcMacroSnapshot {

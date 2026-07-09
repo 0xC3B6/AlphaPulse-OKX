@@ -160,8 +160,13 @@ async fn build_symbol_snapshot(
     let change_5m_pct = last_bar_change(&candles_5m);
     let change_15m_pct = last_bar_change(&candles_15m);
     let change_1h_pct = last_bar_change(&candles_1h);
+    let change_24h_pct = window_change(&candles_1h, 24);
+    let change_48h_pct = window_change(&candles_1h, 48);
+    let change_72h_pct = window_change(&candles_1h, 72);
     let volume_ratio = volume_ratio(&candles_5m).unwrap_or(1.0);
     let volatility_1h = volatility(&candles_1h, price);
+    let intraday_low_break_count = intraday_low_break_count(&candles_1h);
+    let high_volatility_flag = volatility_1h >= 0.30;
 
     let mut fvgs = Vec::new();
     fvgs.extend(detect_fvgs(&candles_5m, Timeframe::M5, 0.003, price));
@@ -229,6 +234,11 @@ async fn build_symbol_snapshot(
         change_5m_pct,
         change_15m_pct,
         change_1h_pct,
+        change_24h_pct,
+        change_48h_pct,
+        change_72h_pct,
+        intraday_low_break_count,
+        high_volatility_flag,
         trend_score: scored.trend_score,
         range_score: scored.range_score,
         pool_tags,
@@ -248,6 +258,15 @@ fn last_bar_change(candles: &[Candle]) -> f64 {
         return 0.0;
     }
     latest.close / previous.close - 1.0
+}
+
+fn window_change(candles: &[Candle], bars_back: usize) -> Option<f64> {
+    let latest = candles.last()?;
+    let previous = candles.iter().rev().nth(bars_back)?;
+    if previous.close <= 0.0 {
+        return None;
+    }
+    Some(latest.close / previous.close - 1.0)
 }
 
 fn volume_ratio(candles: &[Candle]) -> Option<f64> {
@@ -280,6 +299,17 @@ fn volatility(candles: &[Candle], price: f64) -> f64 {
         .map(|candle| candle.low)
         .fold(f64::INFINITY, f64::min);
     (high - low).max(0.0) / price
+}
+
+fn intraday_low_break_count(candles: &[Candle]) -> usize {
+    if candles.len() < 3 {
+        return 0;
+    }
+    let recent = candles.iter().rev().take(48).collect::<Vec<_>>();
+    recent
+        .windows(2)
+        .filter(|window| window[0].low < window[1].low)
+        .count()
 }
 
 fn broke_recent_high(candles: &[Candle]) -> bool {

@@ -89,6 +89,31 @@ Open / 打开：
 http://127.0.0.1:5173
 ```
 
+## Production Deploy / 生产部署
+
+The app can be deployed as a single-server package:
+
+- systemd runs the Rust backend on `127.0.0.1:8787`.
+- Nginx serves the built frontend and proxies `/api/*` plus `/ws` to the backend.
+- The GitHub Actions workflow `.github/workflows/deploy.yml` builds, packages, and deploys the release through SSH when manually triggered.
+
+Required repository secrets:
+
+- `DEPLOY_HOST`
+- `DEPLOY_PORT`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_KEY`
+
+The frontend uses same-origin `/api` and `/ws` by default. Set `VITE_BACKEND_BASE_URL` only when the backend must be hosted on a different origin.
+
+生产环境按单机包部署：
+
+- systemd 将 Rust 后端常驻在 `127.0.0.1:8787`。
+- Nginx 提供前端静态文件，并把 `/api/*` 和 `/ws` 反代到后端。
+- GitHub Actions 工作流 `.github/workflows/deploy.yml` 可手动触发构建、打包并通过 SSH 发布。
+
+仓库需要配置 `DEPLOY_HOST`、`DEPLOY_PORT`、`DEPLOY_USER`、`DEPLOY_SSH_KEY` 这几个 Secrets。不要把服务器密码、Personal Access Token 或 API Key 写入仓库。
+
 ## API / 本地接口
 
 The backend listens on `http://127.0.0.1:8787`.
