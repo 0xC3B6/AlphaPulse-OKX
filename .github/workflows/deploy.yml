@@ -64,22 +64,22 @@ jobs:
 
       - name: Install SSH key
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
           test -n "$DEPLOY_USER"
-          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_SSH_KEY_B64"
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/alphapulse-okx-deploy
+          printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/alphapulse-okx-deploy
           chmod 600 ~/.ssh/alphapulse-okx-deploy
           ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy to server
         run: |
           set -euo pipefail
-          scp -P "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy alphapulse-okx.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/alphapulse-okx.tar.gz"
-          ssh -p "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy "$DEPLOY_USER@$DEPLOY_HOST" "APP_SHA=$GITHUB_SHA bash -s" <<'REMOTE'
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy -o IdentitiesOnly=yes alphapulse-okx.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/alphapulse-okx.tar.gz"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "APP_SHA=$GITHUB_SHA bash -s" <<'REMOTE'
           set -euo pipefail
 
           APP_DIR=/opt/alphapulse-okx
