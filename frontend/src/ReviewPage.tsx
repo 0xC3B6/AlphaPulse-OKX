@@ -1,4 +1,14 @@
 import { useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { Copy } from "./i18n";
 import type {
   PaperAccountSnapshot,
@@ -16,13 +26,28 @@ import {
   pnlClass,
   summarizePaperReview,
 } from "./uiFormat";
+import { PaginationControls } from "./PaginationControls";
 
 type HistoryFilter = "all" | "long" | "short" | "profit" | "loss";
 type ReviewSection = "overview" | "strategy" | "history" | "trades";
+type StrategyCurveRange = "7d" | "30d" | "90d" | "all";
+type SignalConfidence = "high" | "med" | "low";
+type SignalRecommendationKey = "continueExecution" | "optimizeEntry" | "pauseOrReduce";
+
+interface HistorySearchFilters {
+  endDate: string;
+  filter: HistoryFilter;
+  startDate: string;
+  symbolQuery: string;
+  version: string;
+}
 
 interface StrategyCurvePoint {
   closedAtMs: number;
   cumulativePnl: number;
+  instId: string;
+  realizedPnl: number;
+  tradeIndex: number;
 }
 
 interface StrategyCurve {
@@ -33,22 +58,65 @@ interface StrategyCurve {
   worstCumulative: number;
 }
 
+interface StrategyCurveChartPoint {
+  closedAtMs: number;
+  closedCount: number;
+  cumulativePnl: number;
+  negativePnl: number | null;
+  periodPnl: number;
+  positivePnl: number | null;
+  synthetic?: boolean;
+}
+
+interface StrategyAxisScale {
+  label: string;
+  stepMs: number;
+  tickFormat: "date" | "dateTime" | "month" | "time";
+}
+
+interface StrategySignalAttribution {
+  confidence: SignalConfidence;
+  maxLoss: number | null;
+  netPnl: number;
+  profitFactor: number | null;
+  recommendationKey: SignalRecommendationKey;
+  sampleCount: number;
+  signal: string;
+  winRate: number | null;
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const HISTORY_PAGE_SIZE = 10;
+const DEFAULT_HISTORY_SEARCH_FILTERS: HistorySearchFilters = {
+  endDate: "",
+  filter: "all",
+  startDate: "",
+  symbolQuery: "",
+  version: "all",
+};
+
 export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSnapshot }) {
   const [activeSection, setActiveSection] = useState<ReviewSection>("overview");
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
-  const [historySymbolQuery, setHistorySymbolQuery] = useState("");
-  const [historyStartDate, setHistoryStartDate] = useState("");
-  const [historyEndDate, setHistoryEndDate] = useState("");
-  const [historyVersion, setHistoryVersion] = useState("all");
+  const [historyDraftFilters, setHistoryDraftFilters] = useState<HistorySearchFilters>(
+    DEFAULT_HISTORY_SEARCH_FILTERS,
+  );
+  const [historyAppliedFilters, setHistoryAppliedFilters] = useState<HistorySearchFilters>(
+    DEFAULT_HISTORY_SEARCH_FILTERS,
+  );
+  const [historyPage, setHistoryPage] = useState(0);
   const [selectedStrategyVersion, setSelectedStrategyVersion] = useState<string | null>(null);
 
   const summary = summarizePaperReview(paper);
   const positionHistory = paper.position_history ?? [];
   const strategyStats = useMemo(
     () =>
-      paper.strategy_stats && paper.strategy_stats.length > 0
-        ? paper.strategy_stats
-        : buildStrategyStats(positionHistory),
+      sortStrategyStats(
+        paper.strategy_stats && paper.strategy_stats.length > 0
+          ? paper.strategy_stats
+          : buildStrategyStats(positionHistory),
+      ),
     [paper.strategy_stats, positionHistory],
   );
   const activeStrategyVersion =
@@ -57,6 +125,13 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     activeStrategyVersion === null
       ? null
       : buildStrategyCurve(positionHistory, activeStrategyVersion);
+  const activeSignalAttribution = useMemo(
+    () =>
+      activeStrategyVersion === null
+        ? []
+        : buildSignalAttribution(positionHistory, activeStrategyVersion),
+    [activeStrategyVersion, positionHistory],
+  );
   const historyVersionOptions = useMemo(
     () => strategyVersionOptions(positionHistory, strategyStats, paper.trades),
     [paper.trades, positionHistory, strategyStats],
@@ -65,22 +140,16 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     () =>
       positionHistory.filter(
         (position) =>
-          matchesHistoryFilter(position, historyFilter) &&
-          matchesHistoryDetailFilters(position, {
-            endDate: historyEndDate,
-            startDate: historyStartDate,
-            symbolQuery: historySymbolQuery,
-            version: historyVersion,
-          }),
+          matchesHistoryFilter(position, historyAppliedFilters.filter) &&
+          matchesHistoryDetailFilters(position, historyAppliedFilters),
       ),
-    [
-      historyEndDate,
-      historyFilter,
-      historyStartDate,
-      historySymbolQuery,
-      historyVersion,
-      positionHistory,
-    ],
+    [historyAppliedFilters, positionHistory],
+  );
+  const historyPageCount = Math.max(1, Math.ceil(filteredHistory.length / HISTORY_PAGE_SIZE));
+  const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
+  const visibleHistory = filteredHistory.slice(
+    safeHistoryPage * HISTORY_PAGE_SIZE,
+    (safeHistoryPage + 1) * HISTORY_PAGE_SIZE,
   );
   const profitFactor =
     paper.profit_factor === undefined
@@ -129,6 +198,7 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
             copy={copy}
+            initialBalance={paper.initial_balance}
             onSelectVersion={setSelectedStrategyVersion}
             selectedVersion={activeStrategyVersion}
             stats={strategyStats}
@@ -137,6 +207,14 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
             <StrategyCurvePanel
               copy={copy}
               curve={activeStrategyCurve}
+              initialBalance={paper.initial_balance}
+              version={activeStrategyVersion}
+            />
+          )}
+          {activeStrategyVersion === null ? null : (
+            <StrategyDoctorSection
+              copy={copy}
+              rows={activeSignalAttribution}
               version={activeStrategyVersion}
             />
           )}
@@ -146,19 +224,24 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
       {activeSection === "history" ? (
         <HistorySection
           copy={copy}
+          draftFilters={historyDraftFilters}
           filteredHistory={filteredHistory}
-          historyEndDate={historyEndDate}
-          historyFilter={historyFilter}
-          historyStartDate={historyStartDate}
-          historySymbolQuery={historySymbolQuery}
-          historyVersion={historyVersion}
           historyVersionOptions={historyVersionOptions}
-          onEndDateChange={setHistoryEndDate}
-          onFilterChange={setHistoryFilter}
-          onStartDateChange={setHistoryStartDate}
-          onSymbolQueryChange={setHistorySymbolQuery}
-          onVersionChange={setHistoryVersion}
+          onApplyFilters={() => {
+            setHistoryAppliedFilters(historyDraftFilters);
+            setHistoryPage(0);
+          }}
+          onDraftFiltersChange={setHistoryDraftFilters}
+          onPageChange={setHistoryPage}
+          onResetFilters={() => {
+            setHistoryDraftFilters(DEFAULT_HISTORY_SEARCH_FILTERS);
+            setHistoryAppliedFilters(DEFAULT_HISTORY_SEARCH_FILTERS);
+            setHistoryPage(0);
+          }}
+          page={safeHistoryPage}
+          pageCount={historyPageCount}
           totalHistory={positionHistory.length}
+          visibleHistory={visibleHistory}
         />
       ) : null}
 
@@ -186,6 +269,8 @@ function OverviewSection({
   strategyStats: PaperStrategyStats[];
   summary: ReturnType<typeof summarizePaperReview>;
 }) {
+  const returnRate = accountReturnRate(paper);
+
   return (
     <>
       <section className="page-metric-grid review-summary">
@@ -193,6 +278,11 @@ function OverviewSection({
         <MetricCard label={copy.paper.equity} value={formatUsdt(paper.equity)} />
         <MetricCard label={copy.paper.available} value={formatUsdt(paper.available_balance)} />
         <MetricCard label={copy.paper.usedMargin} value={formatUsdt(paper.used_margin)} />
+        <MetricCard
+          label={copy.paper.returnRate}
+          tone={pnlClass(returnRate ?? 0)}
+          value={formatNullablePct(returnRate)}
+        />
         <MetricCard
           label={copy.paper.realized}
           tone={pnlClass(paper.realized_pnl)}
@@ -263,6 +353,7 @@ function OverviewSection({
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
             copy={copy}
+            initialBalance={paper.initial_balance}
             onSelectVersion={onSelectStrategyVersion}
             selectedVersion={activeStrategyVersion}
             stats={strategyStats}
@@ -275,11 +366,13 @@ function OverviewSection({
 
 function StrategyStatsTable({
   copy,
+  initialBalance,
   onSelectVersion,
   selectedVersion,
   stats,
 }: {
   copy: Copy;
+  initialBalance: number;
   onSelectVersion: (version: string) => void;
   selectedVersion: string | null;
   stats: PaperStrategyStats[];
@@ -288,25 +381,32 @@ function StrategyStatsTable({
     return <p className="muted">{copy.review.noStrategyStats}</p>;
   }
 
+  const activeVersion = stats[0]?.strategy_version ?? null;
+
   return (
     <div className="review-strategy-table-wrap" data-testid="paper-strategy-stats">
       <table className="review-strategy-table">
         <thead>
           <tr>
-            <th>{copy.paper.strategyVersion}</th>
-            <th>{copy.paper.strategyVersionNumber}</th>
+            <th>{copy.paper.strategyVersionShort}</th>
             <th>{copy.paper.strategyRuntime}</th>
-            <th>{copy.paper.closedPositions}</th>
+            <th>{copy.paper.strategyTrades}</th>
             <th>{copy.paper.winRate}</th>
             <th>{copy.paper.realized}</th>
-            <th>{copy.paper.averagePositionPnl}</th>
+            <th>{copy.paper.returnRate}</th>
+            <th>{copy.paper.averagePnlShort}</th>
+            <th>{copy.paper.averageHoldingShort}</th>
             <th>{copy.paper.profitFactor}</th>
             <th>{copy.paper.totalFees}</th>
+            <th>{copy.paper.status}</th>
           </tr>
         </thead>
         <tbody>
-          {stats.map((item) => (
+          {stats.map((item) => {
+            const isActiveVersion = activeVersion === item.strategy_version;
+            return (
             <tr
+              aria-label={`${item.strategy_name} ${item.strategy_version}`}
               className={selectedVersion === item.strategy_version ? "active" : ""}
               key={`${item.strategy_name}-${item.strategy_version}`}
               onClick={() => onSelectVersion(item.strategy_version)}
@@ -318,19 +418,31 @@ function StrategyStatsTable({
               }}
               tabIndex={0}
             >
-              <td>{item.strategy_name}</td>
-              <td>{item.strategy_version}</td>
+              <td>
+                <span className="sr-only">{item.strategy_name} </span>
+                <span className="strategy-version-pill">{item.strategy_version}</span>
+              </td>
               <td>{formatNullableDuration(item.running_duration_ms)}</td>
               <td>{item.closed_position_count}</td>
               <td>{formatNullablePct(item.win_rate)}</td>
               <td className={pnlClass(item.realized_pnl)}>{formatSignedUsdt(item.realized_pnl)}</td>
+              <td className={pnlClass(item.realized_pnl)}>
+                {formatNullablePct(strategyReturnRate(item.realized_pnl, initialBalance))}
+              </td>
               <td className={pnlClass(item.average_position_pnl ?? 0)}>
                 {formatNullableSignedUsdt(item.average_position_pnl)}
               </td>
+              <td>{formatNullableDuration(item.average_holding_duration_ms)}</td>
               <td>{formatNullableRatio(item.profit_factor)}</td>
-              <td>{formatUsdt(item.total_fees)}</td>
+              <td className="negative">{formatSignedUsdt(-item.total_fees)}</td>
+              <td>
+                <span className={isActiveVersion ? "strategy-status-pill active" : "strategy-status-pill"}>
+                  {isActiveVersion ? copy.paper.active : copy.paper.closed}
+                </span>
+              </td>
             </tr>
-          ))}
+          );
+          })}
         </tbody>
       </table>
     </div>
@@ -340,18 +452,41 @@ function StrategyStatsTable({
 function StrategyCurvePanel({
   copy,
   curve,
+  initialBalance,
   version,
 }: {
   copy: Copy;
   curve: StrategyCurve;
+  initialBalance: number;
   version: string;
 }) {
+  const [range, setRange] = useState<StrategyCurveRange>("all");
+  const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
+  const rangeOptions: Array<[StrategyCurveRange, string]> = [
+    ["7d", "7D"],
+    ["30d", "30D"],
+    ["90d", "90D"],
+    ["all", "ALL"],
+  ];
+
   return (
     <section className="paper-strategy-curve" data-testid="paper-strategy-curve">
-      <div className="paper-card-header">
+      <div className="paper-card-header paper-strategy-curve-header">
         <div>
-          <h3>{copy.paper.strategyCurve}</h3>
-          <p>{version}</p>
+          <h3>{version} {copy.paper.strategyCurve}</h3>
+        </div>
+        <div className="paper-strategy-range-tabs" role="group" aria-label={copy.paper.strategyCurve}>
+          {rangeOptions.map(([value, label]) => (
+            <button
+              aria-pressed={range === value}
+              className={range === value ? "active" : ""}
+              key={value}
+              onClick={() => setRange(value)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
       {curve.points.length === 0 ? (
@@ -362,6 +497,10 @@ function StrategyCurvePanel({
             <Metric
               label={copy.paper.cumulativeRealized}
               value={formatSignedUsdt(curve.finalPnl)}
+            />
+            <Metric
+              label={copy.paper.returnRate}
+              value={formatNullablePct(strategyReturnRate(curve.finalPnl, initialBalance))}
             />
             <Metric label={copy.paper.maxDrawdown} value={formatSignedUsdt(curve.maxDrawdown)} />
             <Metric
@@ -374,14 +513,77 @@ function StrategyCurvePanel({
             />
             <Metric label={copy.paper.closedPositions} value={String(curve.points.length)} />
           </div>
-          <StrategyCurveSvg copy={copy} curve={curve} version={version} />
+          <StrategyCurveChart copy={copy} curve={chartCurve} version={version} />
         </>
       )}
     </section>
   );
 }
 
-function StrategyCurveSvg({
+function StrategyDoctorSection({
+  copy,
+  rows,
+  version,
+}: {
+  copy: Copy;
+  rows: StrategySignalAttribution[];
+  version: string;
+}) {
+  return (
+    <section className="paper-strategy-doctor" data-testid="paper-strategy-doctor">
+      <header className="paper-strategy-doctor-header">
+        <h3>
+          {copy.paper.signalAttribution} · {copy.paper.strategyDoctor}
+          <span>{version}</span>
+        </h3>
+      </header>
+      {rows.length === 0 ? (
+        <p className="muted panel-empty">{copy.paper.noSignalAttribution}</p>
+      ) : (
+        <div className="paper-strategy-doctor-table-wrap">
+          <table className="paper-strategy-doctor-table">
+            <thead>
+              <tr>
+                <th>{copy.paper.primarySignal}</th>
+                <th>{copy.paper.sampleCount}</th>
+                <th>{copy.paper.netPnl}</th>
+                <th>{copy.paper.winRate}</th>
+                <th>{copy.paper.profitFactor}</th>
+                <th>{copy.paper.maxLoss}</th>
+                <th>{copy.paper.confidence}</th>
+                <th>{copy.paper.recommendation}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.signal}>
+                  <td>{row.signal}</td>
+                  <td>{row.sampleCount}</td>
+                  <td className={pnlClass(row.netPnl)}>{formatSignedUsdt(row.netPnl)}</td>
+                  <td className={pnlClass((row.winRate ?? 0) - 0.5)}>
+                    {formatNullablePct(row.winRate)}
+                  </td>
+                  <td>{formatNullableRatio(row.profitFactor)}</td>
+                  <td className={pnlClass(row.maxLoss ?? 0)}>
+                    {formatNullableSignedUsdt(row.maxLoss)}
+                  </td>
+                  <td>
+                    <span className={`confidence-pill ${row.confidence}`}>
+                      {row.confidence}
+                    </span>
+                  </td>
+                  <td>{copy.paper[row.recommendationKey]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StrategyCurveChart({
   copy,
   curve,
   version,
@@ -390,98 +592,370 @@ function StrategyCurveSvg({
   curve: StrategyCurve;
   version: string;
 }) {
-  const width = 720;
-  const height = 220;
-  const paddingX = 36;
-  const paddingY = 24;
-  const values = [0, ...curve.points.map((point) => point.cumulativePnl)];
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const span = Math.max(maxValue - minValue, 1);
-  const xFor = (index: number) =>
-    paddingX +
-    (curve.points.length <= 1
-      ? (width - paddingX * 2) / 2
-      : (index / (curve.points.length - 1)) * (width - paddingX * 2));
-  const yFor = (value: number) =>
-    height - paddingY - ((value - minValue) / span) * (height - paddingY * 2);
-  const linePoints = curve.points
-    .map((point, index) => `${xFor(index).toFixed(2)},${yFor(point.cumulativePnl).toFixed(2)}`)
-    .join(" ");
-  const zeroY = yFor(0);
+  const rawStartMs = curve.points[0].closedAtMs;
+  const rawEndMs = curve.points[curve.points.length - 1].closedAtMs;
+  const axisScale = chooseStrategyAxisScale(rawStartMs, rawEndMs);
+  const axisDomain = [rawStartMs - axisScale.stepMs / 2, rawEndMs + axisScale.stepMs / 2];
+  const axisTicks = buildStrategyAxisTicks(rawStartMs, rawEndMs, axisScale);
+  const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs);
+  const shouldAnimate = import.meta.env.MODE !== "test";
+  const chart = (
+    <AreaChart
+      data={data}
+      key={`${version}-${rawStartMs}-${rawEndMs}-${axisScale.stepMs}`}
+      margin={{ bottom: 8, left: 0, right: 8, top: 16 }}
+      {...(import.meta.env.MODE === "test" ? { height: 300, width: 920 } : {})}
+    >
+      <defs>
+        <linearGradient id="strategyPositiveFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="5%" stopColor="#12d99c" stopOpacity={0.28} />
+          <stop offset="95%" stopColor="#12d99c" stopOpacity={0} />
+        </linearGradient>
+        <linearGradient id="strategyNegativeFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="5%" stopColor="#ff4d6d" stopOpacity={0.3} />
+          <stop offset="95%" stopColor="#ff4d6d" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <CartesianGrid stroke="rgba(74, 98, 120, 0.2)" strokeDasharray="3 3" vertical={false} />
+      <XAxis
+        allowDataOverflow
+        dataKey="closedAtMs"
+        domain={axisDomain}
+        interval={0}
+        scale="time"
+        tick={{ fill: "#607b96", fontSize: 10, fontWeight: 700 }}
+        tickFormatter={(value) => formatStrategyAxisTick(Number(value), axisScale.tickFormat)}
+        tickLine={false}
+        ticks={axisTicks}
+        type="number"
+      />
+      <YAxis
+        tick={{ fill: "#607b96", fontSize: 10, fontWeight: 700 }}
+        tickFormatter={(value) => formatCompactUsdt(Number(value))}
+        tickLine={false}
+        width={76}
+      />
+      <Tooltip
+        content={<StrategyCurveTooltip />}
+        cursor={{ stroke: "rgba(18, 217, 156, 0.42)", strokeDasharray: "4 4" }}
+        isAnimationActive={false}
+      />
+      <ReferenceLine
+        stroke="rgba(148, 174, 196, 0.45)"
+        strokeDasharray="6 6"
+        strokeWidth={1.2}
+        y={0}
+      />
+      <Area
+        activeDot={{ fill: "#12d99c", r: 5, stroke: "#071017", strokeWidth: 2 }}
+        connectNulls={false}
+        dataKey="positivePnl"
+        dot={false}
+        fill="url(#strategyPositiveFill)"
+        isAnimationActive={shouldAnimate}
+        animationDuration={1200}
+        animationEasing="ease-out"
+        name="盈利"
+        stroke="#12d99c"
+        strokeWidth={2.6}
+        type="linear"
+      />
+      <Area
+        activeDot={{ fill: "#ff4d6d", r: 5, stroke: "#071017", strokeWidth: 2 }}
+        connectNulls={false}
+        dataKey="negativePnl"
+        dot={false}
+        fill="url(#strategyNegativeFill)"
+        isAnimationActive={shouldAnimate}
+        animationBegin={180}
+        animationDuration={1200}
+        animationEasing="ease-out"
+        name="亏损"
+        stroke="#ff4d6d"
+        strokeWidth={2.6}
+        type="linear"
+      />
+    </AreaChart>
+  );
 
   return (
-    <svg
+    <div
       aria-label={`${version} ${copy.paper.strategyCurve}`}
-      className="paper-strategy-curve-svg"
+      className="paper-strategy-chart-wrap"
+      data-testid="paper-strategy-recharts"
       role="img"
-      viewBox={`0 0 ${width} ${height}`}
     >
-      <line className="paper-strategy-curve-grid" x1={paddingX} x2={width - paddingX} y1={paddingY} y2={paddingY} />
-      <line
-        className="paper-strategy-curve-grid"
-        x1={paddingX}
-        x2={width - paddingX}
-        y1={height - paddingY}
-        y2={height - paddingY}
-      />
-      <line
-        className="paper-strategy-curve-zero"
-        x1={paddingX}
-        x2={width - paddingX}
-        y1={zeroY}
-        y2={zeroY}
-      />
-      <polyline className="paper-strategy-curve-line" fill="none" points={linePoints} />
-      {curve.points.map((point, index) => (
-        <circle
-          className={point.cumulativePnl >= 0 ? "paper-strategy-curve-dot positive" : "paper-strategy-curve-dot negative"}
-          cx={xFor(index)}
-          cy={yFor(point.cumulativePnl)}
-          key={`${point.closedAtMs}-${index}`}
-          r={3}
-        />
-      ))}
-      <text className="paper-strategy-curve-label" x={paddingX} y={paddingY - 8}>
-        {formatSignedUsdt(maxValue)}
-      </text>
-      <text className="paper-strategy-curve-label" x={paddingX} y={height - 6}>
-        {formatSignedUsdt(minValue)}
-      </text>
-    </svg>
+      <div className="paper-strategy-chart-legend" aria-hidden="true">
+        <span className="paper-strategy-legend-positive">
+          <i />
+          盈利
+        </span>
+        <span className="paper-strategy-legend-negative">
+          <i />
+          亏损
+        </span>
+        <span className="paper-strategy-legend-zero">
+          <i />
+          0轴
+        </span>
+      </div>
+      <div className="paper-strategy-recharts-curve">
+        {import.meta.env.MODE === "test" ? chart : (
+          <ResponsiveContainer height="100%" width="100%">
+            {chart}
+          </ResponsiveContainer>
+        )}
+      </div>
+      <div className="paper-strategy-axis-summary" data-testid="paper-strategy-axis-summary">
+        <span>时间轴 · {axisScale.label}</span>
+        <span>{formatChartDateTime(rawStartMs)} - {formatChartDateTime(rawEndMs)}</span>
+      </div>
+    </div>
   );
+}
+
+function StrategyCurveTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: StrategyCurveChartPoint }>;
+}) {
+  if (!active || !payload || payload.length === 0) {
+    return null;
+  }
+  const point = payload.find((item) => item.payload)?.payload;
+  if (point === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="paper-strategy-tooltip">
+      <strong>{point.synthetic ? "零轴" : formatChartDateTime(point.closedAtMs)}</strong>
+      <span>{formatChartDateTime(point.closedAtMs)}</span>
+      <dl>
+        <Metric label="累计收益" value={formatSignedUsdt(point.cumulativePnl)} />
+        <Metric label="区间盈亏" value={point.synthetic ? "-" : formatSignedUsdt(point.periodPnl)} />
+        <Metric label="平仓数" value={point.synthetic ? "-" : String(point.closedCount)} />
+      </dl>
+    </div>
+  );
+}
+
+function buildStrategyCurveChartData(
+  points: StrategyCurvePoint[],
+  stepMs: number,
+): StrategyCurveChartPoint[] {
+  const bucketedPoints = bucketStrategyCurvePoints(points, stepMs);
+  return bucketedPoints.reduce<StrategyCurveChartPoint[]>((chartPoints, point, index) => {
+    const previousPoint = bucketedPoints[index - 1];
+    if (previousPoint && crossesZero(previousPoint.cumulativePnl, point.cumulativePnl)) {
+      const distance =
+        Math.abs(previousPoint.cumulativePnl) + Math.abs(point.cumulativePnl);
+      const zeroRatio = distance === 0 ? 0 : Math.abs(previousPoint.cumulativePnl) / distance;
+      chartPoints.push({
+        closedAtMs: Math.round(
+          previousPoint.closedAtMs + (point.closedAtMs - previousPoint.closedAtMs) * zeroRatio,
+        ),
+        closedCount: 0,
+        cumulativePnl: 0,
+        negativePnl: 0,
+        periodPnl: 0,
+        positivePnl: 0,
+        synthetic: true,
+      });
+    }
+    chartPoints.push(toStrategyChartPoint(point));
+    return chartPoints;
+  }, []);
+}
+
+function bucketStrategyCurvePoints(
+  points: StrategyCurvePoint[],
+  stepMs: number,
+): StrategyCurveChartPoint[] {
+  const buckets = new Map<number, StrategyCurveChartPoint>();
+  points.forEach((point) => {
+    const bucketMs = Math.floor(point.closedAtMs / stepMs) * stepMs;
+    const existing = buckets.get(bucketMs);
+    buckets.set(bucketMs, {
+      closedAtMs: bucketMs,
+      closedCount: (existing?.closedCount ?? 0) + 1,
+      cumulativePnl: point.cumulativePnl,
+      negativePnl: null,
+      periodPnl: (existing?.periodPnl ?? 0) + point.realizedPnl,
+      positivePnl: null,
+    });
+  });
+  return Array.from(buckets.values()).sort((left, right) => left.closedAtMs - right.closedAtMs);
+}
+
+function toStrategyChartPoint(point: StrategyCurveChartPoint): StrategyCurveChartPoint {
+  const isZero = point.cumulativePnl === 0;
+  return {
+    ...point,
+    negativePnl: point.cumulativePnl < 0 || isZero ? point.cumulativePnl : null,
+    positivePnl: point.cumulativePnl > 0 || isZero ? point.cumulativePnl : null,
+  };
+}
+
+function crossesZero(left: number, right: number): boolean {
+  return (left < 0 && right > 0) || (left > 0 && right < 0);
+}
+
+function chooseStrategyAxisScale(startMs: number, endMs: number): StrategyAxisScale {
+  const span = Math.max(0, endMs - startMs);
+  if (span <= DAY_MS) {
+    return { label: "10分钟", stepMs: 10 * MINUTE_MS, tickFormat: "time" };
+  }
+  if (span <= 3 * DAY_MS) {
+    return { label: "30分钟", stepMs: 30 * MINUTE_MS, tickFormat: "dateTime" };
+  }
+  if (span <= 7 * DAY_MS) {
+    return { label: "1小时", stepMs: HOUR_MS, tickFormat: "dateTime" };
+  }
+  if (span <= 31 * DAY_MS) {
+    return { label: "4小时", stepMs: 4 * HOUR_MS, tickFormat: "dateTime" };
+  }
+  if (span <= 366 * DAY_MS) {
+    return { label: "1D", stepMs: DAY_MS, tickFormat: "date" };
+  }
+  if (span <= 3 * 366 * DAY_MS) {
+    return { label: "1W", stepMs: 7 * DAY_MS, tickFormat: "date" };
+  }
+  return { label: "1M", stepMs: 30 * DAY_MS, tickFormat: "month" };
+}
+
+function buildStrategyAxisTicks(
+  startMs: number,
+  endMs: number,
+  axisScale: StrategyAxisScale,
+): number[] {
+  if (startMs === endMs) {
+    return [startMs];
+  }
+
+  const ticks = [startMs];
+  const firstIntervalTick = Math.ceil(startMs / axisScale.stepMs) * axisScale.stepMs;
+  for (
+    let tick = firstIntervalTick;
+    tick < endMs && ticks.length < 120;
+    tick += axisScale.stepMs
+  ) {
+    if (tick > startMs) {
+      ticks.push(tick);
+    }
+  }
+  ticks.push(endMs);
+
+  return limitTicks(uniqueSortedNumbers(ticks), 8);
+}
+
+function limitTicks(ticks: number[], maxTicks: number): number[] {
+  if (ticks.length <= maxTicks) {
+    return ticks;
+  }
+  return uniqueSortedNumbers(
+    Array.from({ length: maxTicks }, (_, index) => {
+      const sourceIndex = Math.round((index * (ticks.length - 1)) / (maxTicks - 1));
+      return ticks[sourceIndex];
+    }),
+  );
+}
+
+function uniqueSortedNumbers(values: number[]): number[] {
+  return Array.from(new Set(values)).sort((left, right) => left - right);
+}
+
+function formatStrategyAxisTick(value: number, tickFormat: StrategyAxisScale["tickFormat"]): string {
+  if (tickFormat === "month") {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      year: "2-digit",
+    }).format(new Date(value));
+  }
+  if (tickFormat === "date") {
+    return new Intl.DateTimeFormat("zh-CN", {
+      day: "2-digit",
+      month: "2-digit",
+    }).format(new Date(value));
+  }
+  if (tickFormat === "dateTime") {
+    return new Intl.DateTimeFormat("zh-CN", {
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+      minute: "2-digit",
+      month: "2-digit",
+    }).format(new Date(value));
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatChartDateTime(value: number): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatHistoryDateTime(value: number): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatCompactUsdt(value: number): string {
+  const prefix = value > 0 ? "+" : "";
+  const absValue = Math.abs(value);
+  if (absValue >= 1_000_000) {
+    return `${prefix}${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (absValue >= 1_000) {
+    return `${prefix}${(value / 1_000).toFixed(1)}K`;
+  }
+  return `${prefix}${value.toFixed(0)}`;
 }
 
 function HistorySection({
   copy,
+  draftFilters,
   filteredHistory,
-  historyEndDate,
-  historyFilter,
-  historyStartDate,
-  historySymbolQuery,
-  historyVersion,
   historyVersionOptions,
-  onEndDateChange,
-  onFilterChange,
-  onStartDateChange,
-  onSymbolQueryChange,
-  onVersionChange,
+  onApplyFilters,
+  onDraftFiltersChange,
+  onPageChange,
+  onResetFilters,
+  page,
+  pageCount,
   totalHistory,
+  visibleHistory,
 }: {
   copy: Copy;
+  draftFilters: HistorySearchFilters;
   filteredHistory: PaperClosedPositionSnapshot[];
-  historyEndDate: string;
-  historyFilter: HistoryFilter;
-  historyStartDate: string;
-  historySymbolQuery: string;
-  historyVersion: string;
   historyVersionOptions: string[];
-  onEndDateChange: (value: string) => void;
-  onFilterChange: (value: HistoryFilter) => void;
-  onStartDateChange: (value: string) => void;
-  onSymbolQueryChange: (value: string) => void;
-  onVersionChange: (value: string) => void;
+  onApplyFilters: () => void;
+  onDraftFiltersChange: (filters: HistorySearchFilters) => void;
+  onPageChange: (page: number) => void;
+  onResetFilters: () => void;
+  page: number;
+  pageCount: number;
   totalHistory: number;
+  visibleHistory: PaperClosedPositionSnapshot[];
 }) {
   return (
     <section className="detail-section review-history-panel">
@@ -493,95 +967,134 @@ function HistorySection({
           </p>
         </div>
       </header>
-      <div className="review-history-filter-grid">
-        <label>
-          <span>{copy.paper.historySymbolSearch}</span>
-          <input
-            aria-label={copy.paper.historySymbolSearch}
-            onChange={(event) => onSymbolQueryChange(event.target.value)}
-            placeholder="BTC / ETH / LAB"
-            type="search"
-            value={historySymbolQuery}
-          />
-        </label>
-        <label>
-          <span>{copy.paper.historyStartDate}</span>
-          <input
-            aria-label={copy.paper.historyStartDate}
-            onChange={(event) => onStartDateChange(event.target.value)}
-            step="1"
-            type="datetime-local"
-            value={historyStartDate}
-          />
-        </label>
-        <label>
-          <span>{copy.paper.historyEndDate}</span>
-          <input
-            aria-label={copy.paper.historyEndDate}
-            onChange={(event) => onEndDateChange(event.target.value)}
-            step="1"
-            type="datetime-local"
-            value={historyEndDate}
-          />
-        </label>
-        <label>
-          <span>{copy.paper.historyVersion}</span>
-          <select
-            aria-label={copy.paper.historyVersion}
-            onChange={(event) => onVersionChange(event.target.value)}
-            value={historyVersion}
-          >
-            <option value="all">{copy.paper.allVersions}</option>
-            {historyVersionOptions.map((version) => (
-              <option key={version} value={version}>
-                {version}
-              </option>
+      <form
+        className="review-history-search-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onApplyFilters();
+        }}
+      >
+        <div className="review-history-filter-grid">
+          <label>
+            <span>{copy.paper.historySymbolSearch}</span>
+            <input
+              aria-label={copy.paper.historySymbolSearch}
+              onChange={(event) =>
+                onDraftFiltersChange({ ...draftFilters, symbolQuery: event.target.value })
+              }
+              placeholder="BTC / ETH / LAB"
+              type="search"
+              value={draftFilters.symbolQuery}
+            />
+          </label>
+          <label>
+            <span>{copy.paper.historyStartDate}</span>
+            <input
+              aria-label={copy.paper.historyStartDate}
+              onChange={(event) =>
+                onDraftFiltersChange({ ...draftFilters, startDate: event.target.value })
+              }
+              step="1"
+              type="datetime-local"
+              value={draftFilters.startDate}
+            />
+          </label>
+          <label>
+            <span>{copy.paper.historyEndDate}</span>
+            <input
+              aria-label={copy.paper.historyEndDate}
+              onChange={(event) =>
+                onDraftFiltersChange({ ...draftFilters, endDate: event.target.value })
+              }
+              step="1"
+              type="datetime-local"
+              value={draftFilters.endDate}
+            />
+          </label>
+          <label>
+            <span>{copy.paper.historyVersion}</span>
+            <select
+              aria-label={copy.paper.historyVersion}
+              onChange={(event) =>
+                onDraftFiltersChange({ ...draftFilters, version: event.target.value })
+              }
+              value={draftFilters.version}
+            >
+              <option value="all">{copy.paper.allVersions}</option>
+              {historyVersionOptions.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="review-history-search-row">
+          <div className="page-local-tabs review-history-filters" role="group" aria-label={copy.paper.positionHistory}>
+            {(["all", "long", "short", "profit", "loss"] as HistoryFilter[]).map((value) => (
+              <button
+                className={draftFilters.filter === value ? "active" : ""}
+                key={value}
+                onClick={() => onDraftFiltersChange({ ...draftFilters, filter: value })}
+                type="button"
+              >
+                {copy.paper.filters[value]}
+              </button>
             ))}
-          </select>
-        </label>
-      </div>
-      <div className="page-local-tabs review-history-filters" role="group" aria-label={copy.paper.positionHistory}>
-        {(["all", "long", "short", "profit", "loss"] as HistoryFilter[]).map((value) => (
-          <button
-            className={historyFilter === value ? "active" : ""}
-            key={value}
-            onClick={() => onFilterChange(value)}
-            type="button"
-          >
-            {copy.paper.filters[value]}
-          </button>
-        ))}
-      </div>
+          </div>
+          <div className="review-history-search-actions">
+            <button className="review-history-search-button" type="submit">
+              {copy.paper.historySearch}
+            </button>
+            <button className="review-history-reset-button" onClick={onResetFilters} type="button">
+              {copy.paper.historyReset}
+            </button>
+          </div>
+        </div>
+      </form>
       {filteredHistory.length === 0 ? (
         <p className="muted panel-empty">{copy.paper.noPositionHistory}</p>
       ) : (
-        <ul className="review-history-list">
-          {filteredHistory.map((position) => (
-            <li key={position.id}>
-              <div className="review-history-heading">
-                <strong>{position.inst_id}</strong>
-                <span>{copy.directions[position.side]}</span>
-                <em className={pnlClass(position.realized_pnl)}>
-                  {formatSignedUsdt(position.realized_pnl)} / {formatPct(position.pnl_pct)}
-                </em>
-              </div>
-              <dl>
-                <Metric label={copy.paper.entry} value={formatPrice(position.entry_price)} />
-                <Metric label={copy.paper.exit} value={formatPrice(position.exit_price)} />
-                <Metric label={copy.paper.margin} value={formatUsdt(position.margin)} />
-                <Metric label={copy.paper.leverage} value={`${position.leverage.toFixed(0)}x`} />
-                <Metric label={copy.paper.fee} value={formatUsdt(position.fees)} />
-                <Metric label={copy.paper.duration} value={formatDuration(position.duration_ms)} />
-                <Metric label={copy.paper.openedAt} value={formatTimestamp(position.opened_at_ms)} />
-                <Metric label={copy.paper.closedAt} value={formatTimestamp(position.closed_at_ms)} />
-                <Metric label={copy.paper.strategyVersion} value={strategyLabel(position)} />
-                <Metric label={copy.paper.openReason} value={position.reason || "-"} />
-                <Metric label={copy.paper.closeReason} value={position.close_reason || "-"} />
-              </dl>
-              <TagChips tags={[...(position.open_tags ?? []), ...(position.close_tags ?? []), ...(position.tags ?? [])]} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="review-history-list">
+            {visibleHistory.map((position) => (
+              <li key={position.id}>
+                <div className="review-history-heading">
+                  <strong>{position.inst_id}</strong>
+                  <span>{copy.directions[position.side]}</span>
+                  <em className={pnlClass(position.realized_pnl)}>
+                    {formatSignedUsdt(position.realized_pnl)} / {formatPct(position.pnl_pct)}
+                  </em>
+                </div>
+                <dl>
+                  <Metric label={copy.paper.entry} value={formatPrice(position.entry_price)} />
+                  <Metric label={copy.paper.exit} value={formatPrice(position.exit_price)} />
+                  <Metric label={copy.paper.margin} value={formatUsdt(position.margin)} />
+                  <Metric label={copy.paper.leverage} value={`${position.leverage.toFixed(0)}x`} />
+                  <Metric label={copy.paper.fee} value={formatUsdt(position.fees)} />
+                  <Metric label={copy.paper.duration} value={formatDuration(position.duration_ms)} />
+                  <Metric label={copy.paper.openedAt} value={formatHistoryDateTime(position.opened_at_ms)} />
+                  <Metric label={copy.paper.closedAt} value={formatHistoryDateTime(position.closed_at_ms)} />
+                  <Metric label={copy.paper.strategyVersion} value={strategyLabel(position)} />
+                  <Metric label={copy.paper.openReason} value={position.reason || "-"} />
+                  <Metric label={copy.paper.closeReason} value={position.close_reason || "-"} />
+                </dl>
+                <TagChips tags={[...(position.open_tags ?? []), ...(position.close_tags ?? []), ...(position.tags ?? [])]} />
+              </li>
+            ))}
+          </ul>
+          {pageCount > 1 ? (
+            <PaginationControls
+              className="review-history-pagination"
+              copy={copy}
+              onPageChange={onPageChange}
+              page={page}
+              pageCount={pageCount}
+              testId="review-history-pagination"
+              total={filteredHistory.length}
+            />
+          ) : null}
+        </>
       )}
     </section>
   );
@@ -682,23 +1195,74 @@ function RealizedCurve({ points }: { points: Array<{ id: number; value: number }
     return <div className="review-empty-chart" />;
   }
 
-  const values = points.map((point) => point.value);
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
-  const span = max - min || 1;
-  const path = points
-    .map((point, index) => {
-      const x = points.length === 1 ? 100 : (index / (points.length - 1)) * 100;
-      const y = 100 - ((point.value - min) / span) * 100;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+  const data = points.map((point, index) => ({
+    id: point.id,
+    label: `#${index + 1}`,
+    value: point.value,
+  }));
+  const chart = (
+    <AreaChart
+      data={data}
+      margin={{ bottom: 8, left: -10, right: 10, top: 12 }}
+      {...(import.meta.env.MODE === "test" ? { height: 220, width: 720 } : {})}
+    >
+      <defs>
+        <linearGradient id="reviewRealizedFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
+          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <CartesianGrid stroke="rgba(74, 98, 120, 0.22)" strokeDasharray="3 3" />
+      <XAxis
+        dataKey="label"
+        tick={{ fill: "#4a6278", fontSize: 10 }}
+        tickLine={false}
+      />
+      <YAxis
+        tick={{ fill: "#4a6278", fontSize: 10 }}
+        tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
+        tickLine={false}
+        width={58}
+      />
+      <Tooltip
+        contentStyle={{
+          background: "#0b1220",
+          border: "1px solid rgba(74, 98, 120, 0.45)",
+          borderRadius: 8,
+          color: "#c8d8e8",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 12,
+        }}
+        formatter={(value) => [`$${Number(value).toFixed(2)}`, "PnL"]}
+        labelFormatter={(label) => `Trade ${label}`}
+      />
+      <ReferenceLine stroke="rgba(148, 174, 196, 0.24)" y={0} />
+      <Area
+        dataKey="value"
+        dot={{ fill: "#10b981", r: 3, stroke: "#0b1220", strokeWidth: 2 }}
+        fill="url(#reviewRealizedFill)"
+        isAnimationActive={false}
+        name="Realized PnL"
+        stroke="#10b981"
+        strokeWidth={2}
+        type="monotone"
+      />
+    </AreaChart>
+  );
 
   return (
-    <svg className="review-curve" role="img" aria-label="Realized PnL curve" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <path d="M 0 100 L 100 100" className="review-curve-axis" />
-      <path d={path} className="review-curve-line" />
-    </svg>
+    <div
+      aria-label="Realized PnL curve"
+      className="review-curve review-recharts-curve"
+      data-testid="review-realized-recharts"
+      role="img"
+    >
+      {import.meta.env.MODE === "test" ? chart : (
+        <ResponsiveContainer height="100%" width="100%">
+          {chart}
+        </ResponsiveContainer>
+      )}
+    </div>
   );
 }
 
@@ -727,7 +1291,7 @@ function matchesHistoryDetailFilters(
     return false;
   }
   const startMs = dateStartMs(filters.startDate);
-  if (startMs !== null && position.closed_at_ms < startMs) {
+  if (startMs !== null && position.opened_at_ms < startMs) {
     return false;
   }
   const endMs = dateEndMs(filters.endDate);
@@ -774,6 +1338,34 @@ function buildStrategyStats(positions: PaperClosedPositionSnapshot[]): PaperStra
   });
 }
 
+function sortStrategyStats(stats: PaperStrategyStats[]): PaperStrategyStats[] {
+  return [...stats].sort((left, right) => {
+    const versionOrder = compareStrategyVersions(right.strategy_version, left.strategy_version);
+    if (versionOrder !== 0) {
+      return versionOrder;
+    }
+    return (right.last_trade_ts_ms ?? 0) - (left.last_trade_ts_ms ?? 0);
+  });
+}
+
+function compareStrategyVersions(left: string, right: string): number {
+  const leftParts = parseStrategyVersion(left);
+  const rightParts = parseStrategyVersion(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return left.localeCompare(right);
+}
+
+function parseStrategyVersion(version: string): number[] {
+  const matches = version.match(/\d+/g);
+  return matches === null ? [] : matches.map((part) => Number(part));
+}
+
 function buildStrategyCurve(
   positions: PaperClosedPositionSnapshot[],
   version: string,
@@ -787,7 +1379,7 @@ function buildStrategyCurve(
   let maxDrawdown = 0;
   let bestCumulative = 0;
   let worstCumulative = 0;
-  const points = matched.map((position) => {
+  const points = matched.map((position, index) => {
     cumulativePnl += position.realized_pnl;
     peak = Math.max(peak, cumulativePnl);
     maxDrawdown = Math.min(maxDrawdown, cumulativePnl - peak);
@@ -796,6 +1388,9 @@ function buildStrategyCurve(
     return {
       closedAtMs: position.closed_at_ms,
       cumulativePnl,
+      instId: position.inst_id,
+      realizedPnl: position.realized_pnl,
+      tradeIndex: index + 1,
     };
   });
 
@@ -806,6 +1401,125 @@ function buildStrategyCurve(
     points,
     worstCumulative,
   };
+}
+
+function filterStrategyCurve(curve: StrategyCurve, range: StrategyCurveRange): StrategyCurve {
+  if (range === "all" || curve.points.length <= 1) {
+    return curve;
+  }
+  const rangeMs =
+    range === "7d" ? 7 * DAY_MS : range === "30d" ? 30 * DAY_MS : 90 * DAY_MS;
+  const endMs = curve.points[curve.points.length - 1].closedAtMs;
+  const points = curve.points.filter((point) => point.closedAtMs >= endMs - rangeMs);
+  return points.length === 0 ? curve : { ...curve, points };
+}
+
+function buildSignalAttribution(
+  positions: PaperClosedPositionSnapshot[],
+  version: string,
+): StrategySignalAttribution[] {
+  const groups = new Map<string, PaperClosedPositionSnapshot[]>();
+  positions
+    .filter((position) => strategyVersion(position) === version)
+    .forEach((position) => {
+      const signal = primarySignalLabel(position);
+      groups.set(signal, [...(groups.get(signal) ?? []), position]);
+    });
+
+  return Array.from(groups.entries())
+    .map(([signal, group]) => {
+      const winners = group.filter((position) => position.realized_pnl > 0);
+      const losers = group.filter((position) => position.realized_pnl < 0);
+      const grossProfit = sum(winners.map((position) => position.realized_pnl));
+      const grossLossAbs = Math.abs(sum(losers.map((position) => position.realized_pnl)));
+      const netPnl = sum(group.map((position) => position.realized_pnl));
+      const winRate = group.length === 0 ? null : winners.length / group.length;
+      const profitFactor =
+        grossProfit > 0 && grossLossAbs > 0 ? grossProfit / grossLossAbs : null;
+      const maxLoss = minNumber(losers.map((position) => position.realized_pnl));
+      const confidence = signalConfidence(group.length, netPnl, winRate, profitFactor);
+      return {
+        confidence,
+        maxLoss,
+        netPnl,
+        profitFactor,
+        recommendationKey: signalRecommendation(confidence),
+        sampleCount: group.length,
+        signal,
+        winRate,
+      };
+    })
+    .sort((left, right) => right.netPnl - left.netPnl || right.sampleCount - left.sampleCount);
+}
+
+function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
+  const tagLabel = [
+    ...(position.open_tags ?? []),
+    ...(position.tags ?? []),
+    ...(position.close_tags ?? []),
+  ]
+    .map((tag) => tag.label.trim())
+    .find((label) => label.length > 0);
+  if (tagLabel !== undefined) {
+    return tagLabel;
+  }
+
+  const reason = `${position.reason} ${position.close_reason}`.toLowerCase();
+  if (reason.includes("fvg") && reason.includes("trend")) {
+    return "FVG + Trend";
+  }
+  if (reason.includes("hot") && reason.includes("trend")) {
+    return "Hot Mover + Trend";
+  }
+  if (reason.includes("sweep")) {
+    return "Sweep Failure";
+  }
+  if (reason.includes("multiday") || reason.includes("reversal")) {
+    return "Multiday Reversal";
+  }
+  if (reason.includes("overextension") || reason.includes("extension")) {
+    return position.side === "short" ? "Overextension Short" : "Overextension Long";
+  }
+  if (reason.includes("pattern") && reason.includes("range")) {
+    return "Pattern + Range";
+  }
+  if (reason.includes("time") && reason.includes("range")) {
+    return "Time Risk + Range";
+  }
+  if (reason.includes("trend")) {
+    return position.side === "short" ? "Trend Short" : "Trend Long";
+  }
+  return "Scalping Signal";
+}
+
+function signalConfidence(
+  sampleCount: number,
+  netPnl: number,
+  winRate: number | null,
+  profitFactor: number | null,
+): SignalConfidence {
+  if (
+    sampleCount >= 3 &&
+    netPnl > 0 &&
+    (winRate ?? 0) >= 0.62 &&
+    (profitFactor ?? 0) >= 2
+  ) {
+    return "high";
+  }
+  if (netPnl > 0 && (winRate ?? 0) >= 0.5) {
+    return "med";
+  }
+  return "low";
+}
+
+function signalRecommendation(confidence: SignalConfidence): SignalRecommendationKey {
+  if (confidence === "high") {
+    return "continueExecution";
+  }
+  if (confidence === "med") {
+    return "optimizeEntry";
+  }
+  return "pauseOrReduce";
 }
 
 function strategyVersion(position: Pick<PaperClosedPositionSnapshot, "strategy_version" | "source">): string {
@@ -856,6 +1570,14 @@ function dateEndMs(value: string): number | null {
   }
   const parsed = Date.parse(value.includes("T") ? value : `${value}T23:59:59.999`);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function accountReturnRate(paper: PaperAccountSnapshot): number | null {
+  return strategyReturnRate(paper.equity - paper.initial_balance, paper.initial_balance);
+}
+
+function strategyReturnRate(value: number, initialBalance: number): number | null {
+  return initialBalance === 0 ? null : value / initialBalance;
 }
 
 function formatNullablePct(value: number | null): string {

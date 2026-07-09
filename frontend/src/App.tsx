@@ -15,10 +15,12 @@ import {
 } from "./notifications";
 import { ReviewPage } from "./ReviewPage";
 import "./styles.css";
+import { StrategyPage } from "./StrategyPage";
 import { TradePage } from "./TradePage";
 import { TradingViewModal } from "./TradingViewModal";
 import { defaultLanguage, translations } from "./i18n";
 import type { Language } from "./i18n";
+import { buildTerminalOverview } from "./figmaTerminal";
 import {
   matchesFilter,
   maxScore,
@@ -112,7 +114,6 @@ export default function App() {
         }
         setSnapshot(data);
         setBackendState("connected");
-        setSelectedId((current) => current ?? data.symbols[0]?.inst_id ?? null);
         setOrderInstrument((current) => current || data.symbols[0]?.inst_id || "");
       })
       .catch(() => {
@@ -161,7 +162,6 @@ export default function App() {
         setStreamState("connected");
         if (event.type === "snapshot") {
           setSnapshot(event.data);
-          setSelectedId((current) => current ?? event.data.symbols[0]?.inst_id ?? null);
           setOrderInstrument((current) => current || event.data.symbols[0]?.inst_id || "");
           return;
         }
@@ -171,7 +171,6 @@ export default function App() {
         }
 
         setSnapshot((current) => upsertSymbol(current, event.data));
-        setSelectedId((current) => current ?? event.data.inst_id);
         if (shouldNotify(event.data, notified.current, 80)) {
           sendBrowserNotification(event.data);
         }
@@ -195,12 +194,15 @@ export default function App() {
   );
 
   const filteredSymbols = useMemo(
-    () => sortedSymbols.filter((symbol) => matchesFilter(symbol, filter)),
-    [filter, sortedSymbols],
+    () => sortedSymbols.filter((symbol) => matchesFilter(symbol, filter, snapshot.paper)),
+    [filter, snapshot.paper, sortedSymbols],
+  );
+  const terminalOverview = useMemo(
+    () => buildTerminalOverview(snapshot),
+    [snapshot],
   );
   const selected =
     filteredSymbols.find((symbol) => symbol.inst_id === selectedId) ??
-    filteredSymbols[0] ??
     null;
   const selectedTradePosition =
     snapshot.paper.positions.find((position) => position.inst_id === orderInstrument) ??
@@ -303,6 +305,7 @@ export default function App() {
 
   return (
     <ConsoleShell
+      activeSignalCount={terminalOverview.activeSignalCount}
       backendState={backendState}
       copy={copy}
       language={language}
@@ -312,9 +315,12 @@ export default function App() {
       onRequestNotifications={requestNotifications}
       onThemeModeChange={setThemeMode}
       onViewModeChange={setViewMode}
+      positionCount={terminalOverview.positionCount}
       streamState={streamState}
       symbolCount={snapshot.symbols.length}
+      tickerSymbols={sortedSymbols}
       themeMode={themeMode}
+      unrealizedPnl={terminalOverview.unrealizedPnl}
       viewMode={viewMode}
     >
       {viewMode === "macro" ? (
@@ -346,6 +352,13 @@ export default function App() {
           tradeBusy={tradeBusy}
           tradeError={tradeError}
         />
+      ) : viewMode === "strategy" ? (
+        <StrategyPage
+          copy={copy}
+          lastScanAt={snapshot.last_scan_at_ms}
+          paper={snapshot.paper}
+          symbols={sortedSymbols}
+        />
       ) : viewMode === "review" ? (
         <ReviewPage copy={copy} paper={snapshot.paper} />
       ) : (
@@ -360,6 +373,7 @@ export default function App() {
           onOpenTradingView={openTradingView}
           onSelectSymbol={setSelectedId}
           onTradeSymbol={tradeSymbol}
+          paper={snapshot.paper}
           selected={selected}
           themeMode={themeMode}
         />

@@ -15,6 +15,30 @@ const cssBlock = (selector: string) => {
   return match.groups.body;
 };
 
+const lastCssBlock = (selector: string) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [...css.matchAll(new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`, "g"))];
+  const match = matches[matches.length - 1];
+
+  if (!match?.groups?.body) {
+    throw new Error(`Missing CSS block for ${selector}`);
+  }
+
+  return match.groups.body;
+};
+
+const cssBlockContaining = (selector: string, expected: string) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [...css.matchAll(new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`, "g"))];
+  const match = matches.find((candidate) => candidate.groups?.body.includes(expected));
+
+  if (!match?.groups?.body) {
+    throw new Error(`Missing CSS block for ${selector} containing ${expected}`);
+  }
+
+  return match.groups.body;
+};
+
 const systemDarkBlock = () => {
   const match = css.match(
     /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme\]\),\s*:root\[data-theme="system"\]\s*\{(?<body>[^}]*)\}/,
@@ -39,6 +63,12 @@ describe("theme transitions", () => {
 });
 
 describe("console palette", () => {
+  it("loads the Tailwind 4 pipeline used by the Figma bundle", () => {
+    expect(css).toContain('@import "tailwindcss" source(none);');
+    expect(css).toContain('@source "./**/*.{js,ts,jsx,tsx}";');
+    expect(css).toContain('@import "tw-animate-css";');
+  });
+
   it("uses the approved radar reference colors and responsive console classes", () => {
     const paletteAnchors = ["--app-bg: #0b0e14", "--surface: #151924", "--border: #2b313f"];
     const explicitDark = cssBlock(':root[data-theme="dark"]');
@@ -52,8 +82,13 @@ describe("console palette", () => {
     expect(css).toContain(".console-topbar");
     expect(css).toContain(".task-rail");
     expect(css).toContain(".task-rail-button");
+    expect(css).toContain("--terminal-bg: #070b12");
+    expect(css).toContain("--terminal-cyan: #22d3ee");
+    expect(css).toContain(".terminal-market-tape");
     expect(css).toContain(".macro-summary-strip");
     expect(css).toContain(".radar-workspace");
+    expect(css).toContain(".strategy-page");
+    expect(css).toContain(".strategy-workspace");
     expect(css).toContain(".trade-page");
     expect(css).toContain(".review-page");
     expect(css).toContain("@media (max-width: 960px)");
@@ -79,5 +114,36 @@ describe("console palette", () => {
     expect(metricCard).toContain("overflow: hidden");
     expect(metricValue).toContain("max-width: 100%");
     expect(metricValue).toContain("overflow-wrap: anywhere");
+  });
+
+  it("locks document scroll and delegates overflow to content surfaces", () => {
+    expect(css).toMatch(
+      /html,\s*body,\s*#root\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s,
+    );
+
+    const contentSurface = lastCssBlock(".console-main > .page-surface");
+    const macroSurface = lastCssBlock(".console-main > .macro-panel");
+
+    expect(contentSurface).toContain("flex: 1 1 auto");
+    expect(contentSurface).toContain("min-height: 0");
+    expect(contentSurface).toContain("contain: layout paint");
+    expect(contentSurface).toContain("overflow: auto");
+    expect(contentSurface).toContain("align-content: start");
+
+    expect(macroSurface).toContain("flex: 1 1 auto");
+    expect(macroSurface).toContain("min-height: 0");
+    expect(macroSurface).toContain("contain: layout paint");
+    expect(macroSurface).toContain("overflow: auto");
+  });
+
+  it("keeps radar overflow inside the table pane", () => {
+    const monitorPage = cssBlockContaining(".monitor-page", "overflow: hidden");
+    const radarTablePanel = cssBlockContaining(".monitor-page .radar-table-panel", "overflow: auto");
+
+    expect(monitorPage).toContain("overflow: hidden");
+    expect(radarTablePanel).toContain("min-height: 0");
+    expect(radarTablePanel).toContain("flex: 1");
+    expect(radarTablePanel).toContain("contain: layout paint");
+    expect(radarTablePanel).toContain("overflow: auto");
   });
 });

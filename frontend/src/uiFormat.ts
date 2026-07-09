@@ -1,11 +1,15 @@
 import type { Copy } from "./i18n";
 import type { MacroRegime, PaperAccountSnapshot, Score, SymbolSnapshot } from "./types";
 
-export type Filter = "all" | "trend" | "range" | "hot" | "fixed";
+export type Filter = "all" | "trend" | "range" | "hot" | "fixed" | "positions";
 export type ThemeMode = "light" | "dark" | "system";
-export type ViewMode = "monitor" | "trade" | "review" | "macro";
+export type ViewMode = "monitor" | "trade" | "review" | "macro" | "strategy";
 
-export function matchesFilter(symbol: SymbolSnapshot, filter: Filter): boolean {
+export function matchesFilter(
+  symbol: SymbolSnapshot,
+  filter: Filter,
+  paper?: PaperAccountSnapshot,
+): boolean {
   if (filter === "trend") {
     return symbol.trend_score.value >= 65;
   }
@@ -17,6 +21,9 @@ export function matchesFilter(symbol: SymbolSnapshot, filter: Filter): boolean {
   }
   if (filter === "fixed") {
     return symbol.pool_tags.includes("fixed");
+  }
+  if (filter === "positions") {
+    return paper?.positions.some((position) => position.inst_id === symbol.inst_id) ?? false;
   }
   return true;
 }

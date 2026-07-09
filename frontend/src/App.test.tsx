@@ -1,12 +1,15 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type {
   BtcMacroSnapshot,
   ChartSnapshot,
   DashboardSnapshot,
+  FvgZone,
   PaperAccountSnapshot,
+  PaperClosedPositionSnapshot,
+  SymbolSnapshot,
 } from "./types";
 
 const paper: PaperAccountSnapshot = {
@@ -285,6 +288,73 @@ const chart: ChartSnapshot = {
   ],
 };
 
+function buildSymbol(index: number, overrides: Partial<SymbolSnapshot> = {}): SymbolSnapshot {
+  const suffix = String(index).padStart(2, "0");
+  return {
+    inst_id: `PAGE-${suffix}-USDT-SWAP`,
+    price: 100 + index,
+    change_5m_pct: 0.001 * index,
+    change_15m_pct: 0.002 * index,
+    change_1h_pct: 0.003 * index,
+    trend_score: { value: 100 - index, direction: "long", reasons: [] },
+    range_score: { value: 20 + index, direction: "neutral", reasons: [] },
+    pool_tags: ["dynamic"],
+    trigger_reason: `page symbol ${index}`,
+    funding_rate: null,
+    fvgs: [],
+    levels: [],
+    updated_at_ms: 1782400000000,
+    ...overrides,
+  };
+}
+
+function buildFvg(index: number): FvgZone {
+  return {
+    timeframe: index % 3 === 0 ? "h1" : index % 2 === 0 ? "m15" : "m5",
+    direction: index % 2 === 0 ? "short" : "long",
+    start_ts_ms: 1782399000000 + index * 60000,
+    end_ts_ms: 1782399060000 + index * 60000,
+    lower: 200 + index,
+    upper: 200.5 + index,
+    gap_pct: 0.01,
+    distance_pct: index / 100,
+    filled: false,
+  };
+}
+
+function buildHistoryPosition(
+  index: number,
+  overrides: Partial<PaperClosedPositionSnapshot> = {},
+): PaperClosedPositionSnapshot {
+  const suffix = String(index).padStart(2, "0");
+  const openedAtMs = 1782392800000 + index * 600000;
+  const realizedPnl = index % 2 === 0 ? 20 + index : -10 - index;
+  return {
+    id: index,
+    inst_id: `HIST-${suffix}-USDT-SWAP`,
+    side: index % 2 === 0 ? "long" : "short",
+    qty: 1000,
+    entry_price: 1 + index / 100,
+    exit_price: 1 + index / 100 + realizedPnl / 10000,
+    margin: 100,
+    leverage: 20,
+    notional: 2000,
+    fees: 2,
+    realized_pnl: realizedPnl,
+    pnl_pct: realizedPnl / 100,
+    opened_at_ms: openedAtMs,
+    closed_at_ms: openedAtMs + 600000,
+    duration_ms: 600000,
+    source: "scalping_optimization_design",
+    strategy_name: "Scalping Optimization Design",
+    strategy_version: "v0.1.3",
+    reason: `history open ${index}`,
+    close_source: "scalping_optimization_design",
+    close_reason: `history close ${index}`,
+    ...overrides,
+  };
+}
+
 function analogWindow(startMs: number, days: number, drift: number) {
   const candles = Array.from({ length: days + 1 }, (_, index) => {
     const base = 100 + index * drift;
@@ -520,8 +590,8 @@ describe("App", () => {
   it("renders the radar title and connection status", async () => {
     mockSnapshot({ symbols: [], last_scan_at_ms: null, websocket_connected: false, paper });
     render(<App />);
-    expect(screen.getByText("AlphaPulse OKX")).toBeInTheDocument();
-    expect(screen.getByText("后端")).toBeInTheDocument();
+    expect(screen.getByTestId("figma-sidebar")).toHaveTextContent("CRYPTO");
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
     await screen.findByText("暂无合约数据");
   });
 
@@ -530,26 +600,100 @@ describe("App", () => {
     render(<App />);
 
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("monitor-terminal")).toBeInTheDocument();
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("信号");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("Chg%");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("Tags");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("▼DN");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("dynamic");
+    expect(screen.getByTestId("monitor-live-count")).toHaveTextContent("symbols");
     expect(screen.getByText("动态 / 新币")).toBeInTheDocument();
-    expect(screen.getByText("DOGE-USDT-SWAP")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("radar-terminal-table")).getByText("DOGE-USDT-SWAP"),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "趋势" }));
 
     expect(screen.getAllByText("LAB-USDT-SWAP").length).toBeGreaterThan(0);
     await waitFor(() => {
-      expect(screen.queryByText("DOGE-USDT-SWAP")).not.toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("radar-terminal-table")).queryByText("DOGE-USDT-SWAP"),
+      ).not.toBeInTheDocument();
     });
   });
 
-  it("uses four top-level task rail pages and keeps radar filters inside Monitor", async () => {
+  it("keeps the Monitor symbol list scrollable instead of paginating the Figma table", async () => {
+    const pagedSnapshot: DashboardSnapshot = {
+      ...snapshot,
+      symbols: Array.from({ length: 12 }, (_, index) => buildSymbol(index + 1)),
+    };
+    mockSnapshot(pagedSnapshot);
+
+    render(<App />);
+    expect((await screen.findAllByText("PAGE-01-USDT-SWAP")).length).toBeGreaterThan(0);
+    const table = screen.getByTestId("radar-terminal-table");
+
+    expect(table).toHaveTextContent("PAGE-10-USDT-SWAP");
+    expect(table).toHaveTextContent("PAGE-11-USDT-SWAP");
+    expect(table).toHaveTextContent("PAGE-12-USDT-SWAP");
+    expect(screen.queryByTestId("monitor-pagination")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("symbol-detail-panel")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("row", { name: /PAGE-11-USDT-SWAP/ }));
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("PAGE-11-USDT-SWAP");
+
+    fireEvent.click(screen.getByRole("button", { name: "趋势" }));
+
+    await waitFor(() => {
+      expect(table).toHaveTextContent("PAGE-01-USDT-SWAP");
+    });
+  });
+
+  it("paginates long FVG lists in the symbol detail panel", async () => {
+    const fvgSnapshot: DashboardSnapshot = {
+      ...snapshot,
+      symbols: [
+        buildSymbol(1, {
+          fvgs: Array.from({ length: 7 }, (_, index) => buildFvg(index + 1)),
+        }),
+      ],
+    };
+    mockSnapshot(fvgSnapshot);
+
+    render(<App />);
+    expect((await screen.findAllByText("PAGE-01-USDT-SWAP")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("row", { name: /PAGE-01-USDT-SWAP/ }));
+    const fvgList = screen.getByTestId("fvg-zone-list");
+
+    expect(screen.getByTestId("fvg-pagination")).toHaveTextContent("第 1 / 2 页");
+    expect(fvgList).toHaveTextContent("201.00-201.50");
+    expect(fvgList).toHaveTextContent("205.00-205.50");
+    expect(fvgList).not.toHaveTextContent("206.00-206.50");
+
+    fireEvent.click(within(screen.getByTestId("fvg-pagination")).getByRole("button", { name: "下一页" }));
+
+    expect(fvgList).toHaveTextContent("206.00-206.50");
+    expect(fvgList).toHaveTextContent("207.00-207.50");
+    expect(fvgList).not.toHaveTextContent("201.00-201.50");
+  });
+
+  it("uses Figma task rail pages and keeps radar filters inside Monitor", async () => {
     mockSnapshot({ ...snapshot, paper: activePaper });
 
     render(<App />);
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("terminal-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-market-tape")).toHaveTextContent("LAB-USDT-SWAP");
+    expect(screen.getByTestId("terminal-market-tape")).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(screen.getByTestId("terminal-live-status")).toHaveTextContent("LIVE");
+    expect(screen.getByTestId("terminal-quick-stats")).toHaveTextContent("持仓 2");
+    expect(screen.getByTestId("terminal-quick-stats")).toHaveTextContent("信号 2");
+    expect(screen.getByTestId("terminal-quick-stats")).toHaveTextContent("浮盈 +42.86 USDT");
 
     const taskRail = screen.getByRole("navigation", { name: "主导航" });
     expect(taskRail).toHaveTextContent("监控");
     expect(taskRail).toHaveTextContent("交易");
+    expect(taskRail).toHaveTextContent("策略");
     expect(taskRail).toHaveTextContent("复盘");
     expect(taskRail).toHaveTextContent("宏观");
     expect(screen.getByRole("button", { name: "监控" })).toHaveAttribute(
@@ -560,9 +704,29 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "交易" }));
 
-    expect(screen.getByRole("heading", { name: "交易" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模拟盘" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "趋势" })).not.toBeInTheDocument();
     expect(screen.getByText("当前持仓")).toBeInTheDocument();
+  });
+
+  it("matches the Figma radar shell structure before a symbol is selected", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    expect(screen.getByTestId("figma-sidebar")).toHaveTextContent("CRYPTO");
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("持仓 2");
+    expect(screen.getByTestId("figma-statbar").querySelectorAll(".figma-stat-card")).toHaveLength(5);
+    expect(screen.getByTestId("figma-radar-tabs")).toHaveTextContent("LIVE · 2 symbols");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("SYMBOL");
+    expect(screen.queryByTestId("symbol-detail-panel")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("row", { name: /LAB-USDT-SWAP/ }));
+
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveClass("figma-symbol-detail");
+    expect(screen.getByTestId("symbol-detail-panel")).toHaveTextContent("LAB-USDT");
   });
 
   it("shows all current positions on the Trade page and preloads the selected Monitor symbol", async () => {
@@ -574,12 +738,67 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("row", { name: /DOGE-USDT-SWAP/ }));
     fireEvent.click(screen.getByRole("button", { name: "去交易" }));
 
-    expect(screen.getByRole("heading", { name: "交易" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模拟盘" })).toBeInTheDocument();
     expect(screen.getByTestId("trade-page")).toHaveTextContent("LAB-USDT-SWAP");
     expect(screen.getByTestId("trade-page")).toHaveTextContent("DOGE-USDT-SWAP");
     expect(screen.getByLabelText("交易合约")).toHaveValue("DOGE-USDT-SWAP");
     expect(screen.getByText("全部当前持仓")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeInTheDocument();
+  });
+
+  it("shows live strategy signal attribution separately from Review", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "策略" }));
+
+    expect(screen.getByTestId("strategy-page")).toHaveTextContent("信号归因");
+    expect(screen.getByTestId("strategy-page")).toHaveTextContent("特征分析");
+    expect(screen.getByTestId("strategy-page")).toHaveTextContent("trend short 84: volume 3.1x");
+    expect(screen.getByTestId("strategy-page")).toHaveTextContent("15m move -7.0% aligns with 1h move -11.0%");
+    expect(screen.getByTestId("strategy-page")).toHaveTextContent("near support");
+    expect(screen.queryByTestId("review-page")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+
+    expect(screen.getByTestId("review-page")).toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-page")).not.toBeInTheDocument();
+  });
+
+  it("switches Strategy local tabs between attribution, feature analysis, and Shadow positions", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "策略" }));
+
+    const strategyPage = screen.getByTestId("strategy-page");
+    const attributionTab = within(strategyPage).getByRole("tab", { name: "信号归因" });
+    const featureTab = within(strategyPage).getByRole("tab", { name: "特征分析" });
+    const shadowTab = within(strategyPage).getByRole("tab", { name: "Shadow 持仓" });
+
+    expect(attributionTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("strategy-attribution-panel")).toHaveTextContent("trend short 84: volume 3.1x");
+    expect(screen.queryByTestId("strategy-feature-panel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-shadow-panel")).not.toBeInTheDocument();
+
+    fireEvent.click(featureTab);
+
+    expect(featureTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("特征分析");
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("near support");
+    expect(screen.queryByTestId("strategy-attribution-panel")).not.toBeInTheDocument();
+
+    fireEvent.click(shadowTab);
+
+    expect(shadowTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("Shadow 持仓对照");
+    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("LAB-USDT-SWAP");
+    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(screen.queryByTestId("strategy-feature-panel")).not.toBeInTheDocument();
   });
 
   it("shows Review performance and trade records without Monitor filters", async () => {
@@ -590,7 +809,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "复盘" }));
 
-    expect(screen.getByRole("heading", { name: "复盘" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "策略复盘" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "趋势" })).not.toBeInTheDocument();
     expect(screen.getByTestId("review-page")).toHaveTextContent("已实现盈亏");
     expect(screen.getByTestId("review-page")).toHaveTextContent("+207.58 USDT");
@@ -602,6 +821,8 @@ describe("App", () => {
     expect(screen.getByTestId("review-page")).toHaveTextContent("9,791.00 USDT");
     expect(screen.getByTestId("review-page")).toHaveTextContent("占用保证金");
     expect(screen.getByTestId("review-page")).toHaveTextContent("459.44 USDT");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("收益率");
+    expect(screen.getByTestId("review-page")).toHaveTextContent("2.50%");
     expect(screen.getByTestId("review-page")).toHaveTextContent("胜率");
     expect(screen.getByTestId("review-page")).toHaveTextContent("50.00%");
     expect(screen.getByTestId("review-page")).toHaveTextContent("亏损单");
@@ -610,23 +831,88 @@ describe("App", () => {
     expect(screen.getByTestId("review-page")).toHaveTextContent("平均单笔盈亏");
     expect(screen.getByTestId("review-page")).toHaveTextContent("+89.36 USDT");
     expect(screen.getByTestId("review-page")).not.toHaveTextContent("暂不可用");
+    expect(screen.getByTestId("review-realized-recharts")).toBeInTheDocument();
     expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("Scalping Optimization Design");
     expect(screen.getByTestId("review-page")).toHaveTextContent("历史持仓");
 
     fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("收益率");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("均持仓");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("状态");
+    expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("ACTIVE");
     fireEvent.click(screen.getByRole("row", { name: /Scalping Optimization Design v0\.1\.3/ }));
     expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("v0.1.3");
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("1.79%");
+    expect(within(screen.getByTestId("paper-strategy-curve")).getByRole("button", { name: "7D" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("paper-strategy-curve")).getByRole("button", { name: "ALL" })).toBeInTheDocument();
+    expect(screen.getByTestId("paper-strategy-recharts")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-strategy-axis-summary")).toHaveTextContent("时间轴");
+    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("盈利");
+    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("亏损");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("信号归因");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("策略医生");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("PRIMARY SIGNAL");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("Multiday Reversal");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("+178.72 USDT");
 
     fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
     expect(screen.getByLabelText("历史持仓币种")).toBeInTheDocument();
-    expect(screen.getByLabelText("历史持仓开始日期")).toBeInTheDocument();
-    expect(screen.getByLabelText("历史持仓结束日期")).toBeInTheDocument();
+    expect(screen.getByLabelText("开仓开始时间")).toBeInTheDocument();
+    expect(screen.getByLabelText("平仓结束时间")).toBeInTheDocument();
     expect(screen.getByLabelText("历史持仓版本")).toBeInTheDocument();
     expect(screen.getByTestId("review-page")).toHaveTextContent("scalping v0.1.3 take profit 132.68%");
     expect(screen.getAllByText(/BREV-USDT-SWAP/).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("历史持仓币种"), { target: { value: "nes" } });
+    expect(screen.getByTestId("review-page")).toHaveTextContent("BREV-USDT-SWAP");
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     expect(screen.getByTestId("review-page")).toHaveTextContent("NES-USDT-SWAP");
     expect(screen.getByTestId("review-page")).not.toHaveTextContent("BREV-USDT-SWAP");
+    fireEvent.click(screen.getByRole("button", { name: "重置" }));
+    expect(screen.getByTestId("review-page")).toHaveTextContent("BREV-USDT-SWAP");
+    const afterBrevOpenedBeforeClosed = new Date(
+      1782398200000 - new Date(1782398200000).getTimezoneOffset() * 60000,
+    ).toISOString().slice(0, 16);
+    fireEvent.change(screen.getByLabelText("开仓开始时间"), {
+      target: { value: afterBrevOpenedBeforeClosed },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(screen.getByTestId("review-page")).not.toHaveTextContent("BREV-USDT-SWAP");
+  });
+
+  it("paginates Review position history and resets the page after search", async () => {
+    const history = Array.from({ length: 12 }, (_, index) => buildHistoryPosition(index + 1));
+    mockSnapshot({ ...snapshot, paper: { ...activePaper, position_history: history } });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+    fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
+
+    const reviewPage = screen.getByTestId("review-page");
+    expect(screen.getByTestId("review-history-pagination")).toHaveTextContent("第 1 / 2 页");
+    expect(screen.getByTestId("review-history-pagination")).toHaveTextContent("共 12 条");
+    expect(reviewPage).toHaveTextContent("HIST-01-USDT-SWAP");
+    expect(reviewPage).toHaveTextContent("HIST-10-USDT-SWAP");
+    expect(reviewPage).not.toHaveTextContent("HIST-11-USDT-SWAP");
+
+    fireEvent.click(
+      within(screen.getByTestId("review-history-pagination")).getByRole("button", {
+        name: "下一页",
+      }),
+    );
+
+    expect(screen.getByTestId("review-history-pagination")).toHaveTextContent("第 2 / 2 页");
+    expect(reviewPage).not.toHaveTextContent("HIST-01-USDT-SWAP");
+    expect(reviewPage).toHaveTextContent("HIST-11-USDT-SWAP");
+    expect(reviewPage).toHaveTextContent("HIST-12-USDT-SWAP");
+
+    fireEvent.change(screen.getByLabelText("历史持仓币种"), { target: { value: "hist-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+
+    expect(screen.queryByTestId("review-history-pagination")).not.toBeInTheDocument();
+    expect(reviewPage).toHaveTextContent("HIST-01-USDT-SWAP");
+    expect(reviewPage).not.toHaveTextContent("HIST-11-USDT-SWAP");
   });
 
   it("opens a TradingView chart modal from the radar only", async () => {
@@ -700,7 +986,7 @@ describe("App", () => {
       "aria-checked",
       "true",
     );
-    expect(screen.getByText("后端")).toBeInTheDocument();
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
     expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
     expect(localStorage.getItem("alphapulse-language")).toBeNull();
   });
@@ -719,9 +1005,9 @@ describe("App", () => {
       "aria-checked",
       "true",
     );
-    expect(screen.getByText("Backend")).toBeInTheDocument();
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
     expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Signal" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /SIGNAL/i })).toBeInTheDocument();
   });
 
   it("renders the macro cycle view", async () => {
@@ -796,20 +1082,20 @@ describe("App", () => {
     expect(macroRequests).toBe(1);
   });
 
-  it("shows a compact macro summary on the radar console", async () => {
+  it("shows Figma market stat cards on the radar console", async () => {
     mockSnapshot();
 
     render(<App />);
 
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
-    const summary = await screen.findByTestId("macro-summary-strip");
+    const statbar = await screen.findByTestId("figma-statbar");
 
-    expect(summary).toHaveTextContent("BTC 大周期摘要");
-    expect(summary).toHaveTextContent("熊市反弹");
-    expect(summary).toHaveTextContent("$60,000.00");
-    expect(summary).toHaveTextContent("80/100");
-    expect(summary).toHaveTextContent("-40.00%");
-    expect(summary).toHaveTextContent("55.00%");
+    expect(statbar.querySelectorAll(".figma-stat-card")).toHaveLength(5);
+    expect(statbar).toHaveTextContent("BTC 价格");
+    expect(statbar).toHaveTextContent("$60,000.00");
+    expect(statbar).toHaveTextContent("市场状态");
+    expect(statbar).toHaveTextContent("活跃信号");
+    expect(statbar).toHaveTextContent("热门异动");
   });
 
   it("keeps the radar workspace usable when the macro summary request fails", async () => {
@@ -838,8 +1124,8 @@ describe("App", () => {
     render(<App />);
 
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
-    const summary = await screen.findByTestId("macro-summary-strip");
-    expect(summary).toHaveTextContent("大周期数据不可用");
+    const statbar = await screen.findByTestId("figma-statbar");
+    expect(statbar).toHaveTextContent("ERR");
     expect(screen.getByRole("button", { name: "趋势" })).toBeInTheDocument();
   });
 

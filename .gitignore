@@ -28,6 +28,8 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/.npm-cache/
+.playwright-cli/
+output/
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
