@@ -25,6 +25,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup target add x86_64-unknown-linux-musl
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -37,7 +38,7 @@ jobs:
         run: cargo test -p alphapulse_okx_backend
 
       - name: Build backend
-        run: cargo build --release -p alphapulse_okx_backend
+        run: cargo build --release --target x86_64-unknown-linux-musl -p alphapulse_okx_backend
 
       - name: Test frontend
         working-directory: frontend
@@ -56,7 +57,7 @@ jobs:
           set -euo pipefail
           rm -rf release alphapulse-okx.tar.gz
           mkdir -p release/bin release/frontend release/deploy
-          cp target/release/alphapulse_okx_backend release/bin/
+          cp target/x86_64-unknown-linux-musl/release/alphapulse_okx_backend release/bin/
           cp -R frontend/dist/. release/frontend/
           cp deploy/alphapulse-okx.service release/deploy/
           cp deploy/nginx.alphapulse-okx.conf release/deploy/
