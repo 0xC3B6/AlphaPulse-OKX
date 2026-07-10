@@ -346,8 +346,10 @@ mod tests {
                 pool_tags: Vec::new(),
                 trigger_reason: String::new(),
                 funding_rate: None,
+                scalping_metrics: Default::default(),
                 fvgs: Vec::new(),
                 levels: Vec::new(),
+                pattern_signals: Vec::new(),
                 updated_at_ms: 1,
             },
         );

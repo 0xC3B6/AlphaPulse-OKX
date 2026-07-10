@@ -1,6 +1,9 @@
 use alphapulse_okx_backend::{
     config::AppConfig,
-    domain::{Direction, Score, Timeframe},
+    domain::{
+        Direction, PatternKind, PatternLevelZone, PatternSignal, PatternStatus, ScalpingMetrics,
+        Score, Timeframe,
+    },
 };
 
 #[test]
@@ -38,6 +41,71 @@ fn domain_types_serialize_with_stable_names() {
     assert!(json.contains("\"value\":84"));
     assert!(json.contains("\"direction\":\"short\""));
     assert!(json.contains("15m drop expanded"));
+}
+
+#[test]
+fn pattern_signal_serializes_with_stable_names() {
+    let signal = PatternSignal {
+        kind: PatternKind::DoubleBottom,
+        direction: Direction::Long,
+        timeframe: Timeframe::M15,
+        status: PatternStatus::Holding,
+        score: 72,
+        structure_score: 42,
+        confirmation_score: 14,
+        hold_score: 16,
+        trade_score: 72,
+        neckline: Some(104.0),
+        invalidation_level: Some(98.0),
+        start_ts_ms: 1,
+        confirm_ts_ms: Some(2),
+        pivots: vec![],
+        level_zone: Some(PatternLevelZone {
+            lower: 103.5,
+            upper: 104.5,
+        }),
+        reasons: vec!["neckline retest holding".to_string()],
+        warnings: vec!["btc context neutral".to_string()],
+    };
+
+    let json = serde_json::to_string(&signal).unwrap();
+
+    assert!(json.contains("\"kind\":\"double_bottom\""));
+    assert!(json.contains("\"direction\":\"long\""));
+    assert!(json.contains("\"timeframe\":\"m15\""));
+    assert!(json.contains("\"status\":\"holding\""));
+    assert!(json.contains("\"structure_score\":42"));
+    assert!(json.contains("\"trade_score\":72"));
+    assert!(json.contains("neckline retest holding"));
+    assert!(json.contains("btc context neutral"));
+}
+
+#[test]
+fn scalping_metrics_serialize_with_stable_names() {
+    let metrics = ScalpingMetrics {
+        volume_ratio: 2.5,
+        vwap: Some(101.25),
+        vwap_distance_atr: Some(-0.75),
+        latest_move_atr: Some(1.2),
+        atr_15m_pct: Some(0.018),
+        adx_15m: Some(27.4),
+        bollinger_width_pct: Some(0.044),
+    };
+
+    let json = serde_json::to_value(&metrics).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "volume_ratio": 2.5,
+            "vwap": 101.25,
+            "vwap_distance_atr": -0.75,
+            "latest_move_atr": 1.2,
+            "atr_15m_pct": 0.018,
+            "adx_15m": 27.4,
+            "bollinger_width_pct": 0.044,
+        })
+    );
 }
 
 #[test]

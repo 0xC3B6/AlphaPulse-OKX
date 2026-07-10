@@ -18,7 +18,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{
     config::AppConfig,
     domain::{ChartSnapshot, Timeframe},
-    indicators::fvg::detect_fvgs,
+    indicators::{fvg::detect_fvgs, patterns::detect_patterns},
     macro_cycle,
     okx::rest::OkxRestClient,
     paper::{PaperError, PaperOrderRequest},
@@ -125,6 +125,7 @@ async fn symbol_chart(
             .partial_cmp(&right.distance_pct)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    let pattern_signals = detect_patterns(&candles, timeframe, current_price);
     let updated_at_ms = candles
         .last()
         .map(|candle| candle.ts_ms)
@@ -135,6 +136,7 @@ async fn symbol_chart(
         timeframe,
         candles,
         fvgs,
+        pattern_signals,
         updated_at_ms,
     }))
 }

@@ -1,6 +1,6 @@
 use alphapulse_okx_backend::{
     alerts::{AlertThresholds, AlertTracker},
-    domain::{Direction, Score, SymbolSnapshot},
+    domain::{Direction, ScalpingMetrics, Score, SymbolSnapshot},
 };
 
 fn snapshot(inst_id: &str, trend: u8, range: u8, direction: Direction) -> SymbolSnapshot {
@@ -23,8 +23,10 @@ fn snapshot(inst_id: &str, trend: u8, range: u8, direction: Direction) -> Symbol
         pool_tags: vec!["dynamic".to_string()],
         trigger_reason: "trend short 84: volume 3.1x".to_string(),
         funding_rate: Some(-0.003),
+        scalping_metrics: ScalpingMetrics::default(),
         fvgs: vec![],
         levels: vec![],
+        pattern_signals: vec![],
         updated_at_ms: 1_782_400_000_000,
     }
 }

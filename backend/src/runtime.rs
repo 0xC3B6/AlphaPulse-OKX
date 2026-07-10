@@ -11,6 +11,8 @@ use crate::{
     indicators::{
         fvg::detect_fvgs,
         levels::{find_levels, LevelConfig},
+        patterns::detect_patterns,
+        scalping::scalping_metrics,
     },
     okx::{
         rest::{OkxRestClient, TickerRow},
@@ -161,6 +163,7 @@ async fn build_symbol_snapshot(
     let change_15m_pct = last_bar_change(&candles_15m);
     let change_1h_pct = last_bar_change(&candles_1h);
     let volume_ratio = volume_ratio(&candles_5m).unwrap_or(1.0);
+    let scalping_metrics = scalping_metrics(&candles_5m, &candles_15m, price, volume_ratio);
     let volatility_1h = volatility(&candles_1h, price);
 
     let mut fvgs = Vec::new();
@@ -172,6 +175,16 @@ async fn build_symbol_snapshot(
             .partial_cmp(&right.distance_pct)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    let mut pattern_signals = Vec::new();
+    pattern_signals.extend(detect_patterns(&candles_15m, Timeframe::M15, price));
+    pattern_signals.extend(detect_patterns(&candles_1h, Timeframe::H1, price));
+    pattern_signals.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| right.start_ts_ms.cmp(&left.start_ts_ms))
+    });
+    pattern_signals.truncate(6);
 
     let level_source = if candles_1h.len() >= 12 {
         &candles_1h
@@ -219,6 +232,7 @@ async fn build_symbol_snapshot(
         near_resistance,
         clear_range,
         funding_rate: None,
+        pattern_signals: pattern_signals.clone(),
     });
 
     let trigger_reason = trigger_reason(&symbol.inst_id, &scored.trend_score, &scored.range_score);
@@ -234,8 +248,10 @@ async fn build_symbol_snapshot(
         pool_tags,
         trigger_reason,
         funding_rate: None,
+        scalping_metrics,
         fvgs,
         levels,
+        pattern_signals,
         updated_at_ms: ticker.ts_ms,
     })
 }
