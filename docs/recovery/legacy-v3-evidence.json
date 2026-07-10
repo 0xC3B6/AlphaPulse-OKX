@@ -1,0 +1,2961 @@
+{
+  "base_commit": "907b9ecac5acf0b1f78ce9cf0c5a3be0c3cd0285",
+  "session_path": "/Users/c3b6/.codex/sessions/2026/06/25/rollout-2026-06-25T17-20-58-019efe15-2210-70e0-82d8-0f646f4c407f.jsonl",
+  "session_sha256": "5104686840ff43489a45e93a69d193b546851c24c64223db3ceff40d99c8214a",
+  "successful_patch_event_count": 355,
+  "changed_file_count": 360,
+  "components": [
+    {
+      "path": "backend/src/indicators/patterns.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/src/indicators/scalping.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/src/time_regime.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/src/market_context.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/src/auto_strategy.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/tests/auto_strategy.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/tests/state_prices.rs",
+      "classification": "exact_replay",
+      "source": "session"
+    },
+    {
+      "path": "backend/src/domain.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/indicators/mod.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/scoring.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/runtime.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/paper.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/state.rs",
+      "classification": "verified_port",
+      "source": "session+907b9ec"
+    },
+    {
+      "path": "backend/src/persistence.rs",
+      "classification": "verified_port",
+      "source": "7be9e81"
+    }
+  ],
+  "patches": [
+    {
+      "timestamp": "2026-07-01T09:21:39.372Z",
+      "call_id": "call_2xzKXwAWI8b4iPtPrGpn2maW",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "add",
+      "patch_sha256": "4bd9c7e1726011c401e09d8b68dadef0dc31350db94ee640bd9a22d1cbb3d910",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-01T09:21:46.959Z",
+      "call_id": "call_dsZjCEMJvzJqK2pyWBsiZQzV",
+      "path": "backend/src/indicators/mod.rs",
+      "change_type": "update",
+      "patch_sha256": "eedf3c0039f0274e4eb1770e6aa49082bd09e1ff802b999b6850c45e5bfcdc86",
+      "diff_sha256": "ac756d23f0dc94926360f49f803bbb9aeaa2c36e5b7bd3101e23c38bea63d24b"
+    },
+    {
+      "timestamp": "2026-07-01T09:22:48.102Z",
+      "call_id": "call_8ldaAnAJVYA58Io5yAW2QrUc",
+      "path": "backend/src/domain.rs",
+      "change_type": "update",
+      "patch_sha256": "1f66ec15185213fe41a84219999564cca1804d8362ef98962866b13d1a688d70",
+      "diff_sha256": "40e6be1790e1819b9a3129a22901cadd329ec15891eeed05b22070395f9ab827"
+    },
+    {
+      "timestamp": "2026-07-01T09:24:30.823Z",
+      "call_id": "call_qZeVQi3XQaGKOJC1jlUqVY6L",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "c3c24bba5d2f1a2d6e5e4623e9761af45710f438ebf3c0a4b26e8654b38e2905",
+      "diff_sha256": "1f79c7c613bccf2073885bf4eb87e4aee7663e80184c74b3c47db443ca73faaf"
+    },
+    {
+      "timestamp": "2026-07-01T09:24:50.490Z",
+      "call_id": "call_oO6NUIMambf7TGsI48YHKv0b",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "188f3226c04a73d3725b70db3bf6ce23a3a362d13b842df2f6fe02719a944376",
+      "diff_sha256": "ba3d14b5605c54dcfd5d4e068acc213bea5ffd0ef2858d1ca9a4bd198e1a12f4"
+    },
+    {
+      "timestamp": "2026-07-01T09:24:59.418Z",
+      "call_id": "call_DByOa6AvqBqygLNRkofzrtdL",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "f648a6a6f5c83da6261bb3bcd55595149fd8fec6f8cbfac553994f34c86f79e1",
+      "diff_sha256": "66b5fa8c7f7853b8f5353b11510b227a659fcba3afe9d5587655d5a395421426"
+    },
+    {
+      "timestamp": "2026-07-01T09:25:14.402Z",
+      "call_id": "call_aRqNzcEwozJrcxmWggfNKSM2",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "cf1758bf6d81344bcf4056698f2fe4c5a61e5398bbdb12a10519ea2d1149c7b0",
+      "diff_sha256": "09eb3b88d541c0fd17bdd517f7adaf0adf558719be7de6d590a9aed565565c0a"
+    },
+    {
+      "timestamp": "2026-07-01T09:25:46.832Z",
+      "call_id": "call_6HIzR4oWvK9qKR6eFkoaLzCe",
+      "path": "backend/tests/alerts.rs",
+      "change_type": "update",
+      "patch_sha256": "47a4696c1233aa4bac66eeff3908f93a1c2cdc7275633102b2f246098d8968f4",
+      "diff_sha256": "8622a92a80719bb1733b17b0d883bb375120c6ce8e238e36cd5446c57ac0bb05"
+    },
+    {
+      "timestamp": "2026-07-01T09:26:16.224Z",
+      "call_id": "call_uRYxetSGXmUrtrJaQk95U3tI",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "537a71ef88567238f4c7cc69543d9ae539e7e95d2d720bef906764b3ff36378a",
+      "diff_sha256": "e40e8fcab4df735dc81b80a555b9f5a706cfaa521fb154c0a7ddfa248c2a3381"
+    },
+    {
+      "timestamp": "2026-07-01T09:27:13.591Z",
+      "call_id": "call_eXBwihvfw4e9cndmFEwq1WfN",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "5fcf1091b9e3bc85d0fb0002ccfcbed3d9146af1f989a8d8f638e84b177071a0",
+      "diff_sha256": "e4870f5f331ccb5010eb5d884773bc0bae276b4a0ef54367ffa847f249e41ef7"
+    },
+    {
+      "timestamp": "2026-07-01T09:27:43.573Z",
+      "call_id": "call_8yQMimHoch2UhvYWwss676Ld",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "985a2c223718165c7197896fd39c26500924b0a9b9d1e59293518efe525ef55b",
+      "diff_sha256": "160af3b1d8846772d123321aa0ef2effa2d84b7a0088b0070bc978cc6af0a7be"
+    },
+    {
+      "timestamp": "2026-07-01T09:27:51.605Z",
+      "call_id": "call_fSMRdeyXAJlVls0tvJu9ogXt",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "0d56439b592d9ad66f113074f736ef9eb422b0a21c830c95c4d15de511a532db",
+      "diff_sha256": "e69fc85d3e7f401ff4d3c0d2eec77a98344a7833272afa607eb81f502ac696a8"
+    },
+    {
+      "timestamp": "2026-07-01T09:28:05.113Z",
+      "call_id": "call_SERL8RiqHooaCKCaMrIsOqwn",
+      "path": "backend/tests/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "20a9ca0e55f0bcd227cae25eaacb744b579ba8093c90fdf914f0f57ee7aa3b62",
+      "diff_sha256": "c9d52b3cd8bec3c3350e8be8ff41c184519d5585f207a06356eef0a9a3d078fe"
+    },
+    {
+      "timestamp": "2026-07-01T09:28:29.998Z",
+      "call_id": "call_BRostzC4KgNtpM67lb3t5Rz2",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "051a27dbeb4700e2ef70f37906c58ac83ef3a42734dfcb8fafeb5851f670b376",
+      "diff_sha256": "83badedc01521521b7f66c7a8dee8739623e82396c2342771a8b7e3aa0383b7a"
+    },
+    {
+      "timestamp": "2026-07-01T09:29:12.393Z",
+      "call_id": "call_zG9NijW5bWHKM1e5fprtDNcZ",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "553fe7c60c73a60035f5813b604062bb13728fe4032e8b1d05223a56807789bc",
+      "diff_sha256": "72021f97df7ef7738bef934ea72669075cffd1a71bfa767e79df15435fe4a785"
+    },
+    {
+      "timestamp": "2026-07-01T09:29:24.654Z",
+      "call_id": "call_XjRPndRaQGjDJV4lGw0BvYRv",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "87514c388a972796d8fdde48865d178cb761596ca10c25e718d559fa08efbaba",
+      "diff_sha256": "5fb1cc5da1bf2672675b4c3d0a0167e3a6e860329dbc277d30558281fc48a024"
+    },
+    {
+      "timestamp": "2026-07-01T09:29:44.850Z",
+      "call_id": "call_Ili1nnTHo0ar3AWjxU48mvRy",
+      "path": "backend/tests/domain_config.rs",
+      "change_type": "update",
+      "patch_sha256": "5de9e933a4c8b245640dbf347148ef86a788be2b0223aaaacfadb84dfc5b6f24",
+      "diff_sha256": "da4f192c8aa5e235ba050a5be80136d8f8dbcdc1293b8eb0d5535fee83fbcf8c"
+    },
+    {
+      "timestamp": "2026-07-01T09:30:53.434Z",
+      "call_id": "call_pOqt3gO20Kn6r3Uwom0Dk5ga",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "8620b643c30f38d3934abd73cf98166d44bc2ba045d5cfc6451708b8cfdeebd5",
+      "diff_sha256": "9d21ddc27b200c712e0d91b5baf5f6bc6fe2fccfa678e4daff33f2592e8108fa"
+    },
+    {
+      "timestamp": "2026-07-01T09:34:20.072Z",
+      "call_id": "call_hXUEM9fTgIsiYFPd5rQ3QoYb",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "6daa7f6abe90f48884aeab666249077ed7e7a4f138610dda5bdc517aef06a00e",
+      "diff_sha256": "90f404ef3336ed7e693f89f7f19583855971e12b6c0e4cc80ab2eab2df2765ce"
+    },
+    {
+      "timestamp": "2026-07-01T09:34:36.246Z",
+      "call_id": "call_i9dNUuNK9Ru4O1kcVx1NDRQM",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "fd9b51acc6e2780ad9798be237b729dde7f025a45fc478e624b14b5366613a32",
+      "diff_sha256": "d0b1559e04058c6e2cc586453b0c7d9ab17245bd52ea13c67e3905e6326d4169"
+    },
+    {
+      "timestamp": "2026-07-01T09:34:48.748Z",
+      "call_id": "call_zR00v2yBRt8wFlbZrlIzn4Gq",
+      "path": "frontend/src/uiFormat.ts",
+      "change_type": "update",
+      "patch_sha256": "b0f13a73ebee225a61bd224d9eed59d98e1115d7d049a495d8668871f04f971d",
+      "diff_sha256": "0031cc82ae9c7a881d0968794093e9a15c459fd0bca5add6c28e33496fd59572"
+    },
+    {
+      "timestamp": "2026-07-01T09:34:59.526Z",
+      "call_id": "call_LN76a0M1oXiqJ4m1f2qrZMNw",
+      "path": "frontend/src/RadarTable.tsx",
+      "change_type": "update",
+      "patch_sha256": "b2a387c2e1dbb63d3562a2b09969f64ff655009e612dcd6656e3c6064a33cd85",
+      "diff_sha256": "d1e4d4f31cb0223eab49de1889a65afdd43a94c3b12c516667793632ad7f0825"
+    },
+    {
+      "timestamp": "2026-07-01T09:35:13.449Z",
+      "call_id": "call_wZ8jgAVnP6oQLAN0h0UE88lk",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "b8807c200e5646d0cc11c9756aaf5c963e9eb696f88e58b4b55ecaf0af3cd189",
+      "diff_sha256": "6c42050ce64de383a8a1932373b0daf964bf1a90fc0a2451805fa8128633869f"
+    },
+    {
+      "timestamp": "2026-07-01T09:36:00.218Z",
+      "call_id": "call_wGxWYCyq3Lcolo4brZ919lDj",
+      "path": "frontend/src/ChartPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "e6d18bb93ce21972218affe5f35272d6160f7fe29e67f2c0546cf4c3a49b0d8a",
+      "diff_sha256": "9a9d843873ea3e4ba6e9ebf7bcbf9613681c8d38d832b83ebfab003a111c1dcb"
+    },
+    {
+      "timestamp": "2026-07-01T09:36:29.913Z",
+      "call_id": "call_OQih8iIvYVUZiBnNQyzh9f2l",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "8eb8389d7da975779250844ca5c310f54b63a0b9587127c9abc8df51dbecc32e",
+      "diff_sha256": "9bc6e1d621837a6315fd8add745a5d670d4ae941e3d5bf4768cc6a455c3d93f6"
+    },
+    {
+      "timestamp": "2026-07-01T09:36:42.213Z",
+      "call_id": "call_cJf7H3pvvxAI9dUWEBEy4BBb",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "645de16174ed6adf66a067d400dd21a70465891ee8b559eaa40441ac053b21cd",
+      "diff_sha256": "cfa987c8fbd0e68244801153606692a9afc0f42e50797733b8e3be90b4aa8b0b"
+    },
+    {
+      "timestamp": "2026-07-01T09:36:57.236Z",
+      "call_id": "call_C91fikekdudqn3ZulYUWKhaj",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "ffff71a6efeaa0d884a4f96bd9c1ccb841b8f12b33bf10a06dfd6826a16d7756",
+      "diff_sha256": "b23c4e56efccd3b0e02db100e9885cb837e423ee93300c9e094569075d788796"
+    },
+    {
+      "timestamp": "2026-07-01T09:37:07.546Z",
+      "call_id": "call_raSixT23CJKWQ12S5qOy4erl",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "e09ac2d744109acbf64097737763054a828570c344180af80eceb9409e131c10",
+      "diff_sha256": "3be32407017caf37df2b86c0eaf8b2956b2f4921165c76bba6a9016fcc1c61e9"
+    },
+    {
+      "timestamp": "2026-07-01T09:37:14.612Z",
+      "call_id": "call_4NYlRWYDEffxzyOXOs4BGA01",
+      "path": "frontend/src/notifications.test.ts",
+      "change_type": "update",
+      "patch_sha256": "7efa13a4e82fa65cdf9723cc0a52aafef55ffa28de65e1147d4b7c48ff59f9d7",
+      "diff_sha256": "bd79418be7892341024374002498c00b54b03a305d7dfb99dadc5be158f4cb03"
+    },
+    {
+      "timestamp": "2026-07-01T09:37:20.074Z",
+      "call_id": "call_i93PhltmARE5Z9Kg7GGlhezX",
+      "path": "frontend/src/uiFormat.test.ts",
+      "change_type": "update",
+      "patch_sha256": "930159c60348c5422928f2e1fd65ce2572be086382ccb1666033f1abe63ad992",
+      "diff_sha256": "e9a724f6905dec6f1d49420c68afac4628bb411ac5b1d8f0f12501285bb28bb5"
+    },
+    {
+      "timestamp": "2026-07-01T09:37:47.094Z",
+      "call_id": "call_MR6pNPFPRQOTkZ9nM1x9wqq5",
+      "path": "frontend/src/ChartPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "694c83a17468f28d42e5bc3467c8000461f2b77424a9b1049c7848b6ff030380",
+      "diff_sha256": "2037f6f4a69fb18543178206c7b2da9f322d42019b27dc7dd32a17729efe6871"
+    },
+    {
+      "timestamp": "2026-07-01T09:37:59.500Z",
+      "call_id": "call_83LI77mNjwBIN7l8Cz80M788",
+      "path": "frontend/src/ChartPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "9415ef512ab5178a2fbe997856a06ab3fd5c642ebe407843cf65c72b028ffcfd",
+      "diff_sha256": "5a079bccb83002b4462ef7fe8408b8a284640f3bf2bb46599911ced1a04e3ef6"
+    },
+    {
+      "timestamp": "2026-07-01T09:39:41.600Z",
+      "call_id": "call_Ei6i3BJkUkJSqGDDZOhOEKbW",
+      "path": "frontend/src/RadarTable.tsx",
+      "change_type": "update",
+      "patch_sha256": "9bf6df10525f7d19f2d538a45b7846b4c24a1c2b205152d372b51fa42f6caa18",
+      "diff_sha256": "fca80a88a43bd449ea91e7ef31dc575f1df019ab781206b3754cbce3ae7f4cfc"
+    },
+    {
+      "timestamp": "2026-07-01T09:39:49.810Z",
+      "call_id": "call_UbFl5u9Ki25llAZAbYmabGxS",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "ba1a83cf258eab4f3c46965ad17bf17bf455e0269e940f9aff49614c8a7e47ad",
+      "diff_sha256": "cc5904a127d3ecdf47ccff153e275bddcb4916a13f4732187528a23b9e790aaa"
+    },
+    {
+      "timestamp": "2026-07-01T09:39:55.226Z",
+      "call_id": "call_kLIDRunlTFmhCqqeG6INu1Zm",
+      "path": "frontend/src/ChartPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "6d067ddc7045179d9058a36e6057a0d340f1c953f465dca1fa473bfa4674ae8f",
+      "diff_sha256": "f99b4b58310ac3ea83a4c85e730520e9a6f25e1327b8e8a742341366bfb31613"
+    },
+    {
+      "timestamp": "2026-07-01T09:59:53.671Z",
+      "call_id": "call_QqNrcqCajdpxlih7ReqFzbCq",
+      "path": "backend/tests/okx_parsing.rs",
+      "change_type": "update",
+      "patch_sha256": "f61eecc03002e4412bb6b37a079a0342984a76b49c9cf82e044c8c43068146d8",
+      "diff_sha256": "180894aac0cd085c5a52e32afc8cdcf37374dc54a27085748e4d8ce9d5439f71"
+    },
+    {
+      "timestamp": "2026-07-01T10:00:09.243Z",
+      "call_id": "call_8t915qAi4Jcgf8Gt0nZuhNt3",
+      "path": "backend/tests/universe.rs",
+      "change_type": "update",
+      "patch_sha256": "4a8d12defa67cb10c22be4b8fdfb10c329353491069bc927b262e7f00105a4a8",
+      "diff_sha256": "4553fa729ee5e1a12f646b64f54ded235b810b3f4b5e6060b8c9f5fb0e6b3e10"
+    },
+    {
+      "timestamp": "2026-07-01T10:00:35.102Z",
+      "call_id": "call_kcAJZHvCA1FqzAP9hfgja1Fo",
+      "path": "backend/src/okx/rest.rs",
+      "change_type": "update",
+      "patch_sha256": "497c28a9ddd4083fae17fdacb75f24287f860560eca311a41149c51570bda2c4",
+      "diff_sha256": "2b26ca6b2b46a78edd48ca1aba41a565e26772b8d6a66c2e2be09d6fd575ad5e"
+    },
+    {
+      "timestamp": "2026-07-01T10:00:55.353Z",
+      "call_id": "call_IwtahNVm6FcqHFEXm3MBYgYz",
+      "path": "backend/src/universe.rs",
+      "change_type": "update",
+      "patch_sha256": "828c70b3ebb3dd19f77830c05e1fc64fd2923b3cf36c3d16d406a90a57e533bb",
+      "diff_sha256": "23d0e72f0506f7dc23b06af098823ea67b50a4dbef50570faf32d29c0fde009c"
+    },
+    {
+      "timestamp": "2026-07-01T10:01:11.667Z",
+      "call_id": "call_fStdzD7WHZt1YGKjhYXR9NXR",
+      "path": "backend/src/domain.rs",
+      "change_type": "update",
+      "patch_sha256": "da5cb5eacf86b2ae42f215a842b408bdb5801dd6387266c0a942caf2b27eda40",
+      "diff_sha256": "009710936e7168e63e200e5b12758f3aaf5dd9a92325fac5e5417333e08ebe74"
+    },
+    {
+      "timestamp": "2026-07-01T10:01:20.218Z",
+      "call_id": "call_mit4mqsw4Y0UMO2PYzw2X0z1",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "9bc45839a3ee9ed21ed216cc71df263f9b8ce8ebdc61a6aad11ffb964d93e898",
+      "diff_sha256": "65f16a2cb17c060d00d31fce435f6671685c60894cfe7a46ba6e62746c57b27f"
+    },
+    {
+      "timestamp": "2026-07-01T10:01:26.099Z",
+      "call_id": "call_wY6Np4N5dYGVkv8eUnnGX4z8",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "92252fc85398985286e34bb33db1993b6fee455774277998b1f50ad204b5531e",
+      "diff_sha256": "402088a5c845ee3a609e90c908bbfe7a8db5825a92fc1a785478f848ec4572d6"
+    },
+    {
+      "timestamp": "2026-07-01T10:01:33.833Z",
+      "call_id": "call_zkXy1DF0FuMtbZcjblfxEPWY",
+      "path": "backend/tests/alerts.rs",
+      "change_type": "update",
+      "patch_sha256": "1aa9cd4d13c810d5170705a113842cd17c982382b0a1c341c194bfb79b3c4efa",
+      "diff_sha256": "c628ea537862c8fef4b5c18b83f0b85386d659e3f320f3a578fd99b4cd640ead"
+    },
+    {
+      "timestamp": "2026-07-01T10:01:54.679Z",
+      "call_id": "call_fjx3s7tXPfBxLiBSR2fYytQ1",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "cea35748fc1811d9a8e9e097f1e3d1fe1a41b6f0f7c170d9a0051980809963c9",
+      "diff_sha256": "d4674947e5c85bc1758780707d057aeee944a1ecfdc9c4402d3c7dff0c3e3a0c"
+    },
+    {
+      "timestamp": "2026-07-01T10:02:12.124Z",
+      "call_id": "call_0zGE3PpxY69fC45zYt4kBqBJ",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "441d0e0c462e2f973efb79436838b96e91e77406bead099c1df6db19b85bc3c1",
+      "diff_sha256": "10f0ba5cfc102e919c38dbd7e98944fecac4fe32289d7854764567df74835e56"
+    },
+    {
+      "timestamp": "2026-07-01T10:02:20.828Z",
+      "call_id": "call_QRRB8OR1OCn4cl6cPmlqzQT4",
+      "path": "frontend/src/RadarTable.tsx",
+      "change_type": "update",
+      "patch_sha256": "5b186661d59e45615bc9f88b612ba2936497f3b04ded16fbfc660b4a1ece5a91",
+      "diff_sha256": "7484196eb86eb650f56549c3db621adc20f4375135adfc3b171faecada63ed10"
+    },
+    {
+      "timestamp": "2026-07-01T10:02:28.318Z",
+      "call_id": "call_oJbuAchQ3KGrSifCgAQJ1vTr",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "b3b655a2a88f5c841093d528deaa57596d9816d7225bf7da6cc87cf08fcc293c",
+      "diff_sha256": "a6d8884fd185a05f0dad8adcc6f9831971a8d158280ab9ac9564a28ed1ce622a"
+    },
+    {
+      "timestamp": "2026-07-01T10:02:51.769Z",
+      "call_id": "call_9qvwGtdDYM1MqQe6TbBGYo7s",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "5d55af0bcefdfa72624928d5f6adc165f08ffe316f33ad9a97b6208ff6d93260",
+      "diff_sha256": "74b9f867bc233d147752862ea26bfc35e1013b84a4a2595548cca0335f804321"
+    },
+    {
+      "timestamp": "2026-07-01T10:03:05.828Z",
+      "call_id": "call_jH4HmXfQtY0BdJ26srsMhTez",
+      "path": "frontend/src/notifications.test.ts",
+      "change_type": "update",
+      "patch_sha256": "881cf350786357253c0b8ab198146143f9d3082cc63692d4919e6a65fa1da75d",
+      "diff_sha256": "473bb7bdad58db609f9c116eb10df24ed74c51412630f5336e445b43f5169667"
+    },
+    {
+      "timestamp": "2026-07-01T10:03:12.472Z",
+      "call_id": "call_wbrgZEz00zYFSapBSXyvzjhW",
+      "path": "frontend/src/uiFormat.test.ts",
+      "change_type": "update",
+      "patch_sha256": "62cad4e94a66f130f4a5aac549be05e4a09f0b778a0c27ddf423f39943c09981",
+      "diff_sha256": "126674e0e63fa1b65dcdb261fc5b65aaf5393cbce930192b7f97b3a2fb4840cf"
+    },
+    {
+      "timestamp": "2026-07-01T13:01:14.568Z",
+      "call_id": "call_uLeoV0biBhMLtPc7EhoIKQCO",
+      "path": "docs/superpowers/plans/2026-07-01-auto-paper-strategy.md",
+      "change_type": "add",
+      "patch_sha256": "7fa67a3be0e0810a644e6e9fe0c8d7ac2fbb4de5369e97c34380b455e7a07f3b",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-01T13:02:11.166Z",
+      "call_id": "call_2SJP4u3UPtIa69lDletfYtg7",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "add",
+      "patch_sha256": "939daf2ea9fb29afae9e15ff5bd3c3b27fbd453bbdcd2f289dd58fe0c0d7df57",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-01T13:02:52.776Z",
+      "call_id": "call_zYENnL3e8hE9evY9uvEK761g",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "add",
+      "patch_sha256": "6e5be45c01352e425670461d8dd2ffc686fd9f0022918702504577d1562cc0e7",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-01T13:02:59.060Z",
+      "call_id": "call_cjmPbHgK4PEauQzV1p4zjBi8",
+      "path": "backend/src/lib.rs",
+      "change_type": "update",
+      "patch_sha256": "922cc350adf6790a1f11005c16ce9c900dd2d43f551205ffb65534e30f09bcbf",
+      "diff_sha256": "00322d1cbaa4963136597015f285e0e25ed989be459e3dac5598607cae80928a"
+    },
+    {
+      "timestamp": "2026-07-01T13:03:17.861Z",
+      "call_id": "call_nK1DcrSslgImYECMaQULxgIh",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "a20175cadb2caf717689c4e668b74a56900ca97608d8413464d362086ce53d2d",
+      "diff_sha256": "9dbb6c2a9fc8e272eee74e69bd70d05ce2202109dacb3704ca232caf4fa81b5b"
+    },
+    {
+      "timestamp": "2026-07-01T13:04:01.340Z",
+      "call_id": "call_vuGY4iLIyUmg8WncDngpEYwP",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "62a450342b55040709049176b6238faa522aaa1114f658dbe4ecb5f154843944",
+      "diff_sha256": "19d9f955c5124d0bbd2b4277417bdf057205f8be0d70a3f2b475d72832ab84a0"
+    },
+    {
+      "timestamp": "2026-07-01T13:04:34.663Z",
+      "call_id": "call_t7ePD2suHhVH3011mUNTpnjE",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "1bf32e55560edcaa1b167d7610153caed912565eeb4856458863fb5ca9418b34",
+      "diff_sha256": "9c1018f677409fb0ff4de384deef18c60e8d004cb5b8529fa2f70cbed64ef838"
+    },
+    {
+      "timestamp": "2026-07-01T13:04:51.357Z",
+      "call_id": "call_gTsremxXq8qaFc2XLtcduPN4",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "daac7b208ca39d20fd8bcd28d7ddd6e49c9e84ae0a76a602b7bb3f1ec2a6e9ba",
+      "diff_sha256": "7dc3edb59b32904e37a6e4ed82ff112b9cdd92d8362b49799e3f54c3b95f1fe3"
+    },
+    {
+      "timestamp": "2026-07-01T13:05:00.530Z",
+      "call_id": "call_t3fweeLWgNQHc1eiKWHqLFlA",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "8e8cde45c43645d653d8e21bfc335ca1aa59b0302fd635077d3058359b92ef5c",
+      "diff_sha256": "7a0c10165c947070edb365bba48863fa8e6e1ee6ef184dd2fb9a651974a8f4e8"
+    },
+    {
+      "timestamp": "2026-07-01T13:05:55.367Z",
+      "call_id": "call_rUsNT9NYd11LZITWxyaUJjdp",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "f583af6522f723db8ca87d097e94655db553c17e7752e87d5f6089eb337c496a",
+      "diff_sha256": "d4b21881173dde085c3300f63dd93b1f6d6a13b7da2057d061e7aebb1b87fbe7"
+    },
+    {
+      "timestamp": "2026-07-01T13:06:13.680Z",
+      "call_id": "call_OjVZNvwBQJW8sI0KMjOv7nkM",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "db408b75fe2b5adacef3ba8f20f37a173b8155f2c5304ac621be6caa02265732",
+      "diff_sha256": "6bfc858428c30a5731866c951a1d56d95e77ae3a8a39f768097351761147fb11"
+    },
+    {
+      "timestamp": "2026-07-01T13:06:25.266Z",
+      "call_id": "call_x1LDykd82wCVWAsepJgqa8ZO",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "3a7cd05382e288eac60666cbc703e4b7d8e915ea426190599aa03251f085a1f5",
+      "diff_sha256": "9e06500e4a56dcf1813aa674688cf8d3008c7420256bc56a508ebe363f6ebc3b"
+    },
+    {
+      "timestamp": "2026-07-01T13:06:46.332Z",
+      "call_id": "call_mMLNje0SlBolP0RgrbDz4WNe",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "c13adb533e01d08494da4da267a411c89a6d92e8ca8f5b91740d35f434284666",
+      "diff_sha256": "369be958ce47f88e8cca0b1512a5e9fcabbbded884d5c6c6937cbb04c573c6d3"
+    },
+    {
+      "timestamp": "2026-07-01T13:08:48.730Z",
+      "call_id": "call_xV41fhYdPgA1Cp9G7dRXgtmg",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "c72b852a5fe0a97a96f48c7fc319695235852e9d660a012db3fc114ef21365e0",
+      "diff_sha256": "90ab529edec9f7ff8cf5266703fb981dd7f323b326daf5bdfc71a39c5fba18a1"
+    },
+    {
+      "timestamp": "2026-07-01T13:08:54.782Z",
+      "call_id": "call_4MZfrgjO0zppiGMM9LlP2CB2",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "10ce16a48d3150012778b7c4f5c7ce83fb90c9db3acd702f68f6155f070c7738",
+      "diff_sha256": "330e732f6eb7cebfc61f1797a7c64d996617684d4f73513240164d6b5016bbe3"
+    },
+    {
+      "timestamp": "2026-07-01T13:12:56.384Z",
+      "call_id": "call_onzjN8EMfq1EIRelmqtYB3RH",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "1d30bf3d169cb023203981bfa2601272ed91d1f99bc6c2503281aa1e849dd553",
+      "diff_sha256": "e387e366de8e525a583a8239839333cb8ce25ab7e16099c1116ae7f4a6a7e896"
+    },
+    {
+      "timestamp": "2026-07-01T13:13:12.297Z",
+      "call_id": "call_idBQ7RIi4dkDd3tZaevwgver",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "913bb7ccb094377d942b1fe624a9cf55a3bd81baf4ba3545b99a4befe44fd704",
+      "diff_sha256": "435d07802097443c95231d41927c8626c94f1cec03f9fcf9224ced4f87102963"
+    },
+    {
+      "timestamp": "2026-07-01T13:13:23.745Z",
+      "call_id": "call_YxHyc0jkTqNvhxZeWjGGjDfY",
+      "path": "backend/src/config.rs",
+      "change_type": "update",
+      "patch_sha256": "b6bb11e48f9aadab93c3f53c2cd80a0ceef4bef6b8c7014a214490e2fe7c5460",
+      "diff_sha256": "c772e5549b27c13bd98ab5cad133ff79749654e07e111b6a01b63525e6c21c3a"
+    },
+    {
+      "timestamp": "2026-07-01T13:13:31.091Z",
+      "call_id": "call_zpwDD4T52pWrVOC0GP9egDCw",
+      "path": "backend/tests/domain_config.rs",
+      "change_type": "update",
+      "patch_sha256": "250e676b3e4488555d87c888e1f300d25f64c221b923f2b5917fbcae9763b8f5",
+      "diff_sha256": "ba9d97908c1c59e1b45d7bf08da6024563dc4dfcf43bfc177bca08d8beba91f3"
+    },
+    {
+      "timestamp": "2026-07-01T13:14:02.555Z",
+      "call_id": "call_9QONGPkhAZL4Y4yqQlJFKEYN",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "ec8f73cd8813752f75a425facdb7d4d3d10844cdc64d21c0e2cba0ea1d6a0c33",
+      "diff_sha256": "9ccef7837417ad6c8afa65d68b3fc3e6454df0e5b2a406c293e12456ec5b073d"
+    },
+    {
+      "timestamp": "2026-07-01T13:14:09.891Z",
+      "call_id": "call_Ph9xiYqYZ969zyaLnuV22Rk4",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "b9aa4c32dac6477fc5cf90bd5de45aad54d4a6ea15001dc99b9594ba11924dd9",
+      "diff_sha256": "759f63981fc69e914700768dc698235977259b868e55d44f49da9e1b8aeb7b24"
+    },
+    {
+      "timestamp": "2026-07-01T13:15:51.818Z",
+      "call_id": "call_0RFzAXE8UkDO8uTtc8Kp1xw3",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "7728160c15b3206df0a3419c45ff9ad41f61f1eb6e64026bb05522dec8083e6f",
+      "diff_sha256": "79cf8d42da4dd1a8ac40efdfc01a3e9b5668cbe36741fea0714dadb70d1ea2db"
+    },
+    {
+      "timestamp": "2026-07-01T13:16:18.691Z",
+      "call_id": "call_UJNfCWLEQLoQFxQZ81lrdtag",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "1d9d8699690ccba50118e96c98ec92eee7e1623d137fe03e1a1a57a88e8f5409",
+      "diff_sha256": "3cc77bbd43959b8cd8d826c5c71feeae82e2f81f8dbbc5d7981dda755690ff7a"
+    },
+    {
+      "timestamp": "2026-07-01T13:16:25.980Z",
+      "call_id": "call_XVGIzqXtZAGzLC1vacCeeDyL",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "45a6a55a1b34a7cf6d4e4df3fed4f0b61a67eb0cc41be139c06ecfaf09d6ae4e",
+      "diff_sha256": "bdeb687683de1d90d5f9d8cfeb2b19688f3d953940f4a859e7d8218e1721330a"
+    },
+    {
+      "timestamp": "2026-07-01T13:16:33.772Z",
+      "call_id": "call_IikcC96MCKbeDQWWeczVhVVH",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "a405066d6a563691208ff0f47b792c9bd78993b6dce7abb4cbdc7048020cf5c1",
+      "diff_sha256": "2234410acaf6d7bb47cf8d281dc05a1b123bd99cff877123bfd1a0956d942166"
+    },
+    {
+      "timestamp": "2026-07-01T13:16:43.940Z",
+      "call_id": "call_7GGX4Udb91W2YfhnC8Fp29NX",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "6d431979ddf5ece9f848c666a822c686d150122699eedac56fdd23b27a2f2485",
+      "diff_sha256": "f965f3ceae093567ab6a0cb80a14d0a8051658ea30e6bf3d4509fc965bde4636"
+    },
+    {
+      "timestamp": "2026-07-01T13:17:20.000Z",
+      "call_id": "call_lZJsShRqFZIsJkTCde9MU12v",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "3f577159d0e6cd6b85e3dcb210181b6c24fff9c6a0eeb1f9d33b338e432a332d",
+      "diff_sha256": "031c70ffb997d47c4ce2ca1516b7d3515d80c544cb57110bf3cb1a847e2f1739"
+    },
+    {
+      "timestamp": "2026-07-01T13:20:36.286Z",
+      "call_id": "call_Mx1Sd3if7qTR5n9ppBbKhqbZ",
+      "path": ".gitignore",
+      "change_type": "update",
+      "patch_sha256": "395d632bc53094fc25926afaeab2a25da942b0a20a2d11d9152dc674756ea4ad",
+      "diff_sha256": "efb80b86b9917dedc46fac0e755ce4d91a43387caff4b60424d2b7eec770ae7b"
+    },
+    {
+      "timestamp": "2026-07-02T02:15:45.962Z",
+      "call_id": "call_mhYpoKDTbeP7qCUt2cnAmIvQ",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "52a2afbea84cef84b4dde82165cf764be9189af62c36311c2fa12c218c57ac3d",
+      "diff_sha256": "5cb24706f9c95a19227079e0b3f452de303f3648028a24e4a176d0f93698f52f"
+    },
+    {
+      "timestamp": "2026-07-02T02:16:48.056Z",
+      "call_id": "call_0tPiRvibPWgkNaaw19gxGcr7",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "d49551c9a92ef2e892e78b78c16c3afe5c3a37809a05d1160bf7f7e56ead3905",
+      "diff_sha256": "3c99b38a038b660e02b9a2cfea6cd5ce897c5a86a265ebeb37ba0ce08e2c3f14"
+    },
+    {
+      "timestamp": "2026-07-02T02:17:07.641Z",
+      "call_id": "call_sAQf76rbPsqeAjxncNru0VH1",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "d69574623331c94efffac7d4199cb6d26af8b3f59649faa9c5f505ee3441c5df",
+      "diff_sha256": "73cfb63e3451f7f58cbb00cce0db73a7e34b01aab76bf861bfa6e4a3d6ca302b"
+    },
+    {
+      "timestamp": "2026-07-02T02:17:31.193Z",
+      "call_id": "call_J1TS1VX4ZaFQqjfDQ8qYMLPo",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "dfd4ef702f35ab416d0c51519b0b5d71c865ac72656200ca1f8778a5e6c42d0d",
+      "diff_sha256": "9565fdb499dc3ce5384efbe290d6f42336f44b6b65a1088f6c9a593a72a0faa5"
+    },
+    {
+      "timestamp": "2026-07-02T02:22:20.416Z",
+      "call_id": "call_7ORGIIHBz0M81Q1PbUuxSbbX",
+      "path": "docs/superpowers/plans/2026-07-02-paper-trading-basic-panel.md",
+      "change_type": "add",
+      "patch_sha256": "e77a64d77d42ba03e3998e11a19e586af9966305b658bce37cfc0bf18b49d893",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T02:23:39.557Z",
+      "call_id": "call_DigoyWHwoqdYQd2XNiwjuwEE",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "485caccd2c6f26dccada28c61db5bc8f7a78ad8f71431e51e7da560250138e7a",
+      "diff_sha256": "74c487562ebbb303e74f3b2128a1e18bb29e2d1b549b7eef325a05f40a31f80f"
+    },
+    {
+      "timestamp": "2026-07-02T02:24:48.712Z",
+      "call_id": "call_FxQGiYzs9U9gyUYShF62WhiZ",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "cd22760c163f1c892bccbb87b1052311ca1be4e40c184b6c5b38075ae6b3f248",
+      "diff_sha256": "a6d6399fd50bcfb9fa6c23e4cc5e9cb9bfc155197995eda09cc2966ff4240af3"
+    },
+    {
+      "timestamp": "2026-07-02T02:25:45.225Z",
+      "call_id": "call_R5QRllBkRNXbrmS1SEAJX8iP",
+      "path": "backend/tests/server.rs",
+      "change_type": "update",
+      "patch_sha256": "03a37c9fe7907273a82a59833028fe7986313531cb97b88c5c2b34be246d51c5",
+      "diff_sha256": "540426fd7c1a8197b955d93528143e2342a423de0191c5ed99fceea108e26119"
+    },
+    {
+      "timestamp": "2026-07-02T02:26:37.357Z",
+      "call_id": "call_ehQw4ZlwVMXdLDbE4gam0SfM",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "20f4f1af69a7587066e0d299755c4380e13f30b9c0cfd9b11b20d8895bfef42f",
+      "diff_sha256": "32f6dfa03a65061018b6a3a36d67eab8902c0d8cbc935264f4c9aa0b86f9d3bb"
+    },
+    {
+      "timestamp": "2026-07-02T02:26:49.838Z",
+      "call_id": "call_k5TiCEo4IV2cuSxYVTA1ujoM",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "f633b3f67af3a30f9b2af9e9344445bdae10c25958b84fc24fdb8b72911d452d",
+      "diff_sha256": "05cb089a6435db801820bb5293a76830317e2d0a8350887bf542b2ac4eaa2abf"
+    },
+    {
+      "timestamp": "2026-07-02T02:27:38.770Z",
+      "call_id": "call_SNaqZBP1g67mNG8PCY0BrXee",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "29e9086643a2f5623a0c4d7782b648295807d619821267fa392e8bca4363d208",
+      "diff_sha256": "3301c72871ce9481adb1973c2c32cca4be9b13bf99ef854bf98be82604e656e6"
+    },
+    {
+      "timestamp": "2026-07-02T02:28:38.926Z",
+      "call_id": "call_E8A5crLPb9wnybgBjgg8wdH4",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "041e7999d34b18bced277a814843191b907e6ff66075ac0960869fb724b94b7a",
+      "diff_sha256": "679f538459042c4246fbd04f97ca35918031f8223b5e6f6855388659de08b029"
+    },
+    {
+      "timestamp": "2026-07-02T02:29:18.410Z",
+      "call_id": "call_6Xb2N65xkRWZrb9btnLojtbj",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "c7fadb54390c972fd38a82682354ecc050ada90fc5f7c5dc92d9607eea5d7a9c",
+      "diff_sha256": "9ce2ef27fe2dde21f4a852eca80e5b82876265188b2f29fc91295eb0370b28de"
+    },
+    {
+      "timestamp": "2026-07-02T02:31:45.163Z",
+      "call_id": "call_59yeycRylNINCh6OxUUzKcaS",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "5ab9fab0cc03b3a5f2f31d1363bfc47a8d6a5527268d03ae5da1e636c238b88c",
+      "diff_sha256": "850af884ef2cbc683cd02a186c5e3feafc37781ac18d26cbd77533fda27a98a0"
+    },
+    {
+      "timestamp": "2026-07-02T02:31:57.142Z",
+      "call_id": "call_OGrxW4yk0y4FFRhC0GDjZ9zI",
+      "path": "frontend/src/api.ts",
+      "change_type": "update",
+      "patch_sha256": "c8a69c6adf75da87ef9dcd03a06504782f4f53307e0b1bb55a1053e0830f48fc",
+      "diff_sha256": "28be89d59d1e7ecc57858b7814f631183cc23a62c262ed35dcf11dfda8874c3a"
+    },
+    {
+      "timestamp": "2026-07-02T02:32:19.913Z",
+      "call_id": "call_Jft0DkCNDP4H2Yr0KPiOiK88",
+      "path": "frontend/src/uiFormat.ts",
+      "change_type": "update",
+      "patch_sha256": "9ad60428bc4079ca6b7fa900b3d37e226839027970eba9760487f6ecdd86ce7d",
+      "diff_sha256": "a9d9f540b79f2c04a326a305f8b5fffdd597d6bfd5d1f61f3afb2ce3ab1ca31c"
+    },
+    {
+      "timestamp": "2026-07-02T02:32:50.535Z",
+      "call_id": "call_dhpD9eeEss4luKjLJAwQFE7f",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "d2dc2cc093b69ffc21cf90c6c0125631f660d7359d3c84e5fc2c807246af9455",
+      "diff_sha256": "b18aa0fbd3b64bdb42076d6e2fcf0af014616ef93cdbf34baa773a39df1306b0"
+    },
+    {
+      "timestamp": "2026-07-02T02:33:16.456Z",
+      "call_id": "call_Tem2yJbCKbJtnPm6FoYyPApu",
+      "path": "frontend/src/PaginationControls.tsx",
+      "change_type": "add",
+      "patch_sha256": "3c5c8ae17242f941ddba3f66c7e838a4d1b1e71ba58d7e3d2945274a9dae7459",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T02:34:44.975Z",
+      "call_id": "call_RV0VOwLBzBXMfNFNGPNhjcEa",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "add",
+      "patch_sha256": "1620fd29888e677beda85db230d2ce57bcbaf1eef3e0be294413b24faadbf47c",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T02:35:48.594Z",
+      "call_id": "call_OEeXAjqTvyHc0vPZZPMTV4Tl",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "e62ea1df6dd5bdeb8f1c2529f68df72a0f5a65b23e1ea2e9192593ae195ccee7",
+      "diff_sha256": "15f42ce7ace51e705494d240683cce5ba888d2d185d3c956cecf649869034779"
+    },
+    {
+      "timestamp": "2026-07-02T02:36:28.794Z",
+      "call_id": "call_GFM1VA5xnplF5qw49yRCFqLW",
+      "path": "frontend/src/RadarWorkspace.tsx",
+      "change_type": "update",
+      "patch_sha256": "1af6f997c8e6fd5511f2a8904fc01a70608a81d64033a1558830bae8e21c4f7e",
+      "diff_sha256": "7687500537a6e10fc63083253a546d8b168c43da014aebbfcb1aefceaec04932"
+    },
+    {
+      "timestamp": "2026-07-02T02:36:51.960Z",
+      "call_id": "call_XAeWT6AkgNnK52g4B0hKHxts",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "ba87063466e2e2ba84f03359e8e4bc089d80a627beaf02f1a4cf0c100a668f93",
+      "diff_sha256": "8b2e51478d094ea9276530a5243cdd861cc5281fba8577437eca1a9e534ec625"
+    },
+    {
+      "timestamp": "2026-07-02T02:37:03.624Z",
+      "call_id": "call_WZCIR4JrsiuYRAWCVW78euOr",
+      "path": "frontend/src/RadarTable.tsx",
+      "change_type": "update",
+      "patch_sha256": "b6efe8a6b03144a2ccf5a8e77b28170e2a6f6edc9bcfb0820aa4972a1e7b6ec6",
+      "diff_sha256": "f4ac867e2da70efb37bc3edf58a001021de609cff0abd606b0c3f77833bfecfc"
+    },
+    {
+      "timestamp": "2026-07-02T02:38:01.688Z",
+      "call_id": "call_R24LidSxTVgYdBxoNClWOs0h",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "d13d2d83e64b1d83b7fb758fe56e0762df237153c1837cff1276b6996d5b9685",
+      "diff_sha256": "6c03cf2e7901093b91ee31e4fd55d31bd3f1d7317fcafb8b131caf76565e676c"
+    },
+    {
+      "timestamp": "2026-07-02T02:38:35.785Z",
+      "call_id": "call_L9NHWVegnsHfceZrSIBCHx19",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "4149bf60d47c8c2f402e73911fc37d6dc071d65bb1eec7267eb3069b5a973427",
+      "diff_sha256": "8ceaba825b3804d7c077337f32277676a86c07f87691f7c6d251afa3ee64f677"
+    },
+    {
+      "timestamp": "2026-07-02T02:38:58.193Z",
+      "call_id": "call_1mjvfpfMBYKeInOsND1nzaFA",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "31dd2ed57409f07c77d2c865785bec7e2614b65686f8e9f6847a13305f7f8be6",
+      "diff_sha256": "99eef2e798ccad7d9cef2b8be22cd1cf44f2f8e02ffaf3671b4a95ac61be770c"
+    },
+    {
+      "timestamp": "2026-07-02T02:41:44.867Z",
+      "call_id": "call_oaAWs0gFtYPWSxh3dlymNwnw",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "21e9aeb5ec90a8b491245effb5e226f05b39d8050275e625557e4564fadd946d",
+      "diff_sha256": "2b0ff5fb8e653b29cf593ab419a69d13de926d864a902165f189c69e4cc173d7"
+    },
+    {
+      "timestamp": "2026-07-02T02:41:44.867Z",
+      "call_id": "call_oaAWs0gFtYPWSxh3dlymNwnw",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "21e9aeb5ec90a8b491245effb5e226f05b39d8050275e625557e4564fadd946d",
+      "diff_sha256": "33ac3b29d6bab415fb2e798370951dea203d905412a5c4e0c889b853a47c4258"
+    },
+    {
+      "timestamp": "2026-07-02T02:42:47.529Z",
+      "call_id": "call_uquCn9Ee3HXdwVQq79PzjewA",
+      "path": "frontend/src/PaginationControls.tsx",
+      "change_type": "update",
+      "patch_sha256": "e34274548ec5ba70971fbd64778e281dd0e685b2fa8e2a007f2ff112943badb8",
+      "diff_sha256": "cb2bdd05b4a4c3fe45446c4f98cb1cb7208b31c01200e71c0732d99cf0e3fe7a"
+    },
+    {
+      "timestamp": "2026-07-02T02:53:02.235Z",
+      "call_id": "call_9oQT9Ajc51Mi2JMd5gLbbrJS",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "035f649de076e7937639431e81643ed4c9a06875b232e44b088225d13c7f852b",
+      "diff_sha256": "4685da0c57b1e665e91de68dde3ecfd6babc6259de22f14d9e4765611a674e87"
+    },
+    {
+      "timestamp": "2026-07-02T02:53:38.675Z",
+      "call_id": "call_8PpZ1F7pqAcvyrif838YTYET",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "bd9c7962ab167af254fcc675ace128307d605fd14b788ccd5309093e8f996eb8",
+      "diff_sha256": "6cc7a408c74849df909af9df4ced194d7baff69b53eb56195fe001ab775b53d6"
+    },
+    {
+      "timestamp": "2026-07-02T02:54:35.183Z",
+      "call_id": "call_wa8D9JPFy6QCGUWJO7kscK78",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "fd186ed6a0174218ada7a3ac399c0e716fc87c8d17dbee50523c58068dd21c03",
+      "diff_sha256": "685826a29c26cfffaef1333a9b6e70e6d177a8c94928f40a898c8f5505a88eee"
+    },
+    {
+      "timestamp": "2026-07-02T02:54:46.482Z",
+      "call_id": "call_St3WnnKP31bpnf0lKZHXYBgL",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "368e05f3823d7eac4cfd691a28f83981e6619852f1b8d0af78f566f9910ab8f3",
+      "diff_sha256": "a64f09dfae1795b4dad50db1806d7eae5d4e94b6d8b2caa72b83bdad67e76b6f"
+    },
+    {
+      "timestamp": "2026-07-02T02:55:00.928Z",
+      "call_id": "call_L8VMPehWe1p27UK2PdPunaUq",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "e21a53f19be6d9e6c68853d11b2dd812b23f96af89dd04e83d9afbd593772c29",
+      "diff_sha256": "d1c0873c19196efdd7fb326ca7bdf18b92057ac102872006c823b482af4c76bd"
+    },
+    {
+      "timestamp": "2026-07-02T02:55:13.247Z",
+      "call_id": "call_H4rCdQNxgzVPVpKUJdVOxJgK",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "47ee892289ebfebfef8edc98efd83e1449262ad455b4b814a6f27a9bbdd9401b",
+      "diff_sha256": "ed0ee7f4773c4dec4a41a3ae022813ddbd966fdbd791ef7643603a078e398cf5"
+    },
+    {
+      "timestamp": "2026-07-02T02:55:13.247Z",
+      "call_id": "call_H4rCdQNxgzVPVpKUJdVOxJgK",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "47ee892289ebfebfef8edc98efd83e1449262ad455b4b814a6f27a9bbdd9401b",
+      "diff_sha256": "2e2f11dda78a959984296dfaffe15d87b4a03989c26942eb651712d5abdfab47"
+    },
+    {
+      "timestamp": "2026-07-02T02:55:35.614Z",
+      "call_id": "call_pMn9E0yURmyD1deJxHvtmlou",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "b6558a4f060331140136ca1bb20d563dbd118be49c0d69c2c144b559e22d93a0",
+      "diff_sha256": "ff78ba40a396eb0ec9010b293a701ef16182618a7eae8f0064a83cdb7ac33525"
+    },
+    {
+      "timestamp": "2026-07-02T02:55:57.509Z",
+      "call_id": "call_CKVm2soOmN4EY7rCirM4EBdE",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "fcd356e620d4621673a0f6449a01f018a3973b69b4ac17d8739603fc11d3ec57",
+      "diff_sha256": "cf4ce496a325a02c973f2210d7bdfca43c5cf9478da7b3edf69e150cceb00153"
+    },
+    {
+      "timestamp": "2026-07-02T02:56:15.604Z",
+      "call_id": "call_rBKTbmBzcWH7K5txeMGy8eGJ",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "0aa5051f8fcbd7e7f813f5402309076700ae5c06cf0de5d1c86b5c7942e4bde2",
+      "diff_sha256": "2b34e08cf4e3060b00f4288f9c218a6998ce396e51cc2b1323f102eba403c1d8"
+    },
+    {
+      "timestamp": "2026-07-02T03:45:10.622Z",
+      "call_id": "call_Ax6FgAZoyN4cMg2YYVNJtBP2",
+      "path": "docs/superpowers/specs/2026-07-02-scalping-optimization-design.md",
+      "change_type": "add",
+      "patch_sha256": "24e8030808af36ed0df64c2449ba3b6942cd73986a63eaa1f46c1546c79ba27a",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T03:52:28.336Z",
+      "call_id": "call_Ef01N4L65kuozz5zss12fmHi",
+      "path": "docs/superpowers/plans/2026-07-02-scalping-phase1-tags-time-regime.md",
+      "change_type": "add",
+      "patch_sha256": "9422ffa1987ba70b5f830283bcfaa52b65e37a71c89aa27d9eef2924b9b3c3d2",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T03:52:54.767Z",
+      "call_id": "call_oIKYAvPPnswxZVoS25iK1t7U",
+      "path": "backend/src/lib.rs",
+      "change_type": "update",
+      "patch_sha256": "482c66bc50eeaf02f097f47540bc4ea2f9ef2464ceed2a1416612acd79cefbfb",
+      "diff_sha256": "068946934b74e30073c690e51ffbb99be2274ad960a37c5eb6365d089c0eb616"
+    },
+    {
+      "timestamp": "2026-07-02T03:52:54.767Z",
+      "call_id": "call_oIKYAvPPnswxZVoS25iK1t7U",
+      "path": "backend/src/time_regime.rs",
+      "change_type": "add",
+      "patch_sha256": "482c66bc50eeaf02f097f47540bc4ea2f9ef2464ceed2a1416612acd79cefbfb",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T03:53:42.698Z",
+      "call_id": "call_9H8jbA7UR4EBPav1C3Toui5R",
+      "path": "backend/src/time_regime.rs",
+      "change_type": "update",
+      "patch_sha256": "2da073faf0ef2ee06d21ccac08dbce9ebe3c418c701fff54f794fe69d1ff9cc5",
+      "diff_sha256": "f0c516f064e21fb565264ee764c4ec4a4c679e312fadd2cd94a05e84ef5ea57f"
+    },
+    {
+      "timestamp": "2026-07-02T03:54:45.919Z",
+      "call_id": "call_QneE3Vncle92EB9GWd07WCT5",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "bd3c49ad51add95f517094634a7c4cba9ee45666e2e6861af72b4d6519d8b128",
+      "diff_sha256": "b6d3685d208adefee0b1ebed11a4a5ff7584ab67c09e6ab0fe2b74372734394f"
+    },
+    {
+      "timestamp": "2026-07-02T03:55:40.393Z",
+      "call_id": "call_9GYsxm5OgfbJlYkaBwxJU0Y7",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "f9378669086dbf4f595c4fc48072d05de864e1737ac392b05e3af700ee7e5cd6",
+      "diff_sha256": "81de2b1a86c7e811434480a73799c3947fc3dce5eba8fdb6d3d5ee76cbe69fab"
+    },
+    {
+      "timestamp": "2026-07-02T03:55:53.062Z",
+      "call_id": "call_IlWIw986IuESiAamGB5jcd0q",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "c93b9292b80e509acfcd8a2cf9bbc6dd8b33645eb7aaacb4906d70e52c6f65f5",
+      "diff_sha256": "dda4985dce2c6b7b12bcf3d8a466d03fb4aa9e0bdc0038c9bcf8a28855b4f93d"
+    },
+    {
+      "timestamp": "2026-07-02T03:55:53.062Z",
+      "call_id": "call_IlWIw986IuESiAamGB5jcd0q",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "c93b9292b80e509acfcd8a2cf9bbc6dd8b33645eb7aaacb4906d70e52c6f65f5",
+      "diff_sha256": "dabdc5661f05b9d5287ba785db2cc7a2f50fefc1e9765673fd09298ea819619e"
+    },
+    {
+      "timestamp": "2026-07-02T03:57:10.319Z",
+      "call_id": "call_2KeGzi2P3HyjiEAYdtSLOCV8",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "157fc27dfdeeef55e8fb7fccfdd17daaeba6c4c35d2864c2268acb0c6998183a",
+      "diff_sha256": "bca6b65507aedd44a5da5680d45539ecb2ecdfe7ac05a412ef2c263bf9a1a415"
+    },
+    {
+      "timestamp": "2026-07-02T03:57:56.843Z",
+      "call_id": "call_5VXFnd4Qqvt2ekatFLnuHGbO",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "f4eab2ad406b384fc9b6386fd0c839294a2a5e1c2f9016aa0893acf8cfdc14d4",
+      "diff_sha256": "92aab8403b4f8cb121ecccf864a101520992183fb610368381ae0192cd753228"
+    },
+    {
+      "timestamp": "2026-07-02T03:58:54.213Z",
+      "call_id": "call_8K8yHI6IyodoEBefBXiABV5o",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "a3f6ac76e4ea626c9b2718eb3e76e75a9f138cb231ff833dd564ee295d6b33bd",
+      "diff_sha256": "0409e5d3e371b0d3bbaad9d946ea4eac2ad916050f7a61312baa5290aceea9ff"
+    },
+    {
+      "timestamp": "2026-07-02T03:59:43.636Z",
+      "call_id": "call_7FyI5rhF9L116qV1Oxhare52",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "70248f638f5609fbbdfdb5270221559b55dcc35de0894b9c62666f7cb6323c9c",
+      "diff_sha256": "9e1d84215f9e1d83f0e84a24f6e3163178d60632286110c40a52838d9d4bdd77"
+    },
+    {
+      "timestamp": "2026-07-02T04:00:32.917Z",
+      "call_id": "call_NtiSxJ28rZRDlULnjlfz6ckp",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "e87869c013b5b2c578265898c1c3820eec60039eebd1169dc31b5929f39e0deb",
+      "diff_sha256": "e457cf3c64e9366b77c760b53e93a86709cd29f6a6721d91864f30fbd1ce4833"
+    },
+    {
+      "timestamp": "2026-07-02T04:01:33.117Z",
+      "call_id": "call_Su6nTMH71v09ytgaAOO76J8a",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "e26670586439bde6f109da31d92eca3504bf20bfe2f8694e2a8a88fe4cf876dd",
+      "diff_sha256": "483e7f0025db9452579967aa76d348f11819c7942f5fca62ce7201bb8abcca9e"
+    },
+    {
+      "timestamp": "2026-07-02T04:02:06.902Z",
+      "call_id": "call_MXWo7s9TUdKpfnEXKfDR23Gw",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "ee1fa01eac270dbf2d3c8fa3579b80615c1903084faa14e548343536ef27788e",
+      "diff_sha256": "f8ee1a031f9b74c8148a1b6d2bb2dddd8b511d6d0440ce70991508319ff52508"
+    },
+    {
+      "timestamp": "2026-07-02T04:02:06.902Z",
+      "call_id": "call_MXWo7s9TUdKpfnEXKfDR23Gw",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "ee1fa01eac270dbf2d3c8fa3579b80615c1903084faa14e548343536ef27788e",
+      "diff_sha256": "76f2e2bbcee9bdf2c16748d62b090c31e8795292f07a8b6178c980ea5618096d"
+    },
+    {
+      "timestamp": "2026-07-02T04:02:47.935Z",
+      "call_id": "call_HDYhaXvfqvnQtyhHHJDm8HGO",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "ebe2d7612544ebc9d312f034288d300ebddba11045b35a5412d3295063cd7b6d",
+      "diff_sha256": "9e6e99179b82a74a65924200eceeecb78737b0966a0b481d76f01a7a8328155f"
+    },
+    {
+      "timestamp": "2026-07-02T04:10:10.478Z",
+      "call_id": "call_muVkdaibCYhE6NUS6Lt0FO8T",
+      "path": "backend/src/market_context.rs",
+      "change_type": "add",
+      "patch_sha256": "5f278ce2ce49d228b01831cdc7c2bed6ba0ee83535ae0a309c0a5d793d6c5175",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T04:10:20.522Z",
+      "call_id": "call_wkI3PzozQFoXjddjDXhz0Fdp",
+      "path": "backend/src/lib.rs",
+      "change_type": "update",
+      "patch_sha256": "f4b847f3dd3ee93696864f29122e3ef89da19eabcc579afdd372134e9e924fe9",
+      "diff_sha256": "94a1f72704aeac6f0d83db2b107c955d68248f796088cd03c048e77807e2fe07"
+    },
+    {
+      "timestamp": "2026-07-02T04:10:30.285Z",
+      "call_id": "call_QcWOegL773LRHFIR5HtWQiAz",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "c8fe8a1f46cb99b5d897b72372165d5bcbff52fcc042bc482ef29fd301d76d61",
+      "diff_sha256": "6402a01f90486576d286681d3fe2bb86b26e7903e66ee9f5f45053c935bc7dd5"
+    },
+    {
+      "timestamp": "2026-07-02T04:10:41.373Z",
+      "call_id": "call_eKFOXXWbWom5vB0bKM8EDw9r",
+      "path": "backend/src/time_regime.rs",
+      "change_type": "update",
+      "patch_sha256": "505f68d184b1db2af4160b7908d5cf164be80abc2dd58799103494cf4dab478e",
+      "diff_sha256": "f5a4781f80e14b2bf2e7f1eb369cb31f9a2fbe7a67ec0d45a3fca68ddcf16fee"
+    },
+    {
+      "timestamp": "2026-07-02T04:11:36.593Z",
+      "call_id": "call_swjXmeKxWkZS81a5ZVOgpCla",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "966f2183e355df8bec5010f1cf89d4d8cd0b79f5de2384a75ccfc7bbe8b43a88",
+      "diff_sha256": "44ccaf5cbc4800b4ce7c6717a19ab80b2240d31de820aa83f052d7d7348282c2"
+    },
+    {
+      "timestamp": "2026-07-02T04:12:11.091Z",
+      "call_id": "call_ogWgzkBWtzOCUfmuB4Tryc2U",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "073705e175a1b3d63c80a9c8ad2370238f5f917b8a6c906f8237954e232bdce1",
+      "diff_sha256": "132e442a33f14a0e007379d1dc83e211364f40f257a1f98c73337d98d82a1264"
+    },
+    {
+      "timestamp": "2026-07-02T05:43:29.534Z",
+      "call_id": "call_exWwwTtUx6myIQ7hPYhcJUgg",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "991eb1cc1a90292cddae2db98636a6ae88eec2904b9e2b4a65f8d8328fe664ad",
+      "diff_sha256": "2ce10a6ce14edbafd47441cf768484c8e349e4af937572e8119fccfc670f5c0c"
+    },
+    {
+      "timestamp": "2026-07-02T05:43:57.824Z",
+      "call_id": "call_RUbdiwbVyRcgGJVQ5GZ2J19V",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "f6b6c951351c8bc21288910c462be73da407fe9fceb194301eba529caa7adad4",
+      "diff_sha256": "5af3ef10af1e58b88adac9faa72da96be691322f1d3950aba414964561770fcb"
+    },
+    {
+      "timestamp": "2026-07-02T05:44:17.747Z",
+      "call_id": "call_wqd2hnGxISD8Bd8d7t9FLHU6",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "e3c749c9eb2f4f0daf2785e4c861c02f9ec2381ee222bf8cdc883556220446af",
+      "diff_sha256": "9931a21e7499631f4c5e5a51aa74dd0d543a744fd6b295ed2468ab2d2a9e009b"
+    },
+    {
+      "timestamp": "2026-07-02T05:45:00.277Z",
+      "call_id": "call_lt81amZdw5vhgUxz2k8cOeq1",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "85ae72767fca7632be9228ba763fdd68a5c002cc8576731a8226ad80f177cece",
+      "diff_sha256": "2e8bff9e667e77852319198107347c4ee5b50bad1bffe5f3a4ea102e332c6434"
+    },
+    {
+      "timestamp": "2026-07-02T05:46:02.921Z",
+      "call_id": "call_euG8sk27ItD3qeoW4rrmqT9h",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "309981c7c7a84b15f18555c19637e3475edf5ece0f69ed1569e9a83a1a6eebc6",
+      "diff_sha256": "8586c29b179d170cc4a3f02c009598b99afaa3dcce1f704249e7993c04e9c638"
+    },
+    {
+      "timestamp": "2026-07-02T05:46:42.383Z",
+      "call_id": "call_mkpaqsPJNOqnBOwIUpkAUfZn",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "33bafaeecec8371b98a9968f0dc00c24b7fe3fbaff4073ed4d674cf8c5c5ffdc",
+      "diff_sha256": "cc36d8c583b2b9d489aae916d7ec13423e39a8173bea7ffb31c2d380f2b27312"
+    },
+    {
+      "timestamp": "2026-07-02T05:47:37.715Z",
+      "call_id": "call_YaGIx3FBkZXfsDkXFXMVZHEj",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "9ecb85600ad2129c2ecb6d0d3fb2722317ec10b0efe67c9f4da3e2de0b575931",
+      "diff_sha256": "8c24e27f9fb164595650db92dc75038cabf02715dee4da8a66e9141f84a59617"
+    },
+    {
+      "timestamp": "2026-07-02T05:48:30.986Z",
+      "call_id": "call_rlKqsFSVIAvts7Dk6qvcajqf",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "14455ccae43cdc3bb508ff22a2b1cbfaa7066e5cfedec84a3cbb6c4245d0e3fc",
+      "diff_sha256": "27d5ff7713c7ad34de36fcdbb3228b7458b5b119ccbd8699e6a6e006864cf06f"
+    },
+    {
+      "timestamp": "2026-07-02T05:48:58.947Z",
+      "call_id": "call_1MtmmMY0Dc0O7aFPyjfTjtf9",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "dc13dc0ba9e493d1fd5d34e23f1c961ba924008b5ff74234ec0afc8130d80d83",
+      "diff_sha256": "25dfafc5a57fbdcc97897de0664988ceeaf4ee24160a3908e108daa9955a0e5d"
+    },
+    {
+      "timestamp": "2026-07-02T05:49:29.581Z",
+      "call_id": "call_suHwdBV03Ctflr0vOgxYqEzX",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "1ddcb1561880d32322ba21626ae04b9497f86123683c23afcfdf2e318ce9efe8",
+      "diff_sha256": "249a19ce286676abde13d8d17755c927bd79ee50230aed8f515cbc0aba89b35b"
+    },
+    {
+      "timestamp": "2026-07-02T05:49:44.344Z",
+      "call_id": "call_aF4sTBgnUx4gs1iBszKHwOXu",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "504e4f9a4c572929163336a33a7d7eebbfa06c4bc09721b6380a9744b7ce1f17",
+      "diff_sha256": "c3ece8a35193e6f84530761f24c54ae35e65a1f9fb8ede212e316245d5fc8e87"
+    },
+    {
+      "timestamp": "2026-07-02T05:50:06.819Z",
+      "call_id": "call_XLl4tv3X6Su22N51nsuNL5wf",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "76b1eb8b4049825b4fa1aa67ae25396e196acda087093a89a0c6ebd2ca45a3a7",
+      "diff_sha256": "d77b2866f4fea176eed16e93308af004d30990ac66d1bc00037b74ed69cde96d"
+    },
+    {
+      "timestamp": "2026-07-02T05:50:17.087Z",
+      "call_id": "call_27CR2fHodcurvPRTpGM7TLlB",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "9829c383a8cfa89352d0554b62b4f97792b9d09ad3d9dd441f35f1c66db818e8",
+      "diff_sha256": "a51d65ab7eeaab554c890971bb4a08fa0a006f76f42a068fb401068867b97fe7"
+    },
+    {
+      "timestamp": "2026-07-02T05:50:37.418Z",
+      "call_id": "call_k5dPsUAmGy2bV4ilOMXTGl7e",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "8cab2310116415abf9229702168e77e617aa0c3d47227624ec2e15899ee7335f",
+      "diff_sha256": "142d6fa1fce9116ea91f14ed66a5beec288fd1d45d33c2fdea7402d8fcf539fb"
+    },
+    {
+      "timestamp": "2026-07-02T05:50:49.063Z",
+      "call_id": "call_Ge0YLh0AikRZYFEjizXLvaQr",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "eee5b128d67802ce5250704ee762005b57a23ca90cfacc268c97ddc32170f881",
+      "diff_sha256": "1b19557cf1fd9453c357e19a0a63a89367061ab5ea986c2b0772f4ae24d900f0"
+    },
+    {
+      "timestamp": "2026-07-02T05:51:06.414Z",
+      "call_id": "call_7d7EnxOppDB6G7q6G4dZVPKK",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "5a588045bb850858815d23f7299162599bcc027318c4dc4dd3527d00c24262cf",
+      "diff_sha256": "c80a1b8b2d44bd7e8299e2c0160cd30835a9f5cf3c53e3031b4e035c2ee8602d"
+    },
+    {
+      "timestamp": "2026-07-02T05:57:29.525Z",
+      "call_id": "call_iiC13lAFuISytVHsCtixw8w6",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "37b0644ad6366c2cb830c30c0bcfaf36cb3d905598b1202830551c84847d414f",
+      "diff_sha256": "9b2e8f0584d195e624cfbf38b8716fd166bfdfb9f39568476a1bd5692186bf1b"
+    },
+    {
+      "timestamp": "2026-07-02T05:57:42.835Z",
+      "call_id": "call_xSPAtfHvRyvcoophB72on2Z8",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "6d7d9424f4a62ed0daefab6c91679cd1174870eece7d4133f8db12c006de3c2d",
+      "diff_sha256": "e2de6bcea160b246c8f4eb83387781cbc599708e82095a040e731d615efed842"
+    },
+    {
+      "timestamp": "2026-07-02T05:58:01.807Z",
+      "call_id": "call_L1IpuOg3FtK4bP17qjeuz2p2",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "ff81c30ffb272e0a59136af57862e812e2776673184aafac71a0d33909d2d753",
+      "diff_sha256": "db6ce99638f02510ebd683376e83d5d08ffc1e81191e9767a2ecb7fd586c0df2"
+    },
+    {
+      "timestamp": "2026-07-02T05:58:13.822Z",
+      "call_id": "call_owyD0bSTGuUBHJPnU6zPwlma",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "2ea52440fce9d819589ea4c73930668b882ec34c64065b09d414e42861d8a03e",
+      "diff_sha256": "3533a6e35a7a817f204300f3bfa39df6dd101cf45f19034c13db20da91e49b72"
+    },
+    {
+      "timestamp": "2026-07-02T05:58:30.321Z",
+      "call_id": "call_O4045xDOibochV9nWAgOSPce",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "6045e2fd6344fd83a376d1812e814fb5bf84f1abd758c823d02d9826225cd399",
+      "diff_sha256": "7640335522df7f65ef5e11c8402365a50f58993c46d1e528c356f55fd2fa3fc8"
+    },
+    {
+      "timestamp": "2026-07-02T05:58:42.080Z",
+      "call_id": "call_hNWrNYdi48l8e1MEgjd5Dcpu",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "4772e0229304c4d0feff2eea165b966b2479299e7ad70e381ffd10cfa74ca4a3",
+      "diff_sha256": "37276bea84cb2b27b63488063401796a9dcb618452e477e63c41b5ebed2f0aac"
+    },
+    {
+      "timestamp": "2026-07-02T05:59:20.445Z",
+      "call_id": "call_GoT27fmy1FvzJOWfsxIVeeJY",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "8b5bdbd637d655d71808e3090336b43a92616cf70a29f21430d3c9447ec1aaf2",
+      "diff_sha256": "2718d43ce4e9bc8c1595337d2a77ec96b7f86db2c74fd12be07591fcb211eb79"
+    },
+    {
+      "timestamp": "2026-07-02T05:59:29.895Z",
+      "call_id": "call_7QJguxItGrQcGk7DDIvMWKws",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "69b74792e38506565cec46dd0b21a2d62caa43a231fe318da7afed0e0ad2b4e8",
+      "diff_sha256": "6e7932f2c092b1c8e6fbfea94897019bd16a44998246276897eb19857a11ad95"
+    },
+    {
+      "timestamp": "2026-07-02T05:59:43.093Z",
+      "call_id": "call_yRJzIf83MeSAUjo2bI4l62Hw",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "c67c9e08b591b63c56ea5dd5c07222849172052427290d9738eb042ca0a1f2dc",
+      "diff_sha256": "b4ef27fdadba1d046f402cc60d01aaebf47f2aa590405488189984efae506376"
+    },
+    {
+      "timestamp": "2026-07-02T05:59:53.446Z",
+      "call_id": "call_pMxfEv38EH0lBUm6WjqlYtf6",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "d3914f4ff3242d650d7731779d2cc5da35f620484ba82f512fdbae9ff566dd69",
+      "diff_sha256": "bcdda01c796fb78e020d45f50750065aed7d6beff1a754158a028c4af6431914"
+    },
+    {
+      "timestamp": "2026-07-02T06:00:03.169Z",
+      "call_id": "call_p4SvnDilUee4AW3lVLVy1NGg",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "a8188c744f37ef68f62ad83b76d9f562bb7f78878c3d9276ec928fd51c7126f7",
+      "diff_sha256": "6be4ebc28cac408c9a512fe28c675fb689ae3ba50b8e33c1e9aece11e1b922e6"
+    },
+    {
+      "timestamp": "2026-07-02T06:00:20.574Z",
+      "call_id": "call_D44Rn0oUUT5vTqdz4EZcKEnB",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "b8d23d198d2ca5096ce89bff427d7d5c28bcb25cf6fa3cb969f3c2bf2ed5e4b7",
+      "diff_sha256": "ce7b05e594018bdbee648e21f6a3302b413f860f00999e78a765b0ad05d155fe"
+    },
+    {
+      "timestamp": "2026-07-02T06:00:38.302Z",
+      "call_id": "call_v5Glv6BuGbr2rJfUTxTG6mY0",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "57e26866273d9a4190f41a595609e939095a1824c68ee5b7d826fb081ac44abd",
+      "diff_sha256": "c65b64eaede2f77bf932919c50805f6ceaaf25925762e6c4d5df974dc055011e"
+    },
+    {
+      "timestamp": "2026-07-02T06:04:52.052Z",
+      "call_id": "call_nxpRYqP4g3PbVwUljNX5HAIn",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "9688c466f0bf353ed4a163ad0eac5fed0de7256fa0b47cdd0921d764be4d4aaf",
+      "diff_sha256": "a906e94bc07e83d4dbdf342df5c89191f8586d03ca00c7d2882f76cc7f9d582d"
+    },
+    {
+      "timestamp": "2026-07-02T06:09:42.838Z",
+      "call_id": "call_77gJizxXZoddDf78hPem2zjl",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "8c9a2a87766f9365f3640a8cdc30a97d396b26c7fbebfd79831529a67928a6a6",
+      "diff_sha256": "2c266e1fda999a218873dfb96130e9fb7625dcf0bd38cd7392a818c5c272212f"
+    },
+    {
+      "timestamp": "2026-07-02T06:09:57.133Z",
+      "call_id": "call_i3cZd0v7PBhcOvTEwkrc46rn",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "b792217ef3594a08b86aac71d41418764537594ad9bc2eeb00d10da644bc1f36",
+      "diff_sha256": "aa2a58a4de4aec6cf39ce50fcee5af5f083b0c5a1fd63a0856f0092910f82208"
+    },
+    {
+      "timestamp": "2026-07-02T06:11:14.291Z",
+      "call_id": "call_kQbWsUNuPdjR8z9tIbsOeA9U",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "9a8411b82f182bb204af47bb90a30e899b646789c11afd4efbd35b4d5376ed41",
+      "diff_sha256": "67fbcdfcbec822fd5d52e431d8d1bfdda837ba3ecba6d80da10fd17bd54978dc"
+    },
+    {
+      "timestamp": "2026-07-02T06:11:32.903Z",
+      "call_id": "call_yOJiXY2tdw8OxsKciJ1tWeLQ",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "b7965d64654fdb663ea6aa98666872e71ef0ca9228e08863fb362bbd783a1089",
+      "diff_sha256": "25e38d68e390290d6cc4e9aa8ae4303a182936032ae4cf11ce2ff57b4f961262"
+    },
+    {
+      "timestamp": "2026-07-02T06:11:44.529Z",
+      "call_id": "call_wIcS2s5gCums1hh4Obc9HgTm",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "19348b2608ada9b6cbe0a88a904916a5859bafd44ca3fee8e2ae5ec4f9f42699",
+      "diff_sha256": "cb5a4e49a72fcc7791d8937bcdc25b58abe35812cf14015a08a9376ea2c7d3ed"
+    },
+    {
+      "timestamp": "2026-07-02T06:11:55.426Z",
+      "call_id": "call_7d7Pf4akOejSkEIFNB55cJuF",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "71b8e3cba5bbf64552dadd33af2a1b01276d5f23dd9c0d940b065fc11bb4d575",
+      "diff_sha256": "9079447c9e7e0e556ecec2c33a8c29ef351cba99fa8a3d1a7b6fd2b3008fc50a"
+    },
+    {
+      "timestamp": "2026-07-02T06:12:05.973Z",
+      "call_id": "call_b1ihSNrtsXXogaKsYh0Ru0vG",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "0a0f395c97d066d900ad09a3e71fa6881b0633761dc254265a603070990f08c5",
+      "diff_sha256": "469ed49e7dd7adb9d1124c263175f75fa7781c4350cae9bdd3a6e6f59553611b"
+    },
+    {
+      "timestamp": "2026-07-02T06:18:55.218Z",
+      "call_id": "call_wzx3qNn6IyV0QSeO3vP8CLOf",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "36317aaec9961ca35411d638ad6e25ec0c8b816f6a2751c49b878f5222e4db16",
+      "diff_sha256": "236780af10674c49b5b7de1164a09b4d2e0f578b0cb972e7e2b3f3bd1b0cf746"
+    },
+    {
+      "timestamp": "2026-07-02T06:19:28.911Z",
+      "call_id": "call_38sXOHOSOa1ZTXDecesGZjbH",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "a34b41c20eafb117615e44a8b80ae419116c84e8734c94367458ee84218a8b3d",
+      "diff_sha256": "af17e91b650526f928087d31bd6bdcb44142ca276cdbd8584d422043104b595f"
+    },
+    {
+      "timestamp": "2026-07-02T06:24:36.905Z",
+      "call_id": "call_ARzFhp3EuB4ucs5L7lzJ3T11",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "ef36c06a6502a974fd901826babe47d2dbe3c4488c586d0c8ee83ee523499349",
+      "diff_sha256": "51612a6eefeda88ed483a839aa0a91097cfb3d47439d74f69c4c05a6f5f25b34"
+    },
+    {
+      "timestamp": "2026-07-02T06:24:47.021Z",
+      "call_id": "call_b91J6zcusOG5yR4tzLNgmGhK",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "d10b1b3847fa2fc3d1be2460405c35b7dc9653e21e5af18101d9b5adca1e655c",
+      "diff_sha256": "9344c473b343765daa6004ef52b59c4f014680f74b36640a43201967d49fd92f"
+    },
+    {
+      "timestamp": "2026-07-02T06:25:33.960Z",
+      "call_id": "call_AmkFhbElsssFfF1PuInOBMVo",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "99a2e01c416e370cd12230a9c294a7c0bba0f31886d4e69168c83bdca04e2939",
+      "diff_sha256": "16e7448faee0715f2aa153ff333391fda420013adb692624c9d262324d978721"
+    },
+    {
+      "timestamp": "2026-07-02T06:25:51.563Z",
+      "call_id": "call_gbNV2rjqdTLIwhYHZi9DQKfK",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "3bc97f008ee755476e302cee1909b97eb762e8c5dd6c3d80e727332d92bee50d",
+      "diff_sha256": "d6bbaace18500e94ec55e27eba1a2a36ade20be55199030d2ed924123ecda662"
+    },
+    {
+      "timestamp": "2026-07-02T06:26:00.326Z",
+      "call_id": "call_m9h567BeYvQDusagE9NzLg4p",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "b3b173bd84dfc96909b7ab0f14b394f4add2436150ee7a7d2eb1b339b1b9805d",
+      "diff_sha256": "3076bec0e03b9fff4e6a5ceaba087bb785c654c34e313c00d1a5441c87611aac"
+    },
+    {
+      "timestamp": "2026-07-02T06:26:10.923Z",
+      "call_id": "call_Iv0qodVOToPxiVa8x2CV2t7r",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "8df5cbf4debe0a686d906d1c888f45d89d6da84d68a7dcde3e4f03fb88c7c2b9",
+      "diff_sha256": "975a857eb925da52033fb24ceaa4a2a15bb9a5fb3370a8009e25a8d465e3688c"
+    },
+    {
+      "timestamp": "2026-07-02T06:27:01.844Z",
+      "call_id": "call_VTH9xFedwHsOg0KF0G4Y3GVj",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "a85d2342378f24d8cb9ee5d016539509326ed629446b8087903fce752bfa7ce6",
+      "diff_sha256": "4fea272c5d562c4b9a85091a083a9db49f935b2396f4e553cfdf709eda7ce3d3"
+    },
+    {
+      "timestamp": "2026-07-02T06:37:49.463Z",
+      "call_id": "call_xDrRLuHUR8VsZa6sWsVt02FT",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "725a994059a7f6b69e157ba83fbb51322c0b6019f92a84105f1c6366f9da8dc9",
+      "diff_sha256": "0676ce5446775791f11bd6a317df099e3c19b4d9e4934011fd6452caac29150d"
+    },
+    {
+      "timestamp": "2026-07-02T06:38:09.710Z",
+      "call_id": "call_v3VvPsUUlsySFhOLv6PtHZvA",
+      "path": "backend/src/time_regime.rs",
+      "change_type": "update",
+      "patch_sha256": "3708b1914d66aaa422d28cff91c9f3579a9b279646b0db0bf32662d91b81b7dc",
+      "diff_sha256": "755b19eb0e5e3cecdcf376fbeeb160e2e96fccb427e0ae4d18e02c3dcf1a59e5"
+    },
+    {
+      "timestamp": "2026-07-02T06:38:23.018Z",
+      "call_id": "call_22wWeKuQrol40lpZC3640hda",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "37272a60bd373c637dca5499f1009ab62e65fd753ea046ec09a799f303ca085f",
+      "diff_sha256": "d93f8147fe4ab2ce9fb93d5349ffeb22000b5557e2c9adc35e88b21224f6e6ad"
+    },
+    {
+      "timestamp": "2026-07-02T06:38:47.553Z",
+      "call_id": "call_YpfrT9tz0p1vbgNM8ue0RQ2G",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "8801a2b620d65e77ef21cbbb3d3a63f77c4bb0a637b5d7abfbf69793d5331faa",
+      "diff_sha256": "706021e50d1c3468ada66af363515f0a5322d5116d3bd240e80e1c37d5015450"
+    },
+    {
+      "timestamp": "2026-07-02T06:39:13.721Z",
+      "call_id": "call_5OVhSDyMPxt6fZMD5Mq4uEz8",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "b28acac641baafa3a23af64369046b0051397c3f3c8bd6cce969774175ef810b",
+      "diff_sha256": "83b67e16ca47e5cf4b0e669e6bcdbc3dd5f72b20c0e6871b905503fa3cdfb0bb"
+    },
+    {
+      "timestamp": "2026-07-02T06:40:33.737Z",
+      "call_id": "call_sSH9HuBE5eQFM8VpnJ3i8sV4",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "01ff7282e86e4fec84f2a336e2c27fbdaec3e2481aa228a15c4f93cb61edf567",
+      "diff_sha256": "d42ec96ec329f166d32f0dbeec88edf5bbb2328667714de2c04108badb55ae62"
+    },
+    {
+      "timestamp": "2026-07-02T06:48:53.382Z",
+      "call_id": "call_dCgA1EwnL0GB5CiB7M1uW7nr",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "8e4f354620b8ea8ca58a106282fafe92801e8afa179e5decd716093631021b36",
+      "diff_sha256": "7aab55b1b2c780f93be66dbb930cf1d56fdae94afbc2d7589b0e3680c48d5a1a"
+    },
+    {
+      "timestamp": "2026-07-02T06:49:27.542Z",
+      "call_id": "call_BuIdNA43KFab03qfO5Be9Qls",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "e22b5fc1ea5a3d960e4f56516bb008c572289d992775c432f466716e149376b3",
+      "diff_sha256": "769fa81e24fe2b8dd27f00f93e3e4aa9a0b8bb04e36653b454d61e571ce41fda"
+    },
+    {
+      "timestamp": "2026-07-02T06:49:58.714Z",
+      "call_id": "call_nWy9ndCttGav6CXjaNrDKMHQ",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "30e9051e729d562deb0fcf8e69058c3603e4d06867210238bc5ddb46126b94c3",
+      "diff_sha256": "42eb8307bab2be14c892bd422f1729f4ce64e8d7c8cbfa5aa01648d1091cd2d7"
+    },
+    {
+      "timestamp": "2026-07-02T07:00:44.832Z",
+      "call_id": "call_xKJfP2nut2BdoD0B1rNAZbN3",
+      "path": "backend/tests/state_prices.rs",
+      "change_type": "add",
+      "patch_sha256": "fde969d4c498b467a69b5cef2dbd1dbdb6603244a215bf39fd648f8ac5dccb02",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T07:01:38.789Z",
+      "call_id": "call_cgF7aIUfXxkHlwQLWVKe9iMn",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "9b67b125f8155221ecf8305985ab06d31266a4650d0ef9849ef11ef986f03226",
+      "diff_sha256": "941f9f806491f4ea62beaafa4b8fa2d28ac3263549894f3dde4ab7d4f72c475e"
+    },
+    {
+      "timestamp": "2026-07-02T07:02:26.218Z",
+      "call_id": "call_H960KrmzAqUIQv5vBLwdVbFP",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "69c54a2b478e61e3e028c5eef98f63b9268a16efa327fdefc2c683affa55275a",
+      "diff_sha256": "434f452260bbeef33a5d7e616530857eb4b08d7f39cace92375d1f9b284ce14f"
+    },
+    {
+      "timestamp": "2026-07-02T07:02:45.428Z",
+      "call_id": "call_VTcrio91NkmH4arzktPJifDR",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "a44086cdb5d2eaaa326ac03843e71f9a1fa6fbfe322bc3e1604e0b018510d096",
+      "diff_sha256": "6a9fa7f13e416045d519a63592a5ec0e911c0a5f31631165987419b90873dda6"
+    },
+    {
+      "timestamp": "2026-07-02T07:06:33.537Z",
+      "call_id": "call_EbcUTXWE0XewVRkRcjsrEKdn",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "21a7c0867fdd34f6cce38ac4b41270476ac269a486deb04fe17c26bdee3b81f9",
+      "diff_sha256": "8ddc485c14b7f93dd30154110f4cdbe7329ffc9e65bc50ed0bbbd94f9ab20a79"
+    },
+    {
+      "timestamp": "2026-07-02T07:58:07.412Z",
+      "call_id": "call_VmQVgo42UMME1GkZ7bi3yt0v",
+      "path": "backend/tests/state_prices.rs",
+      "change_type": "update",
+      "patch_sha256": "77543607e98b09760fae79ae545605b2a3bfaa0149a3449ff15a24a4bef41356",
+      "diff_sha256": "0ed8814fe6ef342110938863229a086344087ec1fa845d5df9a9d8a8eec596f2"
+    },
+    {
+      "timestamp": "2026-07-02T07:59:09.011Z",
+      "call_id": "call_tfqXTZFHk3bCZefrBpyVNRON",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "15e791f2c563e4a7a332316db2437a71691e2227ce343ec3e5a3d7fb7a5b3ddd",
+      "diff_sha256": "cb536b40dff7df2c3ce2a321e20172323ded042d7b2cc5bc091a7887fdb3f441"
+    },
+    {
+      "timestamp": "2026-07-02T07:59:38.885Z",
+      "call_id": "call_WNqIGNPm0rOlaF2mIiOFjNxL",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "24e3624c933b8ace565336fe759f3e4fb3c6a22f04debb7bb7acd6a3a637d22a",
+      "diff_sha256": "a0945987c16457219fdec1c0a5cde431fd24e406d71628796685f9f351706f49"
+    },
+    {
+      "timestamp": "2026-07-02T08:00:03.941Z",
+      "call_id": "call_3Qwo23fNUJuKUwgba67UvGvs",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "f729d3088e414e43bc969c7bf6354e04bb3db1d1027f59985b7990f1986a8b75",
+      "diff_sha256": "67acd00c40ad6938b5faff977f4483e86dcfc442012b31702247febd1da6ae47"
+    },
+    {
+      "timestamp": "2026-07-02T08:02:35.632Z",
+      "call_id": "call_Xtsdq1q0j4ic76q8iYXkVUBx",
+      "path": "backend/tests/state_prices.rs",
+      "change_type": "update",
+      "patch_sha256": "a23bbb2c6bc50ea7c93f070fedb948d99d63ef74404d3e83116cba2302a5c523",
+      "diff_sha256": "b46a4840cbfd692b3f2dde5ed1b3c7cccc904a2f194facd796e33bace7bb1331"
+    },
+    {
+      "timestamp": "2026-07-02T08:08:35.906Z",
+      "call_id": "call_0WNENs82kvxqWgRuPsRsAFwW",
+      "path": "backend/src/market_context.rs",
+      "change_type": "update",
+      "patch_sha256": "2d45f59db426d767b369c22a8de39c5e7cdd26628c72f9c4685d4b2d503bc218",
+      "diff_sha256": "7ca783f322def4cecd7501a9f7163062512d9f9c59d9113d6483dd8342a2e54c"
+    },
+    {
+      "timestamp": "2026-07-02T08:08:51.188Z",
+      "call_id": "call_fL6yCv47BQCSlTL5NJ0yaCs8",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "0a80e27592e37f75bf82cf5afcdd1a13d67c84df0e1f24e100fa888fc5814b67",
+      "diff_sha256": "9a16c09e8af66772eb8e68f1a29dc0208b49281765294458777ee0b35cad5314"
+    },
+    {
+      "timestamp": "2026-07-02T08:09:14.033Z",
+      "call_id": "call_LzNDnzHKMl620DpXNlsrL7Iw",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "3728106f8a2d108306043552dcb88604bcd032cd6de010e1741f5d83dac23b36",
+      "diff_sha256": "f9267ed9d5da6630fafa8c92ff288b954cee9d04b6eeab41fe621adc97c79d52"
+    },
+    {
+      "timestamp": "2026-07-02T09:06:21.566Z",
+      "call_id": "call_qNv9ARKoNTP8lmZSHYW652Gp",
+      "path": "frontend/src/realtime.test.ts",
+      "change_type": "add",
+      "patch_sha256": "c7fc60392d7691883d33bde26172dd6ddf32bbcd401f992a5e48835528455fe9",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T09:06:58.005Z",
+      "call_id": "call_t5XHgYyDVQ7802U1Rddk3MeQ",
+      "path": "frontend/src/realtime.ts",
+      "change_type": "add",
+      "patch_sha256": "c5a7bcd0998a74f3ec4bbf82ac21f9838e2241837a124758f582d344cc4099eb",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T09:07:13.128Z",
+      "call_id": "call_fXWuVpNudiTNl17Wp6HcaIb0",
+      "path": "frontend/src/api.ts",
+      "change_type": "update",
+      "patch_sha256": "e082e62add41a341cd8a86796fce0be6f5046f23f9802f1371582c1f40bd2a15",
+      "diff_sha256": "14a23f4906bc24576b78357acb13b1fbfc2bd9c59c9ee8b18a2458d020b2b287"
+    },
+    {
+      "timestamp": "2026-07-02T09:07:28.197Z",
+      "call_id": "call_1NRkI1oGci3vio3IeBzafj0a",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "47ea3477668e0d0dc473c6a2f6d0c278c8cfe6cee85db67bc6f933a7e578f80b",
+      "diff_sha256": "0705f57024d0cb5b6dad0d5fe65b72beb0ecc721739cc0adc8edb8b9318ebaf4"
+    },
+    {
+      "timestamp": "2026-07-02T09:29:14.278Z",
+      "call_id": "call_GrSl527YHvhDktLOrFohM5fL",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "d0803ece050d23b4ab792566c8e77729cb03e889e5629044bf15dd84b233ea00",
+      "diff_sha256": "78c3fbffda32485726d62112f84ed3f02dd2ad0588c529ff1bbf1b50b949ebfe"
+    },
+    {
+      "timestamp": "2026-07-02T09:30:06.282Z",
+      "call_id": "call_sY1YVRzABP69VGdG5SVSRGoh",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "28fb1c8f58ee1c6791e475c8207c070a3561948b96cfd06d3230f007b741d2f6",
+      "diff_sha256": "fad17aed9dd1b4fdb1bb2c5f8592eb36264c9903a17516dfcaacd2671c196453"
+    },
+    {
+      "timestamp": "2026-07-02T09:30:44.678Z",
+      "call_id": "call_OUwmRVz8qkVFGBenUr3AX0Bx",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "86442853bfee5050a1f1303fdbb24fd6e7f7eb208a8926caf09991a23b99d4e1",
+      "diff_sha256": "948a23c3e4636f0937579a1dbd112ad172618b260a7c586dd069069543a46ce7"
+    },
+    {
+      "timestamp": "2026-07-02T09:31:00.365Z",
+      "call_id": "call_spYzTA1EGkPpai47AhXuOMXZ",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "1c938b83b9790bb4f2c1893bc191f7ef69d923f7ec07f3483e1572c22302efeb",
+      "diff_sha256": "01761c5b7f65d48bc052cbe56ae925254b3681e8dbc903f6ae8633216340803b"
+    },
+    {
+      "timestamp": "2026-07-02T09:31:22.969Z",
+      "call_id": "call_nSyOCGlxqg0DbsYYy3aXTdSJ",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "b35846787306d640b0f69a20e5cdf1be319753a8c6406f591807c953ca8b4c7f",
+      "diff_sha256": "5f231a21992a3de8e9c93388c972c3290fb8fb5fc5b8cd10ca222dbbae916c20"
+    },
+    {
+      "timestamp": "2026-07-02T09:32:43.601Z",
+      "call_id": "call_N8zwsEQIg0VzZbFXTr6E6sqU",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "5ae70365fb77f7153e8da4955efbf26208050620c0dea54a9b3988eb4f944a3b",
+      "diff_sha256": "374575165b32f4c433b2d011a48b2523bdf3bbb71c7b47a967be9a743b69cbe3"
+    },
+    {
+      "timestamp": "2026-07-02T12:15:49.727Z",
+      "call_id": "call_zkpJvIsrYaCeWwLLi86g04NH",
+      "path": "backend/tests/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "f0d7a6481c482dcec0f12853753ee420780c263e9de2f2ca2aa5aa737eaa6d57",
+      "diff_sha256": "2a4915ca1c843296addeba4053e1883d477f9de42ee948c4a028bd675986f5fa"
+    },
+    {
+      "timestamp": "2026-07-02T12:16:30.001Z",
+      "call_id": "call_oBmDioN6THdgqiOxprtJbidc",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "7b41e40a8e49c898e198bb5fd9e38d532195bc67c0d599b450ea16a11cacae80",
+      "diff_sha256": "4ee9685205f7c4572aa606a40420883429bbfb84d04afeb8381caaffe96c7b89"
+    },
+    {
+      "timestamp": "2026-07-02T12:16:38.955Z",
+      "call_id": "call_Lithp6wD0SvGltXO0X1oSIHi",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "bbebe4b6ca7c687a6fd6a1677e422a40d1b7604198309f6b4e573f055c0f714e",
+      "diff_sha256": "7cbb676c0e2c1ba2035fae8ea8e922280822ed82fc0c11853b737ebd64d3c8f8"
+    },
+    {
+      "timestamp": "2026-07-02T12:16:59.147Z",
+      "call_id": "call_rhEOQo17S7qa3otRg3qv7hfM",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "c0a549c32b62a94eb4c53f5a2b9a523d765adb579ac762ca32c2f9f41292e3d5",
+      "diff_sha256": "41d747332e72237539245fb2259d3b469532209d8ee68f45f162744823137c32"
+    },
+    {
+      "timestamp": "2026-07-02T12:17:07.593Z",
+      "call_id": "call_YjsxsG957rv3rTvlJgHugHro",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "81eef3439084a65af9b2b1266bf8990a35a718376919e5932a567368ad41bda2",
+      "diff_sha256": "61e6387510f21074d57d02faa9cac2980b89d914c19fc2b55402b392c920d315"
+    },
+    {
+      "timestamp": "2026-07-02T12:17:54.214Z",
+      "call_id": "call_yREBLm4yUxVPpGvLgUhPlLl1",
+      "path": "backend/src/domain.rs",
+      "change_type": "update",
+      "patch_sha256": "b2d8773276ff2daf5d15b4361d56acdd69e76432e5f2938511fb55bd0bd528c7",
+      "diff_sha256": "fababb64f152fddc327800818643b081e0c355c5e881beb8226388b1186f13a3"
+    },
+    {
+      "timestamp": "2026-07-02T12:18:28.686Z",
+      "call_id": "call_tGSdfiHFbNHKAQrmEfInUgof",
+      "path": "backend/src/indicators/scalping.rs",
+      "change_type": "add",
+      "patch_sha256": "b7dffb5a26ed1df6d0903d7d77638beef5a4d76b883453ad02cf0bc9ac56ff2c",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "timestamp": "2026-07-02T12:18:36.349Z",
+      "call_id": "call_u4NLmGklwB51ZVzRCRKUAggD",
+      "path": "backend/src/indicators/mod.rs",
+      "change_type": "update",
+      "patch_sha256": "c294a8cc2b97fe836d737e0625065c641a66e13c5f0252756a60b47e48e91d1a",
+      "diff_sha256": "cdf74abb07a5fec6241c521cf1a6c2071c4f11dbf8cc3c809409e5d2d63a316c"
+    },
+    {
+      "timestamp": "2026-07-02T12:18:55.988Z",
+      "call_id": "call_Lcru7QFGggcpn5gcqH6SXTbj",
+      "path": "backend/src/runtime.rs",
+      "change_type": "update",
+      "patch_sha256": "1c3be9fcb0c47ed1a3e00d608645c5fba32b3a9edb7a7064686dff61c01424a3",
+      "diff_sha256": "9b8084919cc5dfe44306e52e60752b40658b0fece3c81ff7345b8f7949396b0a"
+    },
+    {
+      "timestamp": "2026-07-02T12:19:13.794Z",
+      "call_id": "call_NbifvrnzR3fgH8k27KgkT4mf",
+      "path": "backend/tests/alerts.rs",
+      "change_type": "update",
+      "patch_sha256": "21be3cfa3239a626ffe1470592d4a85d40f42caf52b8144e2f324720d15dd75f",
+      "diff_sha256": "2fe689271e3c120e1a3e33edc60f1729170ebd6b69bbcb6ab40d9ead431eaaa7"
+    },
+    {
+      "timestamp": "2026-07-02T12:19:22.621Z",
+      "call_id": "call_Pz3jNigsOzJTL7QNiBXskWSc",
+      "path": "backend/tests/server.rs",
+      "change_type": "update",
+      "patch_sha256": "f88a2ea59dc3e4e689cd10ab90b766b3b8e41f544adcbdcf508db53b35a33939",
+      "diff_sha256": "6fd0af7cfbfd6e0074e9223cf8c5638c037f41e210bab489dadcabcd678616e4"
+    },
+    {
+      "timestamp": "2026-07-02T12:19:31.832Z",
+      "call_id": "call_m90tkdq0RnEOBsRLJdmEMEyb",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "ec831ddeab01579640e0df6a49102117fef78f6f4ebd3b2742fe19e7afce217b",
+      "diff_sha256": "eeec48f29753050c68f782070781bf2f95aa5bfe519991c415ffe16ab9420774"
+    },
+    {
+      "timestamp": "2026-07-02T12:19:45.342Z",
+      "call_id": "call_3yj2FV9hRgxlQgIBQenjWHLi",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "5070fc0f9459c2962932370509c06045c327597d457efca3c02b7d48c8b5757c",
+      "diff_sha256": "ab5c5d8572832033f79cd088245cb184202cc3df352bd6dd87d45ca6fc31eb33"
+    },
+    {
+      "timestamp": "2026-07-02T12:19:55.381Z",
+      "call_id": "call_9A9fiugEEflIsmXl41FKq2tC",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "7ea1075aed232952c77441cdc6143039b8534e277bb4eef73612cb30f8b544d3",
+      "diff_sha256": "4325f3af0e35462119ea01abf7cee9e99ccebfb21fb9520909dfddd84f3a3a48"
+    },
+    {
+      "timestamp": "2026-07-02T12:20:19.977Z",
+      "call_id": "call_3PMxDuKCYHa6tGDWgNp1Ol5x",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "03d5d7baba1aeaf8e033b281c95aa24e4bee19a70ffddb0f8211531401230e65",
+      "diff_sha256": "5414725c776a1131bcb95f1e97ba0785c66b5bd2e08d2293bf3f58e659c369a1"
+    },
+    {
+      "timestamp": "2026-07-02T12:20:28.331Z",
+      "call_id": "call_xLH6pN42pyAoLBhmiSb3rNr3",
+      "path": "backend/src/time_regime.rs",
+      "change_type": "update",
+      "patch_sha256": "854103ea9cc604b7bea6462436446a0f6e3c6e147edc7efba37b6940f8ea93c4",
+      "diff_sha256": "8f74245eb2cfb9f28ac57c28acc1201071cbbecfce05e8cbc28084e80b368f35"
+    },
+    {
+      "timestamp": "2026-07-02T12:20:39.058Z",
+      "call_id": "call_xcRgczpdNZSsvXQj6m1hq4MW",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "778a394b5da828fe46670a5f2a19028807d0e35a6723e54c7b352c4a83050227",
+      "diff_sha256": "774e369a01d3209bd9e6df61ce46c4a545f6530792ed023f3e627260d2a78d4e"
+    },
+    {
+      "timestamp": "2026-07-02T12:20:58.731Z",
+      "call_id": "call_8spvD9NcG5eoxSDmApZVe7J8",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "58f4033d541979d8aa8e6de8352189c90a1211b9cfcb8a37495a6c4c69dc29c9",
+      "diff_sha256": "971d8f3538ad4f469655e8e1707674a3296b185d5c20c4f782a910fe20d190d3"
+    },
+    {
+      "timestamp": "2026-07-02T12:21:10.397Z",
+      "call_id": "call_SJwcn5x6TUDsCvidMZ03mfT5",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "ad8d1be6baf046cc93a838671c1a2827ba40f49ef6a0e3b156eabc6ebf968443",
+      "diff_sha256": "400354e2d9c63ef6fd5adb4de0693c89ecadcb7aac293777a8d25f3b29c998a8"
+    },
+    {
+      "timestamp": "2026-07-02T12:21:46.106Z",
+      "call_id": "call_MxZX4XkTqEOkjpNAipIAU838",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "f91371bb911c7a264be9df07ac48c48489aa7448366c176091c30a34180c9875",
+      "diff_sha256": "b982c42c637ef0f607f23be41b838691cd03e199459e077442a4cd31c664df53"
+    },
+    {
+      "timestamp": "2026-07-02T12:22:00.172Z",
+      "call_id": "call_IToR6lAU6WcALHAC6W4oQ7we",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "1ddd89839c57a17e8df5efc6b2dcf440dded63be6f6e2b088e7d6acb0ae4efbc",
+      "diff_sha256": "eabe893689c15a5f6a32f4df2eec3eb9bee106c18fd342ec608115a879819f78"
+    },
+    {
+      "timestamp": "2026-07-02T12:22:21.543Z",
+      "call_id": "call_udGRjYG5D02T8dmI4DpivXpY",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "f69bdea0c58da685a3e82e5c71c44ee4f292f190fd8204626e2475ee0d747ada",
+      "diff_sha256": "1ea75d23bb2049308d9ba3d39a941169701dc1ceb300ae1ae142a11e79ad5dc1"
+    },
+    {
+      "timestamp": "2026-07-02T12:22:56.257Z",
+      "call_id": "call_swE2AXqSRiZrl0zBcxnvZkqR",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "c4bdf106c413d41b841ebf93aa8c349935ef74e362f89fa72280f99745ac1c4e",
+      "diff_sha256": "92cd8c147ee03d8190662ed6da7c757681b3a8f01603aaa085759581cd3ad6d4"
+    },
+    {
+      "timestamp": "2026-07-02T12:24:48.206Z",
+      "call_id": "call_qHdJNZCfna6esotaeI7KBZWZ",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "bd96756423e893ab6ad93f2ad3f6b0cafcf2820778d94121fc0a2a6f45393f96",
+      "diff_sha256": "49964831dc746276fac1c3d2c198efc0cc13a1f9cc04615c1f37b1e0dae72894"
+    },
+    {
+      "timestamp": "2026-07-02T12:24:57.055Z",
+      "call_id": "call_BtkQLw1Q8av3XtM9bPNJUAum",
+      "path": "frontend/src/notifications.test.ts",
+      "change_type": "update",
+      "patch_sha256": "538b9e91e553e227be4764bb0a66b2045a683162312ac3af6de2613c3aa39788",
+      "diff_sha256": "75fcdd5cdf5a734f9bf03b5d22de63e5712676d211099c043fa9c51c4e90d7b7"
+    },
+    {
+      "timestamp": "2026-07-02T12:25:06.608Z",
+      "call_id": "call_y5x9negi1hAeMJlmrce16YDH",
+      "path": "frontend/src/uiFormat.test.ts",
+      "change_type": "update",
+      "patch_sha256": "0c904749f87bec9f53d74fa281488a4ca0fddf9784c0c6e6b7d4475944d50ba9",
+      "diff_sha256": "b67b6cb3dfa9ef0acb95e98f86fc881e3a61a29d6e4080a855999e9487f18a55"
+    },
+    {
+      "timestamp": "2026-07-02T12:30:43.374Z",
+      "call_id": "call_2Ck65ZYBQTAMshH6pZDTpM5M",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "e901b1ec1504c80d0febb39ff2804c1418cc50ac04083da8b012569cc947f3bb",
+      "diff_sha256": "b7d995aaa81d4a98b118b130f2eceb1958536cf5e32ef62577cea89af42d73d9"
+    },
+    {
+      "timestamp": "2026-07-02T12:31:27.995Z",
+      "call_id": "call_hZNhwMkO6Gnc3g11FwGvUd5X",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "53f36e1cda162575159af3da8a4ecfb164f39ed89bf27b08c4397a29b1c1647f",
+      "diff_sha256": "e007dc738ad7a493c0bf18e1383a13af5526ffa9bca8215e6d5ba1eeb4b95a25"
+    },
+    {
+      "timestamp": "2026-07-02T12:32:33.157Z",
+      "call_id": "call_q5LcFGzMQaDbFgjEuLj7bd5Y",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "7d186b00b3e6623a50a4ab848f596549c73d82ce38b16722d83155fdde2404dd",
+      "diff_sha256": "19593c0b7d15e9dec440cf65a270f3afe219c7a331b8070f60af436ac150198a"
+    },
+    {
+      "timestamp": "2026-07-02T12:44:27.913Z",
+      "call_id": "call_WDbwJcWR6svaicgpiNvEA8H2",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "ba141ef22194108026f5863f215d883e1ab305a7bc90a20591ed31f1bf611785",
+      "diff_sha256": "6956bb85b4dfdc8a5d86cdd0f24e23473b69b4eeda55ba4c75d45b87f650519d"
+    },
+    {
+      "timestamp": "2026-07-02T15:58:07.875Z",
+      "call_id": "call_fhKRc2yrlWeV8aWSiTU6iKkC",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "68d126ecac0902dc76d8737d0e6745cb2a513d6c79b89dc2d7b2f280ddf4202d",
+      "diff_sha256": "0003027a95110b4e799d4a4cc0886c0aff154f39dbea129c2f92dd41c9d07b54"
+    },
+    {
+      "timestamp": "2026-07-02T15:58:29.821Z",
+      "call_id": "call_sGCbHo5SXB5PrnN0bHZeeCy5",
+      "path": "backend/src/domain.rs",
+      "change_type": "update",
+      "patch_sha256": "2b47537de36a4e8fa83a894a40d79529b0be0087974524afba59cd6da41e2a66",
+      "diff_sha256": "146ab5b4669b69e2ef7a879138dd4224e8397c1b9ee3dab694830d3b730ce3f3"
+    },
+    {
+      "timestamp": "2026-07-02T15:58:46.225Z",
+      "call_id": "call_xZwPAjIb8rv20xdSZ254MCwh",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "14d57f7ccb87534de092b790cc62de85d9fc972c92705bafc853696d29691341",
+      "diff_sha256": "1c0ba9b36257c28c29baf0e3bc52c5b2658b2aae381e9dc453315401dde17524"
+    },
+    {
+      "timestamp": "2026-07-02T15:59:35.555Z",
+      "call_id": "call_3wjq033sluInu3DbqrM2uW8u",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "1cf2fefc2b0a63971e746b1cb458a95a8bfb470f2229312587a5f2d2038a08da",
+      "diff_sha256": "2c21f07ccaf3f7df0bbfabc9c4109e53c3c4b053de1275254798eca7e4d64616"
+    },
+    {
+      "timestamp": "2026-07-02T16:00:11.471Z",
+      "call_id": "call_tTN9ykI0xiUZq1HsaXLvc4RQ",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "d6a9b39b864db67705e8ecc587fa32bae27a6e785b62d0f504fd9b0839eae8d1",
+      "diff_sha256": "cfd47c62ef9cf8a04219fcb9748d82185e6fb235b1a700b6dc6253a4f0a77d12"
+    },
+    {
+      "timestamp": "2026-07-02T16:00:34.123Z",
+      "call_id": "call_4j1kKOIdcFJMRiiKjISPSC9K",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "337aa536b872d976837c5df5864d9e73e23da1f399cfd17e9e8e8ab6946bc4b4",
+      "diff_sha256": "9aa3c06055085b538092e83d6f42a8d28251e7b189a0aebedb27fbe13a87518a"
+    },
+    {
+      "timestamp": "2026-07-02T16:01:32.649Z",
+      "call_id": "call_Rsire6RHwRO6SYSCyqVz73Y4",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "4bdde5da7bf36095316b704ab0421a944c734340a6742d917bdc54f7f45bc5f1",
+      "diff_sha256": "72ab02653532a9417e05be3fe2fcee85594b49022f5e83dbde3d4f86686988b3"
+    },
+    {
+      "timestamp": "2026-07-02T16:01:51.706Z",
+      "call_id": "call_3jQSjtOmjRGnS4pWWweWtMXD",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "5fa82102a2ab68974026023876107cb9891683abb25b9732e242cba8025c2b75",
+      "diff_sha256": "c8d8da1336f4975f7259ff163cc8103f51be9f1afce0d62d86865e18d132f7c2"
+    },
+    {
+      "timestamp": "2026-07-02T16:02:21.193Z",
+      "call_id": "call_SxFJNy4tlz3EnjUIcfbhqOS7",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "44c831796e102825a234898f5413cd364cd77eb9dcd4b7e03dff7aba79e222e2",
+      "diff_sha256": "e6064f245f15ee7fa29c749906407cab59a53bc1ff26f0166304166511af1600"
+    },
+    {
+      "timestamp": "2026-07-02T16:02:41.053Z",
+      "call_id": "call_Y4r1i2DlfVDXqofBHKjpkbVw",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "2f93cbe1c0285e1715a1360758c45f61bfaa5000ed8223b5ca9ffc19b7a66950",
+      "diff_sha256": "61294ba497f9aa77383b6e6fad2a34617a418ca649e5bbe5a5e3ae25948dbb89"
+    },
+    {
+      "timestamp": "2026-07-02T16:04:54.323Z",
+      "call_id": "call_XeG63nri0iu4gBrkfNQxzpjX",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "a15cfd1978ae5549b53b0531c1235017e66516f7a14781cee0afbb181c490a2c",
+      "diff_sha256": "e73949c8f86f474187772e810a21ce722c0b409ba8d1dcb0e8dd085a34b77fa2"
+    },
+    {
+      "timestamp": "2026-07-02T16:05:03.002Z",
+      "call_id": "call_9uKKIpTqWvcea3eo7IfhiCXN",
+      "path": "backend/src/indicators/patterns.rs",
+      "change_type": "update",
+      "patch_sha256": "90fe0d5f2447bebe7b93d09eb259d51c4b999805dc959ef84413612690742ac2",
+      "diff_sha256": "30058ae21e7b2fd4c0f760985ceefd61c8092a4a5f50ac6d8a26090ce28dcd3b"
+    },
+    {
+      "timestamp": "2026-07-02T16:07:06.310Z",
+      "call_id": "call_eBR5hEUclEsitgGbQHdJWbpP",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "6414f1771bd2732add7a8042bbc642317cb4615c068623459713d6a73e64bc30",
+      "diff_sha256": "1f9ee8e9e96ca61e963ecc46ee073bd567bff72a562f1ef935298e0d36818f27"
+    },
+    {
+      "timestamp": "2026-07-02T16:08:25.623Z",
+      "call_id": "call_Yq5U15LRcz3YJf6xLsXPtf6B",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "fcd677e2fd34d2f5905c69aa66738467cb9ca3e9cc57d49c29148fca3c99ca68",
+      "diff_sha256": "d49dda3bc70224c7a35dc24d77d776c1dd2e7bfa436b670d9ffe0340d5cb1f75"
+    },
+    {
+      "timestamp": "2026-07-02T16:08:33.571Z",
+      "call_id": "call_6hkvUiB6QBCsxWSGcG9fYKgw",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "584abf3deda82264bc223b0a14b5160dc1f5d122f01c0f450e12406ad2073f73",
+      "diff_sha256": "79b67bfb3cf276f8f3aa73d345dd82a47392e4a84f909b8568ddf67b1ec79dd9"
+    },
+    {
+      "timestamp": "2026-07-02T16:08:43.346Z",
+      "call_id": "call_OS1ZpPBeS4B9I3qPBru9vMfS",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "9b708cd3ff9d202062b189aa19c40b6c827e9ea252fdb31a2e00bcfc6dd81bd8",
+      "diff_sha256": "7371d99346f278a2aa61d70bf44aa41daae7ae11b2cb231aac26be4982d5f3bb"
+    },
+    {
+      "timestamp": "2026-07-02T16:09:02.813Z",
+      "call_id": "call_TNeHTyOx7S9v2RDdnRQ7CS4V",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "f371aa925857c073bdda146f4d951bae9e52c9c143fb04459de827a33caf72b3",
+      "diff_sha256": "c63468aaaac0f857fc1584510b94bbebdfefdbb2eaaed45d0625a0fc5d8bea28"
+    },
+    {
+      "timestamp": "2026-07-02T16:09:29.802Z",
+      "call_id": "call_xQkakIdnnVNBfs6jxm2KUl46",
+      "path": "backend/src/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "dbb4f76b9965a08412cff54334da6208925734f9ba98b1af988ef29d8ac209b3",
+      "diff_sha256": "d05204be0b51d3d866dbc228a0f34b1dae34a581bfc78f55ec699bd895909f9b"
+    },
+    {
+      "timestamp": "2026-07-02T16:09:53.278Z",
+      "call_id": "call_Om3CZ1J5jpjOivjzTRcCDcSd",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "6d6b189af4395dff910563cd2026650971e4161b0bab1019fae94e8484c2a27f",
+      "diff_sha256": "cfc744aa86bf3e2fe60c62f6b3844829a69582ab395ef350d55d4fb242b22f25"
+    },
+    {
+      "timestamp": "2026-07-02T16:10:21.289Z",
+      "call_id": "call_twHqoICoeYjLpaC2ZTIJDc4E",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "4ab8c36557a1b1a66ece9e6e0837eb7604339d3872ce6ad39dbad6d42692ca9e",
+      "diff_sha256": "f4a78cb4a01afbbf5e9fb315387b5cee1f783b29493f204b7e3c5f2d2d0da93a"
+    },
+    {
+      "timestamp": "2026-07-02T16:10:35.905Z",
+      "call_id": "call_u5qAYekRamhNhJ41giIJPm15",
+      "path": "frontend/src/SymbolDetailPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "3fd64f3f3820721305f91f0f6211046d5533a46436c07db2d7fdd5a1bebd1853",
+      "diff_sha256": "54630edad6d5fe82f8c3f77c35b11bbb8e69261e18eb08b902a10fdc1bd59a80"
+    },
+    {
+      "timestamp": "2026-07-02T16:10:43.843Z",
+      "call_id": "call_1ME5cdltQTyYEH8mPZm5OI3P",
+      "path": "frontend/src/uiFormat.ts",
+      "change_type": "update",
+      "patch_sha256": "55b203cc6ea5c65f00a111e117a98e4d765a6e8c33f173e7ddbb35f15ede79f9",
+      "diff_sha256": "c8d0057f2c7537274dbb5b9b9ab094e8de286658a011b7950788c803a68adf18"
+    },
+    {
+      "timestamp": "2026-07-02T16:10:52.632Z",
+      "call_id": "call_sRMCP0aX7Lbw7s4Zgr2zl0zu",
+      "path": "frontend/src/ChartPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "9c12ddbc1c25b568a49372838bcf01192ea321520450e22f019bb19b79893e3a",
+      "diff_sha256": "01eff463a7a5a1af7ecb08e730b31c535f20717607482a3dd4f5741e24f6f0e5"
+    },
+    {
+      "timestamp": "2026-07-02T16:11:46.226Z",
+      "call_id": "call_PXHGRt6eKBdn1vs257gIPFTD",
+      "path": "backend/tests/domain_config.rs",
+      "change_type": "update",
+      "patch_sha256": "b91f18d0bb56579225b94394e9a3a34a6ee15ff699125f6809e56d64e0c9ab2f",
+      "diff_sha256": "27981482a162362cd0e41fd0ebcdfeb4cae699381229f52662a94075eb96804a"
+    },
+    {
+      "timestamp": "2026-07-02T16:12:17.927Z",
+      "call_id": "call_hdKJC6h3FnVs689I6uwmJ7he",
+      "path": "backend/tests/scoring.rs",
+      "change_type": "update",
+      "patch_sha256": "96164600b8ac990a514da5ea142c730cb72a4276753d4781e5daa67ce60b1980",
+      "diff_sha256": "a76ae07528988bd94a925e49c333312d74f968e2265376f378dd88425b676108"
+    },
+    {
+      "timestamp": "2026-07-03T02:07:30.040Z",
+      "call_id": "call_Vb8mMMrJNrPNuZxvFNN7cnjl",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "84026cbc3d71f44118c8e95db8b5e87c579a2b408b7d79c21993f076dfe4ca5a",
+      "diff_sha256": "e513172a2beda2edc956c142145c847701ef8197a785fe63e81eed5f04127a08"
+    },
+    {
+      "timestamp": "2026-07-03T02:08:51.859Z",
+      "call_id": "call_AGbebgLgHAA58D75D4gMVEFw",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "716de40edf0fe69080993f4e2ce59482a96811619d6cfb5dae5e24f6f5576322",
+      "diff_sha256": "3efdf778f778a72125f725f1548750d04b2ff60b816fbdd1a25acc77f7c5dbb2"
+    },
+    {
+      "timestamp": "2026-07-03T02:09:30.620Z",
+      "call_id": "call_CyH3RhV84ayCJlksGesFpL0j",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "1d0e829508c73461bdfc20c1dd37a4e40e2b901d6f9dcdaa6f4209d67fe9424c",
+      "diff_sha256": "ad15487b5308e8bde8dd00ddf0da2e3e8446bb90fde1f26421227266a72f929a"
+    },
+    {
+      "timestamp": "2026-07-03T02:11:48.088Z",
+      "call_id": "call_0p295I7P0TtZdEcWkrRl4Xe0",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "d9ce043c967e79a281bc161faf897a949b969ad701c29eae8750f078b6438c5a",
+      "diff_sha256": "3a14845e3eb8516665acbf4bfd8c28d2af702af55424484ab1e1dc96c426cac4"
+    },
+    {
+      "timestamp": "2026-07-03T02:12:25.718Z",
+      "call_id": "call_D4JaC9CdpFIKfivCpXZEeGum",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "43938f7565864a3fa687793de1b8e9c5f1c87d1271d9f0afbd6f0132f2e854e4",
+      "diff_sha256": "a6d2399a45c44b6c525643d0c77c9aeee705a2213535ad29ccdce9ceee9a11e1"
+    },
+    {
+      "timestamp": "2026-07-03T06:14:51.840Z",
+      "call_id": "call_poGOJvnGre4rHd3v2yudHyqR",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "973b013cc5f52e54d87483176cf0d9ccda18599591656fce8f9f161f799f31bd",
+      "diff_sha256": "7a89315f7d6a63e24f7eaff50cd4c76ef894d2b38291f27855ab5e0489c77ece"
+    },
+    {
+      "timestamp": "2026-07-03T06:15:30.590Z",
+      "call_id": "call_qmBTtDXh08CtNhKqBTfxJxHf",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "024a093d67514959050375cca8947d80246d95b18baeba852f2cdec3d741ea9a",
+      "diff_sha256": "5bf6c1bb1f398457deea7b691eacc8b1148ee3a5e7fc6b006569b2857c048b0b"
+    },
+    {
+      "timestamp": "2026-07-03T06:15:41.769Z",
+      "call_id": "call_QapmZePSGEz8dZYN5n7b1pRA",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "2248bd8c861c380c92849fb3b54c4b36fa202d4a865231de0f7c61ab8ac41bcf",
+      "diff_sha256": "fb62f56075fc92af56ffa20daba03ef81f04449429fc0203bcab808d98df5d0a"
+    },
+    {
+      "timestamp": "2026-07-03T06:16:03.820Z",
+      "call_id": "call_aEi3anjVwyIKXqeQpUe7sInl",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "02210d23029d1687197256c02ef8320658325f03202d0ce2171ecf7363d5fea4",
+      "diff_sha256": "64de17d17f39ed4f9d91eba87156af93bad0c2c8d697f72b4c86f6826dccc205"
+    },
+    {
+      "timestamp": "2026-07-03T06:16:26.169Z",
+      "call_id": "call_3ddmbuumfd5Utdn0mn5IVAl8",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "aeb6543e29b0c11fcd3d14997c1972f9a96909e4e072c8500a3d95dfe36ac0f2",
+      "diff_sha256": "be4d36402bd6e6036a97a80fc8879219ec09f36d17a49207a84f134bb09ae30c"
+    },
+    {
+      "timestamp": "2026-07-03T06:16:48.923Z",
+      "call_id": "call_HHG7kyre5EzqqhEZchRSGHEH",
+      "path": "frontend/src/RadarWorkspace.tsx",
+      "change_type": "update",
+      "patch_sha256": "c040953d4a84000620d04b43111308487338cf90b8e939a2b578d91e01e9909c",
+      "diff_sha256": "76a314469a8184f3defe8b716c6eadacc8e8765bfc7d52d56fd98fcc9a6d1531"
+    },
+    {
+      "timestamp": "2026-07-03T06:17:08.013Z",
+      "call_id": "call_qjxNDziRTKLqklJsbwej3BLw",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "4371419f5ad05848f2bb7fb8e2f7ad8c7a4b1cc5dafb87c9651aadf1f6c42650",
+      "diff_sha256": "1fa728c0c99b4395214c94808d3fe9c4bda859b063065f136093b0ce6345d972"
+    },
+    {
+      "timestamp": "2026-07-03T06:17:44.178Z",
+      "call_id": "call_2FH4KTydj1cyxiEJfyp6C949",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "5ad75b028d040807fd6c8210ad25468bd8616a6f3fdd31fa13bc6278de4ff30e",
+      "diff_sha256": "dba53e607d5b36dd9775003dd7801315a5d8e8d97743684eca443025057ac930"
+    },
+    {
+      "timestamp": "2026-07-03T06:17:58.378Z",
+      "call_id": "call_u38fVk6Abubh9f24KOtjMRJZ",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "2fb62de9843152a08dd97a611984d4a88fec1494e44eb243177d8dda29f9f65a",
+      "diff_sha256": "e47074c0c494d4b5c0f4ef67969497253085385880986c592e69ec142a5b726b"
+    },
+    {
+      "timestamp": "2026-07-03T06:18:44.728Z",
+      "call_id": "call_IJP2wXWOo6sE26nxVhAzCA1R",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "7fb81dbbdaccb1987c7fbeb221733bd0978728c497201877d71f372909f74df0",
+      "diff_sha256": "580427a19e8f6baad3d11841da16dc8b828d7468a9b882576050cc93abff3dd7"
+    },
+    {
+      "timestamp": "2026-07-03T06:19:06.459Z",
+      "call_id": "call_zmldsY8IZnMFLcOlVriRWHCh",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "2bf321aae51fbf5f3429f4924616545e7250c7aba342f10fa3d1804e95b3a266",
+      "diff_sha256": "fbe99523fe39d3a094c626cebc92be0754e025f1188998fa473a24d3b36d2cfd"
+    },
+    {
+      "timestamp": "2026-07-03T06:19:45.076Z",
+      "call_id": "call_M4QpU9mO2gocDDPDBVATaidf",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "2a2ee7a62babac4c541cfcf41e2aff7497d6cabe625b7348a2331bd9328a89a4",
+      "diff_sha256": "bf2ece956330cc96c81c45feea3ff93fcb9376069a9bdbfafc36b1c19e0da237"
+    },
+    {
+      "timestamp": "2026-07-03T06:54:25.393Z",
+      "call_id": "call_y5QlCijSlIWqgjaAn3ulApov",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "ff5e98a741e3f89d792fcd5b8a20657cfdac1c830a289ac30136644b0b588d92",
+      "diff_sha256": "db469a0ea3e8bd7d06df4915f73614b2434e2480e6bca31dbd13a7ff6e878447"
+    },
+    {
+      "timestamp": "2026-07-03T06:55:30.180Z",
+      "call_id": "call_gIFshmoH71otdPbZXftIa985",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "e73c7bb0dbb6b951e2ae990112d123cb73f87d379b7d5b6ec7f30050761044ba",
+      "diff_sha256": "f555f73c8ebb4db5ebb2753365fbecfadab2536f644ff67cc7eb073536beb83c"
+    },
+    {
+      "timestamp": "2026-07-03T06:55:41.762Z",
+      "call_id": "call_2b3B9AlTDgZAImZJZfyB6d3C",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "64703b90e412c69af80d2ff81fb38e0f8ba583a760f3365421893f8820064317",
+      "diff_sha256": "b4225eb5eca5ee55c20de654bf7afd15b5c8cd667d7a32e8a1a7eec9fed25f49"
+    },
+    {
+      "timestamp": "2026-07-03T07:28:19.506Z",
+      "call_id": "call_JRINzSyGLtkXAC5lUdaNvl8z",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "6cc2f1eb76a5859fac5de6d5cec7bb44943dd00d36d84bd2084eab70034a8c20",
+      "diff_sha256": "56c2692310b862d23de31d59840ed12f19f66207d7573ce4b69af33556bc5c72"
+    },
+    {
+      "timestamp": "2026-07-03T07:29:41.642Z",
+      "call_id": "call_5K6LUjyZhJWfjy6IwCFGJaNZ",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "f21e56da26ea3a7bd6928a95e5e56c232870d5f3b37b91d275009deb3e811da6",
+      "diff_sha256": "dfccb99b311f856e5ad9df15a395b43dded13b99a4499499f0beddfef2c6d753"
+    },
+    {
+      "timestamp": "2026-07-03T07:30:03.490Z",
+      "call_id": "call_eQpqIv73g21Ymb74N0r0SGs0",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "b334fe1c7e6e420eda600fe7bc779d93baf30fe4b27ece97983891440e81a802",
+      "diff_sha256": "493e48e27af86a5545bce0c8da33946e1bc8d26f0f70c6874a009691ed04609b"
+    },
+    {
+      "timestamp": "2026-07-03T07:30:17.833Z",
+      "call_id": "call_9mYsT3y3qQpAcu44EPQClLKI",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "e4be7d3fbed1ab177d2fa08243c874cdf0480a80f8b1bef3bfa1e9c526e915b0",
+      "diff_sha256": "018702459360b063781630300ac535439a8f832de28a6b115c30ba9e45830aee"
+    },
+    {
+      "timestamp": "2026-07-03T07:30:40.567Z",
+      "call_id": "call_RbOYMjoQNAwt8h0ZB6FDQ6mR",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "45e3784599de500156c070cb3f2fa6fadad6a5736742d7201457e16c80e445c3",
+      "diff_sha256": "cdb44348ab7f5a27f4fd2bda2cafa92255fbd1e161170882c8d03f25725b5978"
+    },
+    {
+      "timestamp": "2026-07-03T07:31:02.295Z",
+      "call_id": "call_sJH7t5khQEZJr7lunXYz30CP",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "a59fc3ea87800194a7a5a241ac93a723143371989b061217018870ef9321ce0c",
+      "diff_sha256": "a519539ea975c10d908b052c0b299c862f583ac90377deaa0a7cda2bd2660f47"
+    },
+    {
+      "timestamp": "2026-07-03T07:31:20.746Z",
+      "call_id": "call_nYHsHrjdaRjL5bhhSAp4gLAR",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "d4aa07f78490508991ce2e9ee4f9cd2bc46cf0fa9623c80452399eb242df7726",
+      "diff_sha256": "42cd6ff33efdb7d29d32b3b69c05488f9a9a8e3dc6e7ee65e4a945f49843d7fa"
+    },
+    {
+      "timestamp": "2026-07-03T07:31:52.721Z",
+      "call_id": "call_LK0ONiIWmV83u6BPxvOrLLUO",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "8dc1148c5fc747ad75080a692dbb8a11b43b6b694e52519ff317ddb751f611a4",
+      "diff_sha256": "4a5492b8b829025985a10e273b82ba7462ce085ff921cdfb5c17fb0e9d3ac48a"
+    },
+    {
+      "timestamp": "2026-07-06T08:27:52.355Z",
+      "call_id": "call_yVVQMHJidpe23ASh4Lrcu6Qw",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "01c9df4c5e8dd79f5dede704dc1864ad76396f701d8e90c634208473bfb3e7a2",
+      "diff_sha256": "5f6bdc080f8aa3962517ee8de15fceba791fbe0ce4ffccb40a422f608f383c52"
+    },
+    {
+      "timestamp": "2026-07-06T08:29:22.953Z",
+      "call_id": "call_7G2OUwvPJa4Pt3OZAsWPl8rW",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "f0e123c373bf62948a59228e83e19736203e1ec871548e45defb1c42504aaad6",
+      "diff_sha256": "ecb1ec26accf2d0fce9f01383b6e4b1d0cb23dcca1340277760182866c8fc72f"
+    },
+    {
+      "timestamp": "2026-07-06T08:29:36.123Z",
+      "call_id": "call_GKZnk9JA7z1bgXNYCK3Kn9G6",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "467a37c67308900dec0bdf604168cb5147314d19343fc3208d518a7e0a34f981",
+      "diff_sha256": "fa6dbe1ac525605e6fa5d764a777aa8dd2eee466c0dcd70cb1981491e558e2bd"
+    },
+    {
+      "timestamp": "2026-07-06T08:30:49.197Z",
+      "call_id": "call_jkSfpsZi7XB4GDiwNtKk3LGL",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "9d4c29461bb02850529b2fb34f27d7dfb3cb0a7ba6c71278ae9b95250a3531d5",
+      "diff_sha256": "98d2e028571d1fff92af1a45ea40975c74d39a31a986106133f259a9fa3f941c"
+    },
+    {
+      "timestamp": "2026-07-06T08:32:36.399Z",
+      "call_id": "call_Ed4EgbJ2CZAcXTRz7bz7eZj3",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "01cb96a87e03f997cafa76253bbc6f04619a154ff8e73a7eb3f5867f51272dd9",
+      "diff_sha256": "f211a63121178c6274e51cf577ea54beea59c06156c7a876e4cdeecd8ad6388a"
+    },
+    {
+      "timestamp": "2026-07-06T08:33:49.632Z",
+      "call_id": "call_0gDqPIOzKNdoruBFQYhhi4za",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "8a8f0cfe2a639205b850ea094d895a97d158a46cb69d6cbe52fdf2cb4c6be9b2",
+      "diff_sha256": "a165ab9ae296eb43b0d12ea7ef68ae96a94fc1cbd23e1ff80b0ffac6e32b2a34"
+    },
+    {
+      "timestamp": "2026-07-06T08:37:29.672Z",
+      "call_id": "call_edUmlICsSYskaR2bPDDForm2",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "6b46a4c5e62e0cd72645afabd53b02eba94fc4a1ee311e673fbe06aefecb3194",
+      "diff_sha256": "592306c848c40bcd4ed5e98a0e0b2acff95973f67a3f2db2cef8fef91e7756ac"
+    },
+    {
+      "timestamp": "2026-07-06T08:37:40.403Z",
+      "call_id": "call_koNNmJaLq22qxhFgfwZFHw82",
+      "path": "frontend/src/App.tsx",
+      "change_type": "update",
+      "patch_sha256": "249340776ad4aa656b2ff4641cf642239ec1c3f4afad68dfff1022d49fe1d33c",
+      "diff_sha256": "869b0a34bb6d1d84afd31dfada0a430bf6d41fbe79a9a80a06e13de72c147569"
+    },
+    {
+      "timestamp": "2026-07-06T08:37:51.240Z",
+      "call_id": "call_V6ATwmBuxbfEI8Z3ldgmoHFs",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "2102670df9b17f464a778ffb6a7a6c2d098e32bc564da554fc42e21cae7a6c8e",
+      "diff_sha256": "c2ab713ac9617f5da14c66018b74f5f5ab3b5fb5a633af8dbc17c626707d07d3"
+    },
+    {
+      "timestamp": "2026-07-06T08:38:34.122Z",
+      "call_id": "call_CJJqnRvAcQK55UtQgEFnnbrr",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "5b5c7ec0694d06dd15f000af9e92429c25d6ff956b009b1ab84c7d709f6a76f9",
+      "diff_sha256": "0ae8c616959a61f8aaeddb00698fd758761a4ba21b4a6d801fa035afd3bd1a41"
+    },
+    {
+      "timestamp": "2026-07-06T08:39:08.981Z",
+      "call_id": "call_05tOUOHWebeHT4fIjocezBMS",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "8488e6616b32ac34fa37ca588e6aa23a102113446ba2a63a2d06cdf762e4d067",
+      "diff_sha256": "c9c94bd342ee7c845a27eec9564576771e1e45f0d1050435b5c32ff47d17a9e2"
+    },
+    {
+      "timestamp": "2026-07-06T08:39:21.240Z",
+      "call_id": "call_Ett1xppexlrDLaArLqPd9IAv",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "40aafc16a627ece67ac881817ff537fb8f41e97b2838edb2b3b7dfccad321deb",
+      "diff_sha256": "cda0042432394cce4d6da0aa929850c755c0b67c48399ad59a4bed5bccf56c40"
+    },
+    {
+      "timestamp": "2026-07-06T08:39:42.284Z",
+      "call_id": "call_Q6bFanA0WKP8oCBR4p9GClKy",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "75c8e3c9980d67c55f3926987c95af33468ce1d02e4b0c57bdf527a9c42ea8f2",
+      "diff_sha256": "f6a90caa82aebf20936987b7c52184be0ca2419d7362f8b11c9d9236a4ce9969"
+    },
+    {
+      "timestamp": "2026-07-06T08:40:03.962Z",
+      "call_id": "call_JM2iUQbEbwVWZjnQHL5JhLUK",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "0b2ae66dc032b0888108f2f49de2a70f29004e98608def6adf743f89aeea8139",
+      "diff_sha256": "3bfb8b4588bfbc1f730d365fa669af221d3f2d9483928aaefa28af149f4d6a6e"
+    },
+    {
+      "timestamp": "2026-07-06T08:40:53.479Z",
+      "call_id": "call_WLafP4ijEtJqWUYWQ8cQbIP9",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "a6571eead1c87ee545a50b742b8ac297910d56e4873ffa6d194e876f0a936d41",
+      "diff_sha256": "508d5d27bcab815e75f2ccbd90fe9ddd85e23e72d78fda3a945914f7631216ea"
+    },
+    {
+      "timestamp": "2026-07-06T08:42:43.751Z",
+      "call_id": "call_Pv6o8ApfVCpeBHjVLl3g7bvH",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "7b6df978292450f6c5382031a87f0c83072513c06f2ed7572995cff3320e6b1a",
+      "diff_sha256": "6552da67f59f778d51a2fcfea74462abf554e1135d4f8333bb22091c19e3b1cb"
+    },
+    {
+      "timestamp": "2026-07-06T08:52:29.819Z",
+      "call_id": "call_YMXnFKUUXD1FpBIeXezy8nlW",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "9f0b22b2c62fcb681feb0bf79c76e8a1fb9e00d4d2fdfd1c0b09c0aa732409e6",
+      "diff_sha256": "d864053628681c6a03fc94f29bbb240ee4c3c6c6afc3bd536af772e2c40c9fb5"
+    },
+    {
+      "timestamp": "2026-07-06T08:53:22.503Z",
+      "call_id": "call_1OtKhIqbocVuOH0sw9sk7rTN",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "591ff78aed4b88452838449110f93477058d67c71dc0e1325413ded151637beb",
+      "diff_sha256": "e1e93c8fcbf3ecb9477669117f31a26369cfef2328b0e7a1978fefaf911af669"
+    },
+    {
+      "timestamp": "2026-07-06T09:57:37.934Z",
+      "call_id": "call_tYismibPZayMKCj1AwXWDvQ0",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "75d16346df7bd4fa2302efa6814a6278b2c297e8dd3f8c34b972a3b652c665ae",
+      "diff_sha256": "6c9b84aef27833d9f822ff97ed0927d2d77f1f07451960d4b5986c40637723f3"
+    },
+    {
+      "timestamp": "2026-07-06T09:59:24.572Z",
+      "call_id": "call_rtKjlV0HSlA1A3MrPe9o5rTA",
+      "path": "backend/src/paper.rs",
+      "change_type": "update",
+      "patch_sha256": "4f948c4c227c276753772844dd4524e5e41f30d0b2b3b6a224f98f4c03914413",
+      "diff_sha256": "31a65877c0749c264ef88f7b3913268988d880e81f8943473fb13057fa6cc6e0"
+    },
+    {
+      "timestamp": "2026-07-06T10:00:17.469Z",
+      "call_id": "call_ssrhLO4TwcXJT4POCqCKZM5H",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "cd42612bd574824e2c954ae862135827d3976767dae5853b85a40915366cc9fc",
+      "diff_sha256": "9cb094d3626d6dd38ab3c612d39d9717febecf4da0f89e64ecad334c300be3c5"
+    },
+    {
+      "timestamp": "2026-07-06T10:01:12.243Z",
+      "call_id": "call_QsbeMFvrfQNlR5n1dd3Co7Yx",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "d426e02734a1a81ae8770e639d3444974c2a67a0d38ea6bad9a763afda6b2b8e",
+      "diff_sha256": "1cc5691011364bdc82dacdbb3270bbaf871258f22690d6d2c008ae43b70a6941"
+    },
+    {
+      "timestamp": "2026-07-06T10:01:46.339Z",
+      "call_id": "call_j3cFJ9luEv9a6APqyoSkR5ex",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "0f2a24d3b8f7356609951e27a6bc1cc3ba3bc91b92503034bfe3d1899596b52b",
+      "diff_sha256": "668043171e317229642809c78cc23e53fe491f6368140f54a76b26e120abad55"
+    },
+    {
+      "timestamp": "2026-07-06T10:02:18.304Z",
+      "call_id": "call_Q5niEexiJY7cUFCkNkSntsyj",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "61c2b92c3b4051525bf631485405671db372fde7de4c1c7d2528d34069e15b3a",
+      "diff_sha256": "22b40be631817873ec9983a75a24bc1760d6598ade724482ee780e20c4e0f840"
+    },
+    {
+      "timestamp": "2026-07-06T10:02:36.711Z",
+      "call_id": "call_SAi73AU2LbBdJd25JBOO2hLf",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "874f2e624b200d50ad4dc0d4687e05f00280a7b424d4310cadc6c0f5998a9acb",
+      "diff_sha256": "6dc0e00365c8996d6c8cfe2241fd30dc6dadb9b57492e578c07446b551bf2233"
+    },
+    {
+      "timestamp": "2026-07-06T10:03:25.992Z",
+      "call_id": "call_Tz5FyCwpp3zaN0NvQAtLjiVg",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "3fc53299424f4f0d95b26567c9810249c92782c7da16166bc1e65bdd8d8a70db",
+      "diff_sha256": "b57d1f25e32a505d7ec9925f6656c6e3f17806d707a840ab1fc2b069258976e8"
+    },
+    {
+      "timestamp": "2026-07-06T10:05:17.736Z",
+      "call_id": "call_J3njj3UESppqOkpCzkUCcJvV",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "724486a1c4b672b022c4e58904d12210946bfdaa1e079aa2f36492b47f4ddfd9",
+      "diff_sha256": "d6f6cb13e2db184f006dde520af936289ab1a1dd88d92383c1d85812b62633f2"
+    },
+    {
+      "timestamp": "2026-07-06T10:05:42.351Z",
+      "call_id": "call_FNBIfSLfoNtGs84u8sg5czgE",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "198c3b3274a9306823ffe373b4ebf19c4a082d639132ece01fd518b0315831a9",
+      "diff_sha256": "2eb5bb8a4fe635bd69f4700d51ff8e42e48615dad9ac57d47e24c141555606bf"
+    },
+    {
+      "timestamp": "2026-07-06T10:05:59.354Z",
+      "call_id": "call_Z8J7et8FSCIZ087RhyFPZawv",
+      "path": "frontend/src/i18n.ts",
+      "change_type": "update",
+      "patch_sha256": "353571522687d1cca1a9b304fafbe62bae1a3eae8bb73986e83e38df6cfe48af",
+      "diff_sha256": "94882a6504eb34b358eb3e22146fe1c89f354b7dc2955c41eb33e17905a6e495"
+    },
+    {
+      "timestamp": "2026-07-06T10:06:12.031Z",
+      "call_id": "call_2wr50vaW8DePz6qrOdPHvdfg",
+      "path": "frontend/src/styles.css",
+      "change_type": "update",
+      "patch_sha256": "7ebff4f463c7ff50a09a5a8c8d94fe476a231c41f7ed50846dafd94a6c708425",
+      "diff_sha256": "b89846d8e97e1f8ecadf8b448d07ad566aaf9b9226dd5c0b9a062d2120587bde"
+    },
+    {
+      "timestamp": "2026-07-06T10:06:36.617Z",
+      "call_id": "call_j8XjvfG1wi0BPTa14rS1giQc",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "2d4cd3e1a32adceae27c88c17dbe5f417765c266c4529f2fb70ba25b0bd402e5",
+      "diff_sha256": "b84f12b0533386b25c70a612504b7a594b93b4a265bdb23c1a02b7d6be3c1eb3"
+    },
+    {
+      "timestamp": "2026-07-07T06:34:40.385Z",
+      "call_id": "call_X8WAuegNkkCLdX4i76iYwasG",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "ec35dfce2bb869bfa6ecc78671c1ef56e8f2e51d008d1a45b25fd3d7d2760173",
+      "diff_sha256": "7002610abe4e1fff561ed64e823c7e87557fd7e9858dd16f382f6ccd0b31043e"
+    },
+    {
+      "timestamp": "2026-07-07T06:35:22.251Z",
+      "call_id": "call_TGA990wYZwLx1IQIU95Bn1ev",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "d674b62587299dc798837e75d623611582a208bc7a16392725fbe72e5af13ccc",
+      "diff_sha256": "24dcc28178a198dda4bc58577b0b63cf8832e55b1f126a821575e37cf5cfed28"
+    },
+    {
+      "timestamp": "2026-07-07T06:36:42.466Z",
+      "call_id": "call_8FHuGwQe4s7fuNoo0Q4VYmcx",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "13db2419e1ee0557af48257a357b4143e654733762ef8d7dee059261f0027735",
+      "diff_sha256": "a89350f84837c9be163fad92d0c131fbf3ef2258a5f0557c0174b69c8f9cda87"
+    },
+    {
+      "timestamp": "2026-07-07T06:38:24.701Z",
+      "call_id": "call_NTXkslYjrUXsHfvslPJUa0bE",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "6d351e23a74f2601508d50d962caaeb4a1c4bb71e51ea81c0afd90ac601fde56",
+      "diff_sha256": "26663cc29ad762d2972d4bcd7a4fb77b752e23b2145afa4efef8b24fc8f571c3"
+    },
+    {
+      "timestamp": "2026-07-07T06:38:40.779Z",
+      "call_id": "call_2WnbS2PpLLQQRoNEfAy8WN9i",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "b36b17c6dae6217dd0949ae1c18f5a4e52c7fcbb8b7f6c18e12201da2460ac3a",
+      "diff_sha256": "fa81f7f5c7a278d037a16347beea813e9af946df9d443e827c0d8269055e85e8"
+    },
+    {
+      "timestamp": "2026-07-07T06:38:56.676Z",
+      "call_id": "call_N55uFvgMB1HajijKaHf2gHUg",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "d82647457ed25e80dd511517e2d349fcd995610dfb643a8dd7259811fc02603f",
+      "diff_sha256": "e3279bc77397a52c0313589bb9962cca40e0bdf03c7a20b712bab2f0eb860bf3"
+    },
+    {
+      "timestamp": "2026-07-07T06:39:15.002Z",
+      "call_id": "call_4veUofMBBZcyR4uuekkXWkL0",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "51b50fdf065b8a6b1c56505a8b1fb373c057e5b1372aad378fdf6018b4d7ca6e",
+      "diff_sha256": "8d44ad3d6d4291010ee0a605b36929deb4819e5de07be323a4271affd292ba8b"
+    },
+    {
+      "timestamp": "2026-07-07T06:39:38.158Z",
+      "call_id": "call_5bno1Ubm72VttQs3j6d71ZXr",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "061dc24a6d4f17ade214da39195240caa6671182f145441205680ce6704ba381",
+      "diff_sha256": "767e42d7ad7d956bc6e4e51eed8942a22bfc872e91178247bb07cc89ea2f8465"
+    },
+    {
+      "timestamp": "2026-07-07T06:39:55.279Z",
+      "call_id": "call_RQgETrDrXxDXlH0LLT3z2NFW",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "d1def17585c23e5dbd165caf9e16b1a13d6d93d2fefe015c8e5ab86cea02b67e",
+      "diff_sha256": "6be594d5cee5d92a68d15da7bc6dce1d57dc55dfaa927415722a5e43e06ccfa7"
+    },
+    {
+      "timestamp": "2026-07-07T06:40:11.292Z",
+      "call_id": "call_KXdtuPROUx54ofgx2cEJdZ3d",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "731270d25aad4a4cc8856a00a8584646bde3365e258eb364be6f9f3cd0f4fa5f",
+      "diff_sha256": "b9f84ea8d44ebea35faee995de530787f0c73700e4a15b6410276a5a2526b857"
+    },
+    {
+      "timestamp": "2026-07-08T06:15:52.434Z",
+      "call_id": "call_tiSLCwmY8NWcIhFVOXVad84S",
+      "path": "backend/tests/server.rs",
+      "change_type": "update",
+      "patch_sha256": "ec566619f7ecb7002b929d9595fd502888615c603fb7ae466d99f8c95d2f7398",
+      "diff_sha256": "604e9edb16d92980f1527d6f3c23cd9e5a02161323623c2e40271a830ff2542d"
+    },
+    {
+      "timestamp": "2026-07-08T06:16:44.130Z",
+      "call_id": "call_PdK4ySDrNDL8q7FoyvMocIUu",
+      "path": "backend/tests/server.rs",
+      "change_type": "update",
+      "patch_sha256": "3b84c32c3ef6471cda03734a9367aca6ae24f23aa916913e2f2ec56dbdaee8e3",
+      "diff_sha256": "c93b9a9b3204a18933b756d38f1660401b50503f0a34d5522536dedf8f9efb60"
+    },
+    {
+      "timestamp": "2026-07-08T06:18:54.045Z",
+      "call_id": "call_OtCr1xsO5Yf9r1eMwn0owio5",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "b8bd1c5f0e4eeaf8fae91a87a45d6f04eaf3ea30d2b0ecaae01625b31dccb923",
+      "diff_sha256": "5db6335b62edde578dd58ee73a152c80818846720902b0f20a650deee85d486f"
+    },
+    {
+      "timestamp": "2026-07-08T06:19:35.681Z",
+      "call_id": "call_Iggf0Niu0LeZZPjoWcP3QCEx",
+      "path": "backend/src/server.rs",
+      "change_type": "update",
+      "patch_sha256": "861f265d092e7cbebc294c994f940b9c223125a2d100af25b067dc4bf4130f6f",
+      "diff_sha256": "fe6917f52d677d4b02d0f2092a342ab1700a5181c333bb413751e1b6492811bd"
+    },
+    {
+      "timestamp": "2026-07-08T06:20:51.350Z",
+      "call_id": "call_HAJ2zCvoVja0aZ70ZoS3dMnZ",
+      "path": "frontend/src/types.ts",
+      "change_type": "update",
+      "patch_sha256": "058e28b7063bbb1eca9048918a30098a65583ff04e92f6ef621aa84ab39d9542",
+      "diff_sha256": "86cf5b771df8df6747ef8813c11453759592782969a7abc934404f5fcb3090a8"
+    },
+    {
+      "timestamp": "2026-07-08T06:21:14.600Z",
+      "call_id": "call_UY5S0ek3IBzZMqLMlHPh67uG",
+      "path": "frontend/src/api.ts",
+      "change_type": "update",
+      "patch_sha256": "fae230508c599e7c8dcc51556925a239109cefa20cacc0628f81ddf2578ddd76",
+      "diff_sha256": "33e8f176caee4bce086a344b3b2e386a6fd9638cb53083957174e69a3e170505"
+    },
+    {
+      "timestamp": "2026-07-08T06:21:49.270Z",
+      "call_id": "call_b6naynv5IclJYULi2qLaynyv",
+      "path": "frontend/src/RadarWorkspace.tsx",
+      "change_type": "update",
+      "patch_sha256": "db6c313eb7342b5b3ae4e3983bd28fbddac55f1500b1ecdaf432897b75b7015e",
+      "diff_sha256": "7aa83798fd5ec59e2b511a5cf32b6dc1abdb85ac89776cdc2afb5cbbb8f359fa"
+    },
+    {
+      "timestamp": "2026-07-08T06:22:40.076Z",
+      "call_id": "call_F2gkuvY0bPTrT9GQfl3aBuSC",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "57fb491949a363d96fb9785f7ae43bf7a6cacf8034421d5e9379ad4e63413ed5",
+      "diff_sha256": "2cf5c657115d760e1733c677fee0dae0ee9856d1d2ced6bcc47e52fe39839192"
+    },
+    {
+      "timestamp": "2026-07-08T06:23:09.783Z",
+      "call_id": "call_M8khPPYVrYRPqNOIBRtNzsTu",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "400579f66742993ae3a358307a77aa7ab3ec74145805aaa28f68b3842bfdb77a",
+      "diff_sha256": "9b3dd35aa43ab3b19dc22da1607bacef50d01b6a4a8feed0cefb6d08bd502872"
+    },
+    {
+      "timestamp": "2026-07-08T06:24:16.225Z",
+      "call_id": "call_OL6sTvpL3mDC6o5N8G6c5lZK",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "192813ee8ef9e71ba0b08852a95d7d39de91d164b38aae5ec26f4d210c1c0bc5",
+      "diff_sha256": "1027b06a40b4b4129c66798e594e3878892c4a3ea55abf2e8f9771acc717d6ef"
+    },
+    {
+      "timestamp": "2026-07-08T06:24:49.855Z",
+      "call_id": "call_tH5T2EwGzmUisdjpHqQWDxkF",
+      "path": "frontend/src/RadarWorkspace.tsx",
+      "change_type": "update",
+      "patch_sha256": "60be536d4503c32eca1e0da0f4722cbaa76ccccca7fcbd501220f97726ed40f4",
+      "diff_sha256": "29ea295a5c22b2b3664cef1979942238fc0242017224da9524d35b6579293c0d"
+    },
+    {
+      "timestamp": "2026-07-08T06:25:25.410Z",
+      "call_id": "call_eyX2vEXtw9adl59sUlwyHwQ0",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "35063134cd481f9442fa918459a0b9f3a99f1a39f00d5deed6225a9b4c576740",
+      "diff_sha256": "c7f50b7fbc6c770332dda0656a6550dc8e14bc18d21db077189fc0b9670c54cb"
+    },
+    {
+      "timestamp": "2026-07-09T02:46:16.871Z",
+      "call_id": "call_PLLK308nvvmTA5j5C4rBAqjS",
+      "path": "backend/tests/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "e57ada94be480b945308f278fe89078241331f3a153e6f89ef73fe7245e60411",
+      "diff_sha256": "5ba3eaed738db0ed5473ea3a8faa3ad09d5877da6b20321fc118d0d9d4175a2e"
+    },
+    {
+      "timestamp": "2026-07-09T02:46:33.189Z",
+      "call_id": "call_hVnecuPuK54FvIVboq1XVpI2",
+      "path": "frontend/src/App.test.tsx",
+      "change_type": "update",
+      "patch_sha256": "033a96904f93147dcc0bf2a3745984921dde08d0cf03425c35b67a92b329000e",
+      "diff_sha256": "40301fe86cb0fe7114e9bf38208c3eb7901bfcecaa1acbde35a531ae480d26f2"
+    },
+    {
+      "timestamp": "2026-07-09T02:47:29.509Z",
+      "call_id": "call_S7fWcLoFty1UHQALRvMoW6ZT",
+      "path": "backend/src/auto_strategy.rs",
+      "change_type": "update",
+      "patch_sha256": "1f86c1f4c4e753fda31564df0bb4523b61ff42e08739f3d3596f4a47e2598d89",
+      "diff_sha256": "7794ec40508766ccf74c894d3628d87208044df039372ac5a052c73f64a9ce31"
+    },
+    {
+      "timestamp": "2026-07-09T02:47:41.715Z",
+      "call_id": "call_WoMKD3ZRKpYLkJ9ukYexoYQv",
+      "path": "backend/src/state.rs",
+      "change_type": "update",
+      "patch_sha256": "9f789b6f89c2bf9a56faeab03cb9d8ed6886563e1bd6113e366aa8dfd3ee1fe0",
+      "diff_sha256": "4ffa1960a8996ec2748a73240caaa9504551e94377802479687360fe1cb921e0"
+    },
+    {
+      "timestamp": "2026-07-09T02:48:21.535Z",
+      "call_id": "call_tyHJv5UhEibbHVeLkHWahMxe",
+      "path": "frontend/src/PaperPanel.tsx",
+      "change_type": "update",
+      "patch_sha256": "48564ee3af9a7bd976f7abbc465eef526bae1bf169758dd84ee0cdeebec091b3",
+      "diff_sha256": "c1ac6dc31064321af6c9888b0f4e5f4442d78e379601d8c4ccb21c615bad6b46"
+    }
+  ]
+}
