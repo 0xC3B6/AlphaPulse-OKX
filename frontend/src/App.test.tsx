@@ -15,6 +15,15 @@ import type {
 const paper: PaperAccountSnapshot = {
   mode: "paper",
   initial_balance: 10000,
+  strategy_version: "v0.1.3",
+  strategy_build_id: "legacy-v3-replay-2026-07-10",
+  config_hash: "fixture-v3-config-hash",
+  run_id: "v0.1.3-restored-paper-1",
+  persistence: {
+    status: "healthy",
+    last_committed_at_ms: 1783660000000,
+    last_error: null,
+  },
   realized_pnl: 0,
   unrealized_pnl: 0,
   equity: 10000,
@@ -26,6 +35,15 @@ const paper: PaperAccountSnapshot = {
 
 const activePaper: PaperAccountSnapshot = {
   ...paper,
+  strategy_version: "v0.1.3",
+  strategy_build_id: "legacy-v3-replay-2026-07-10",
+  config_hash: "fixture-v3-config-hash",
+  run_id: "v0.1.3-restored-paper-1",
+  persistence: {
+    status: "healthy",
+    last_committed_at_ms: 1783660000000,
+    last_error: null,
+  },
   realized_pnl: 207.58,
   unrealized_pnl: 42.86,
   equity: 10250.44,
@@ -78,6 +96,12 @@ const activePaper: PaperAccountSnapshot = {
       unrealized_pnl: 40.7,
       pnl_pct: 0.407,
       opened_at_ms: 1782400000000,
+      stop_loss: 16.942,
+      take_profit: 17.544,
+      primary_signal: "pattern_long",
+      reason: "W bottom retest held near neckline",
+      fee: 0.5,
+      config_hash: "fixture-v3-config-hash",
     },
     {
       inst_id: "DOGE-USDT-SWAP",
@@ -741,6 +765,14 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "模拟盘" })).toBeInTheDocument();
     expect(screen.getByTestId("trade-page")).toHaveTextContent("LAB-USDT-SWAP");
     expect(screen.getByTestId("trade-page")).toHaveTextContent("DOGE-USDT-SWAP");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("v0.1.3");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent(
+      "legacy-v3-replay-2026-07-10",
+    );
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("已持久化");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("SL");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("TP");
+    expect(screen.getByTestId("trade-page")).toHaveTextContent("pattern_long");
     expect(screen.getByLabelText("交易合约")).toHaveValue("DOGE-USDT-SWAP");
     expect(screen.getByText("全部当前持仓")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeInTheDocument();

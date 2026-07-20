@@ -57,6 +57,44 @@ export function TradePage({
         <span>{copy.trade.quickOrder}</span>
         <span>{copy.trade.recentTrades}</span>
       </section>
+      <section className="trade-strategy-identity" aria-label={copy.trade.restoredStrategy}>
+        <div>
+          <span>{copy.trade.restoredStrategy}</span>
+          <strong>{paper.strategy_version}</strong>
+        </div>
+        <div>
+          <span>{copy.trade.build}</span>
+          <code>{paper.strategy_build_id}</code>
+        </div>
+        <div>
+          <span>{copy.trade.run}</span>
+          <code>{paper.run_id}</code>
+        </div>
+        <div title={paper.config_hash}>
+          <span>{copy.trade.config}</span>
+          <code>{shortHash(paper.config_hash)}</code>
+        </div>
+        <div>
+          <span>{copy.trade.persistence}</span>
+          <strong
+            className={
+              paper.persistence.status === "healthy"
+                ? "persistence-healthy"
+                : "persistence-paused"
+            }
+          >
+            {paper.persistence.status === "healthy"
+              ? copy.trade.persisted
+              : copy.trade.persistencePaused}
+          </strong>
+          {paper.persistence.last_committed_at_ms ? (
+            <small>{formatTimestamp(paper.persistence.last_committed_at_ms)}</small>
+          ) : null}
+        </div>
+        {paper.persistence.last_error ? (
+          <p className="trade-persistence-error">{paper.persistence.last_error}</p>
+        ) : null}
+      </section>
       <section className="page-metric-grid trade-summary">
         <MetricCard label={copy.paper.equity} value={formatUsdt(paper.equity)} />
         <MetricCard label={copy.paper.available} value={formatUsdt(paper.available_balance)} />
@@ -89,6 +127,10 @@ export function TradePage({
                   <th>{copy.paper.margin}</th>
                   <th>{copy.paper.pnl}</th>
                   <th>{copy.paper.mark}</th>
+                  <th>{copy.trade.stopLoss}</th>
+                  <th>{copy.trade.takeProfit}</th>
+                  <th>{copy.trade.signal}</th>
+                  <th>{copy.trade.reason}</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,6 +148,12 @@ export function TradePage({
                       {formatSignedUsdt(position.unrealized_pnl)} / {formatPct(position.pnl_pct)}
                     </td>
                     <td>{formatPrice(position.mark_price)}</td>
+                    <td>{formatOptionalPrice(position.stop_loss)}</td>
+                    <td>{formatOptionalPrice(position.take_profit)}</td>
+                    <td>{position.primary_signal || "—"}</td>
+                    <td className="trade-reason-cell" title={position.reason}>
+                      {position.reason || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -209,6 +257,26 @@ export function TradePage({
                     </dd>
                   </div>
                   <div>
+                    <dt>{copy.trade.stopLoss}</dt>
+                    <dd>{formatOptionalPrice(selectedPosition.stop_loss)}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy.trade.takeProfit}</dt>
+                    <dd>{formatOptionalPrice(selectedPosition.take_profit)}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy.trade.signal}</dt>
+                    <dd>{selectedPosition.primary_signal || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy.trade.entryFee}</dt>
+                    <dd>{formatUsdt(selectedPosition.fee ?? 0)}</dd>
+                  </div>
+                  <div className="paper-position-wide">
+                    <dt>{copy.trade.reason}</dt>
+                    <dd>{selectedPosition.reason || "—"}</dd>
+                  </div>
+                  <div>
                     <dt>{copy.detail.updated}</dt>
                     <dd>{formatTimestamp(selectedPosition.opened_at_ms)}</dd>
                   </div>
@@ -250,6 +318,14 @@ export function TradePage({
       </section>
     </section>
   );
+}
+
+function formatOptionalPrice(value: number | null | undefined) {
+  return value == null ? "—" : formatPrice(value);
+}
+
+function shortHash(value: string) {
+  return value.length > 16 ? `${value.slice(0, 12)}…` : value || "—";
 }
 
 function MetricCard({

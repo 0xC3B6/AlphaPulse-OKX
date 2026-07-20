@@ -10,6 +10,15 @@ import type { DashboardSnapshot, PaperAccountSnapshot, SymbolSnapshot } from "./
 const paper: PaperAccountSnapshot = {
   mode: "paper",
   initial_balance: 10000,
+  strategy_version: "v0.1.3",
+  strategy_build_id: "legacy-v3-replay-2026-07-10",
+  config_hash: "fixture-v3-config-hash",
+  run_id: "v0.1.3-restored-paper-1",
+  persistence: {
+    status: "healthy",
+    last_committed_at_ms: 1783660000000,
+    last_error: null,
+  },
   realized_pnl: 120,
   unrealized_pnl: -25,
   equity: 10095,

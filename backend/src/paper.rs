@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::SymbolSnapshot;
+use crate::persistence::PersistenceHealthSnapshot;
 use crate::strategy_identity::{StrategyIdentity, INITIAL_RUN_ID};
 use crate::time_regime::TradeTag;
 
@@ -126,6 +127,11 @@ pub struct PaperAccountSnapshot {
     pub current_strategy_source: String,
     pub current_strategy_name: String,
     pub current_strategy_version: String,
+    pub strategy_version: String,
+    pub strategy_build_id: String,
+    pub config_hash: String,
+    pub run_id: String,
+    pub persistence: PersistenceHealthSnapshot,
     pub fee_rate: f64,
     pub slippage_rate: f64,
     pub total_fees: f64,
@@ -191,6 +197,8 @@ pub struct PaperPositionSnapshot {
     pub strategy_version: String,
     pub primary_signal: String,
     pub reason: String,
+    pub fee: f64,
+    pub config_hash: String,
     pub signal_tags: Vec<String>,
     pub tags: Vec<TradeTag>,
     pub stop_loss: Option<f64>,
@@ -451,6 +459,11 @@ impl PaperState {
             current_strategy_source: SCALPING_OPTIMIZATION_SOURCE.to_string(),
             current_strategy_name: SCALPING_OPTIMIZATION_NAME.to_string(),
             current_strategy_version: SCALPING_OPTIMIZATION_VERSION.to_string(),
+            strategy_version: self.strategy_identity.version_code.clone(),
+            strategy_build_id: self.strategy_identity.strategy_build_id.clone(),
+            config_hash: self.strategy_identity.config_hash.clone(),
+            run_id: self.run_id.clone(),
+            persistence: PersistenceHealthSnapshot::default(),
             fee_rate: self.fee_rate,
             slippage_rate: self.slippage_rate,
             total_fees: self.trades.iter().map(|trade| trade.fee).sum(),
@@ -779,6 +792,8 @@ impl PaperState {
             strategy_version: position.strategy_version.clone(),
             primary_signal: position.primary_signal.clone(),
             reason: position.reason.clone(),
+            fee: position.open_fee,
+            config_hash: self.strategy_identity.config_hash.clone(),
             signal_tags: position.signal_tags.clone(),
             tags: position.tags.clone(),
             stop_loss: position.stop_loss,

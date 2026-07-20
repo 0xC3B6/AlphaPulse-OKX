@@ -43,6 +43,15 @@ const languageStorageKey = "alphapulse-language";
 const emptyPaperAccount: PaperAccountSnapshot = {
   mode: "paper",
   initial_balance: 10000,
+  strategy_version: "v0.1.3",
+  strategy_build_id: "legacy-v3-replay-2026-07-10",
+  config_hash: "",
+  run_id: "v0.1.3-restored-paper-1",
+  persistence: {
+    status: "persistence_paused",
+    last_committed_at_ms: null,
+    last_error: "backend not connected",
+  },
   realized_pnl: 0,
   unrealized_pnl: 0,
   equity: 10000,

@@ -12,6 +12,8 @@ use alphapulse_okx_backend::{
         PaperAccountSnapshot, PaperPositionSnapshot, PaperSide, SCALPING_OPTIMIZATION_NAME,
         SCALPING_OPTIMIZATION_SOURCE, SCALPING_OPTIMIZATION_VERSION,
     },
+    persistence::PersistenceHealthSnapshot,
+    strategy_identity::{StrategyIdentity, INITIAL_RUN_ID, STRATEGY_BUILD_ID},
     time_regime::TradeTagKind,
 };
 
@@ -637,6 +639,7 @@ fn assert_close(actual: f64, expected: f64, epsilon: f64) {
 }
 
 fn paper_account(equity: f64, positions: Vec<PaperPositionSnapshot>) -> PaperAccountSnapshot {
+    let identity = StrategyIdentity::restored_v3();
     let used_margin = positions
         .iter()
         .map(|position| position.margin)
@@ -651,6 +654,11 @@ fn paper_account(equity: f64, positions: Vec<PaperPositionSnapshot>) -> PaperAcc
         current_strategy_source: SCALPING_OPTIMIZATION_SOURCE.to_string(),
         current_strategy_name: SCALPING_OPTIMIZATION_NAME.to_string(),
         current_strategy_version: SCALPING_OPTIMIZATION_VERSION.to_string(),
+        strategy_version: SCALPING_OPTIMIZATION_VERSION.to_string(),
+        strategy_build_id: STRATEGY_BUILD_ID.to_string(),
+        config_hash: identity.config_hash,
+        run_id: INITIAL_RUN_ID.to_string(),
+        persistence: PersistenceHealthSnapshot::default(),
         fee_rate: 0.0005,
         slippage_rate: 0.0002,
         total_fees: 0.0,
@@ -697,6 +705,8 @@ fn position(inst_id: &str, side: PaperSide, pnl_pct: f64) -> PaperPositionSnapsh
         strategy_version: "manual".to_string(),
         primary_signal: String::new(),
         reason: "manual".to_string(),
+        fee: 0.0,
+        config_hash: StrategyIdentity::restored_v3().config_hash,
         signal_tags: Vec::new(),
         tags: Vec::new(),
         stop_loss: None,

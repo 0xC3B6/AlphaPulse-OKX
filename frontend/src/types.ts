@@ -124,6 +124,11 @@ export interface PaperOrderRequest {
 export interface PaperAccountSnapshot {
   mode: "paper";
   initial_balance: number;
+  strategy_version: string;
+  strategy_build_id: string;
+  config_hash: string;
+  run_id: string;
+  persistence: PersistenceHealthSnapshot;
   fee_rate?: number;
   slippage_rate?: number;
   total_fees?: number;
@@ -148,6 +153,12 @@ export interface PaperAccountSnapshot {
   positions: PaperPositionSnapshot[];
   position_history?: PaperClosedPositionSnapshot[];
   trades: PaperTrade[];
+}
+
+export interface PersistenceHealthSnapshot {
+  status: "healthy" | "persistence_paused";
+  last_committed_at_ms: number | null;
+  last_error: string | null;
 }
 
 export interface PaperStrategyStats {
@@ -185,8 +196,15 @@ export interface PaperPositionSnapshot {
   source?: string;
   strategy_name?: string;
   strategy_version?: string;
+  primary_signal?: string;
   reason?: string;
+  signal_tags?: string[];
   tags?: TradeTag[];
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  expire_at_ms?: number | null;
+  fee?: number;
+  config_hash?: string;
 }
 
 export interface PaperClosedPositionSnapshot {
@@ -211,9 +229,14 @@ export interface PaperClosedPositionSnapshot {
   reason: string;
   close_source: string;
   close_reason: string;
+  primary_signal?: string;
+  signal_tags?: string[];
   tags?: TradeTag[];
   open_tags?: TradeTag[];
   close_tags?: TradeTag[];
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  expire_at_ms?: number | null;
 }
 
 export interface PaperTrade {
@@ -224,6 +247,7 @@ export interface PaperTrade {
   source?: string;
   strategy_name?: string;
   strategy_version?: string;
+  primary_signal?: string;
   reason?: string;
   price: number;
   qty: number;
@@ -232,6 +256,9 @@ export interface PaperTrade {
   fee?: number;
   slippage_rate?: number;
   tags?: TradeTag[];
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  expire_at_ms?: number | null;
   realized_pnl: number;
   ts_ms: number;
 }

@@ -64,7 +64,7 @@ pub struct RadarState {
     paper_transition: Arc<Mutex<()>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct RadarStateInner {
     symbols: BTreeMap<String, SymbolSnapshot>,
     latest_prices: BTreeMap<String, LatestPrice>,
@@ -78,23 +78,6 @@ struct RadarStateInner {
 struct LatestPrice {
     price: f64,
     updated_at_ms: i64,
-}
-
-impl Default for RadarStateInner {
-    fn default() -> Self {
-        Self {
-            symbols: BTreeMap::new(),
-            latest_prices: BTreeMap::new(),
-            last_scan_at_ms: None,
-            websocket_connected: false,
-            paper: PaperState::default(),
-            persistence: PersistenceHealthSnapshot {
-                status: PersistenceStatus::Healthy,
-                last_committed_at_ms: None,
-                last_error: None,
-            },
-        }
-    }
 }
 
 impl RadarStateInner {
@@ -126,9 +109,15 @@ impl RadarStateInner {
             symbols: self.symbols.values().cloned().collect(),
             last_scan_at_ms: self.last_scan_at_ms,
             websocket_connected: self.websocket_connected,
-            paper: self.paper.snapshot(&self.price_map()),
+            paper: self.paper_snapshot(),
             persistence: self.persistence.clone(),
         }
+    }
+
+    fn paper_snapshot(&self) -> PaperAccountSnapshot {
+        let mut snapshot = self.paper.snapshot(&self.price_map());
+        snapshot.persistence = self.persistence.clone();
+        snapshot
     }
 
     fn set_latest_price(&mut self, inst_id: &str, price: f64, updated_at_ms: i64) {
@@ -181,8 +170,7 @@ impl RadarState {
     }
 
     pub async fn paper_snapshot(&self) -> PaperAccountSnapshot {
-        let inner = self.inner.read().await;
-        inner.paper.snapshot(&inner.price_map())
+        self.inner.read().await.paper_snapshot()
     }
 
     pub async fn persistence_health(&self) -> PersistenceHealthSnapshot {
@@ -527,7 +515,10 @@ impl RadarState {
             let inner = self.inner.read().await;
             (inner.paper.clone(), inner.price_map())
         };
-        let snapshot = paper.snapshot(&prices);
+        let mut snapshot = paper.snapshot(&prices);
+        if self.persistence.is_some() {
+            snapshot.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
+        }
         if let Some(persistence) = &self.persistence {
             let transition = PersistedTransition {
                 event_type: "scan_checkpoint".to_string(),
@@ -720,7 +711,10 @@ impl RadarState {
         intent: Option<PersistedOrderIntent>,
         committed_at_ms: i64,
     ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
-        let snapshot = candidate.snapshot(prices);
+        let mut snapshot = candidate.snapshot(prices);
+        if self.persistence.is_some() {
+            snapshot.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
+        }
         if let Some(persistence) = &self.persistence {
             let transition = PersistedTransition {
                 event_type: event_type.to_string(),

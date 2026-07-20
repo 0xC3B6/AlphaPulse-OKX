@@ -2459,6 +2459,53 @@ input {
   gap: 10px;
 }
 
+.trade-strategy-identity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.trade-strategy-identity > div {
+  min-width: 0;
+}
+
+.trade-strategy-identity span,
+.trade-strategy-identity small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.trade-strategy-identity strong,
+.trade-strategy-identity code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trade-strategy-identity .persistence-healthy {
+  color: var(--positive);
+}
+
+.trade-strategy-identity .persistence-paused,
+.trade-persistence-error {
+  color: var(--negative);
+}
+
+.trade-persistence-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+}
+
 .metric-card {
   min-width: 0;
   border: 1px solid var(--border);
@@ -2522,6 +2569,21 @@ input {
 .trade-table,
 .review-trade-table {
   min-width: 720px;
+}
+
+.trade-table {
+  min-width: 1180px;
+}
+
+.trade-reason-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paper-position .paper-position-wide {
+  grid-column: 1 / -1;
 }
 
 .trade-order {

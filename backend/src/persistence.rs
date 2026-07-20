@@ -202,6 +202,16 @@ pub struct PersistenceHealthSnapshot {
     pub last_error: Option<String>,
 }
 
+impl Default for PersistenceHealthSnapshot {
+    fn default() -> Self {
+        Self {
+            status: PersistenceStatus::Healthy,
+            last_committed_at_ms: None,
+            last_error: None,
+        }
+    }
+}
+
 impl PersistenceHealthSnapshot {
     pub fn healthy(ts_ms: i64) -> Self {
         Self {
