@@ -13,6 +13,7 @@ import type { Copy } from "./i18n";
 import type {
   PaperAccountSnapshot,
   PaperClosedPositionSnapshot,
+  PaperEquityPoint,
   PaperStrategyStats,
   PaperTrade,
   TradeTag,
@@ -43,28 +44,33 @@ interface HistorySearchFilters {
 }
 
 interface StrategyCurvePoint {
-  closedAtMs: number;
-  cumulativePnl: number;
-  instId: string;
+  timestampMs: number;
+  equity: number;
+  equityChange: number;
   realizedPnl: number;
-  tradeIndex: number;
+  unrealizedPnl: number;
+  openPositionsCount: number;
 }
 
 interface StrategyCurve {
   points: StrategyCurvePoint[];
-  finalPnl: number;
+  currentEquity: number;
+  equityChange: number;
   maxDrawdown: number;
-  bestCumulative: number;
-  worstCumulative: number;
+  peakEquity: number;
+  troughEquity: number;
 }
 
 interface StrategyCurveChartPoint {
-  closedAtMs: number;
-  closedCount: number;
-  cumulativePnl: number;
-  negativePnl: number | null;
-  periodPnl: number;
-  positivePnl: number | null;
+  timestampMs: number;
+  snapshotCount: number;
+  equity: number;
+  equityChange: number;
+  negativeEquity: number | null;
+  positiveEquity: number | null;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  openPositionsCount: number;
   synthetic?: boolean;
 }
 
@@ -120,11 +126,14 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     [paper.strategy_stats, positionHistory],
   );
   const activeStrategyVersion =
-    selectedStrategyVersion ?? strategyStats[0]?.strategy_version ?? null;
+    selectedStrategyVersion ?? paper.strategy_version ?? strategyStats[0]?.strategy_version ?? null;
   const activeStrategyCurve =
     activeStrategyVersion === null
       ? null
-      : buildStrategyCurve(positionHistory, activeStrategyVersion);
+      : buildStrategyCurve(
+          activeStrategyVersion === paper.strategy_version ? (paper.equity_history ?? []) : [],
+          paper.initial_balance,
+        );
   const activeSignalAttribution = useMemo(
     () =>
       activeStrategyVersion === null
@@ -495,25 +504,34 @@ function StrategyCurvePanel({
         <>
           <div className="paper-strategy-curve-metrics">
             <Metric
-              label={copy.paper.cumulativeRealized}
-              value={formatSignedUsdt(curve.finalPnl)}
+              label={copy.paper.currentEquity}
+              value={formatUsdt(chartCurve.currentEquity)}
+            />
+            <Metric
+              label={copy.paper.equityChange}
+              value={formatSignedUsdt(chartCurve.equityChange)}
             />
             <Metric
               label={copy.paper.returnRate}
-              value={formatNullablePct(strategyReturnRate(curve.finalPnl, initialBalance))}
+              value={formatNullablePct(strategyReturnRate(chartCurve.equityChange, initialBalance))}
             />
-            <Metric label={copy.paper.maxDrawdown} value={formatSignedUsdt(curve.maxDrawdown)} />
+            <Metric label={copy.paper.maxDrawdown} value={formatSignedUsdt(chartCurve.maxDrawdown)} />
             <Metric
-              label={copy.paper.bestCumulative}
-              value={formatSignedUsdt(curve.bestCumulative)}
+              label={copy.paper.peakEquity}
+              value={formatUsdt(chartCurve.peakEquity)}
             />
             <Metric
-              label={copy.paper.worstCumulative}
-              value={formatSignedUsdt(curve.worstCumulative)}
+              label={copy.paper.troughEquity}
+              value={formatUsdt(chartCurve.troughEquity)}
             />
-            <Metric label={copy.paper.closedPositions} value={String(curve.points.length)} />
+            <Metric label={copy.paper.equitySnapshots} value={String(chartCurve.points.length)} />
           </div>
-          <StrategyCurveChart copy={copy} curve={chartCurve} version={version} />
+          <StrategyCurveChart
+            copy={copy}
+            curve={chartCurve}
+            initialBalance={initialBalance}
+            version={version}
+          />
         </>
       )}
     </section>
@@ -586,18 +604,20 @@ function StrategyDoctorSection({
 function StrategyCurveChart({
   copy,
   curve,
+  initialBalance,
   version,
 }: {
   copy: Copy;
   curve: StrategyCurve;
+  initialBalance: number;
   version: string;
 }) {
-  const rawStartMs = curve.points[0].closedAtMs;
-  const rawEndMs = curve.points[curve.points.length - 1].closedAtMs;
+  const rawStartMs = curve.points[0].timestampMs;
+  const rawEndMs = curve.points[curve.points.length - 1].timestampMs;
   const axisScale = chooseStrategyAxisScale(rawStartMs, rawEndMs);
   const axisDomain = [rawStartMs - axisScale.stepMs / 2, rawEndMs + axisScale.stepMs / 2];
   const axisTicks = buildStrategyAxisTicks(rawStartMs, rawEndMs, axisScale);
-  const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs);
+  const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs, initialBalance);
   const shouldAnimate = import.meta.env.MODE !== "test";
   const chart = (
     <AreaChart
@@ -619,7 +639,7 @@ function StrategyCurveChart({
       <CartesianGrid stroke="rgba(74, 98, 120, 0.2)" strokeDasharray="3 3" vertical={false} />
       <XAxis
         allowDataOverflow
-        dataKey="closedAtMs"
+        dataKey="timestampMs"
         domain={axisDomain}
         interval={0}
         scale="time"
@@ -636,7 +656,7 @@ function StrategyCurveChart({
         width={76}
       />
       <Tooltip
-        content={<StrategyCurveTooltip />}
+        content={<StrategyCurveTooltip copy={copy} />}
         cursor={{ stroke: "rgba(18, 217, 156, 0.42)", strokeDasharray: "4 4" }}
         isAnimationActive={false}
       />
@@ -644,18 +664,18 @@ function StrategyCurveChart({
         stroke="rgba(148, 174, 196, 0.45)"
         strokeDasharray="6 6"
         strokeWidth={1.2}
-        y={0}
+        y={initialBalance}
       />
       <Area
         activeDot={{ fill: "#12d99c", r: 5, stroke: "#071017", strokeWidth: 2 }}
         connectNulls={false}
-        dataKey="positivePnl"
+        dataKey="positiveEquity"
         dot={false}
         fill="url(#strategyPositiveFill)"
         isAnimationActive={shouldAnimate}
         animationDuration={1200}
         animationEasing="ease-out"
-        name="盈利"
+        name={copy.paper.equityGrowth}
         stroke="#12d99c"
         strokeWidth={2.6}
         type="linear"
@@ -663,14 +683,14 @@ function StrategyCurveChart({
       <Area
         activeDot={{ fill: "#ff4d6d", r: 5, stroke: "#071017", strokeWidth: 2 }}
         connectNulls={false}
-        dataKey="negativePnl"
+        dataKey="negativeEquity"
         dot={false}
         fill="url(#strategyNegativeFill)"
         isAnimationActive={shouldAnimate}
         animationBegin={180}
         animationDuration={1200}
         animationEasing="ease-out"
-        name="亏损"
+        name={copy.paper.equityDrawdown}
         stroke="#ff4d6d"
         strokeWidth={2.6}
         type="linear"
@@ -688,15 +708,15 @@ function StrategyCurveChart({
       <div className="paper-strategy-chart-legend" aria-hidden="true">
         <span className="paper-strategy-legend-positive">
           <i />
-          盈利
+          {copy.paper.equityGrowth}
         </span>
         <span className="paper-strategy-legend-negative">
           <i />
-          亏损
+          {copy.paper.equityDrawdown}
         </span>
         <span className="paper-strategy-legend-zero">
           <i />
-          0轴
+          {copy.paper.initialBalance}
         </span>
       </div>
       <div className="paper-strategy-recharts-curve">
@@ -716,9 +736,11 @@ function StrategyCurveChart({
 
 function StrategyCurveTooltip({
   active,
+  copy,
   payload,
 }: {
   active?: boolean;
+  copy: Copy;
   payload?: Array<{ payload?: StrategyCurveChartPoint }>;
 }) {
   if (!active || !payload || payload.length === 0) {
@@ -731,12 +753,17 @@ function StrategyCurveTooltip({
 
   return (
     <div className="paper-strategy-tooltip">
-      <strong>{point.synthetic ? "零轴" : formatChartDateTime(point.closedAtMs)}</strong>
-      <span>{formatChartDateTime(point.closedAtMs)}</span>
+      <strong>{point.synthetic ? copy.paper.initialBalance : formatChartDateTime(point.timestampMs)}</strong>
+      <span>{formatChartDateTime(point.timestampMs)}</span>
       <dl>
-        <Metric label="累计收益" value={formatSignedUsdt(point.cumulativePnl)} />
-        <Metric label="区间盈亏" value={point.synthetic ? "-" : formatSignedUsdt(point.periodPnl)} />
-        <Metric label="平仓数" value={point.synthetic ? "-" : String(point.closedCount)} />
+        <Metric label={copy.paper.currentEquity} value={formatUsdt(point.equity)} />
+        <Metric label={copy.paper.equityChange} value={formatSignedUsdt(point.equityChange)} />
+        <Metric label={copy.paper.realized} value={formatSignedUsdt(point.realizedPnl)} />
+        <Metric label={copy.paper.unrealized} value={formatSignedUsdt(point.unrealizedPnl)} />
+        <Metric
+          label={copy.paper.openPositions}
+          value={point.synthetic ? "-" : String(point.openPositionsCount)}
+        />
       </dl>
     </div>
   );
@@ -745,27 +772,33 @@ function StrategyCurveTooltip({
 function buildStrategyCurveChartData(
   points: StrategyCurvePoint[],
   stepMs: number,
+  initialBalance: number,
 ): StrategyCurveChartPoint[] {
   const bucketedPoints = bucketStrategyCurvePoints(points, stepMs);
   return bucketedPoints.reduce<StrategyCurveChartPoint[]>((chartPoints, point, index) => {
     const previousPoint = bucketedPoints[index - 1];
-    if (previousPoint && crossesZero(previousPoint.cumulativePnl, point.cumulativePnl)) {
+    if (previousPoint && crossesBaseline(previousPoint.equity, point.equity, initialBalance)) {
       const distance =
-        Math.abs(previousPoint.cumulativePnl) + Math.abs(point.cumulativePnl);
-      const zeroRatio = distance === 0 ? 0 : Math.abs(previousPoint.cumulativePnl) / distance;
+        Math.abs(previousPoint.equity - initialBalance) + Math.abs(point.equity - initialBalance);
+      const baselineRatio =
+        distance === 0 ? 0 : Math.abs(previousPoint.equity - initialBalance) / distance;
       chartPoints.push({
-        closedAtMs: Math.round(
-          previousPoint.closedAtMs + (point.closedAtMs - previousPoint.closedAtMs) * zeroRatio,
+        timestampMs: Math.round(
+          previousPoint.timestampMs +
+            (point.timestampMs - previousPoint.timestampMs) * baselineRatio,
         ),
-        closedCount: 0,
-        cumulativePnl: 0,
-        negativePnl: 0,
-        periodPnl: 0,
-        positivePnl: 0,
+        snapshotCount: 0,
+        equity: initialBalance,
+        equityChange: 0,
+        negativeEquity: initialBalance,
+        positiveEquity: initialBalance,
+        realizedPnl: 0,
+        unrealizedPnl: 0,
+        openPositionsCount: 0,
         synthetic: true,
       });
     }
-    chartPoints.push(toStrategyChartPoint(point));
+    chartPoints.push(toStrategyChartPoint(point, initialBalance));
     return chartPoints;
   }, []);
 }
@@ -776,31 +809,37 @@ function bucketStrategyCurvePoints(
 ): StrategyCurveChartPoint[] {
   const buckets = new Map<number, StrategyCurveChartPoint>();
   points.forEach((point) => {
-    const bucketMs = Math.floor(point.closedAtMs / stepMs) * stepMs;
+    const bucketMs = Math.floor(point.timestampMs / stepMs) * stepMs;
     const existing = buckets.get(bucketMs);
     buckets.set(bucketMs, {
-      closedAtMs: bucketMs,
-      closedCount: (existing?.closedCount ?? 0) + 1,
-      cumulativePnl: point.cumulativePnl,
-      negativePnl: null,
-      periodPnl: (existing?.periodPnl ?? 0) + point.realizedPnl,
-      positivePnl: null,
+      timestampMs: bucketMs,
+      snapshotCount: (existing?.snapshotCount ?? 0) + 1,
+      equity: point.equity,
+      equityChange: point.equityChange,
+      negativeEquity: null,
+      positiveEquity: null,
+      realizedPnl: point.realizedPnl,
+      unrealizedPnl: point.unrealizedPnl,
+      openPositionsCount: point.openPositionsCount,
     });
   });
-  return Array.from(buckets.values()).sort((left, right) => left.closedAtMs - right.closedAtMs);
+  return Array.from(buckets.values()).sort((left, right) => left.timestampMs - right.timestampMs);
 }
 
-function toStrategyChartPoint(point: StrategyCurveChartPoint): StrategyCurveChartPoint {
-  const isZero = point.cumulativePnl === 0;
+function toStrategyChartPoint(
+  point: StrategyCurveChartPoint,
+  initialBalance: number,
+): StrategyCurveChartPoint {
+  const isBaseline = point.equity === initialBalance;
   return {
     ...point,
-    negativePnl: point.cumulativePnl < 0 || isZero ? point.cumulativePnl : null,
-    positivePnl: point.cumulativePnl > 0 || isZero ? point.cumulativePnl : null,
+    negativeEquity: point.equity < initialBalance || isBaseline ? point.equity : null,
+    positiveEquity: point.equity > initialBalance || isBaseline ? point.equity : null,
   };
 }
 
-function crossesZero(left: number, right: number): boolean {
-  return (left < 0 && right > 0) || (left > 0 && right < 0);
+function crossesBaseline(left: number, right: number, baseline: number): boolean {
+  return (left < baseline && right > baseline) || (left > baseline && right < baseline);
 }
 
 function chooseStrategyAxisScale(startMs: number, endMs: number): StrategyAxisScale {
@@ -1367,39 +1406,46 @@ function parseStrategyVersion(version: string): number[] {
 }
 
 function buildStrategyCurve(
-  positions: PaperClosedPositionSnapshot[],
-  version: string,
+  history: PaperEquityPoint[],
+  initialBalance: number,
 ): StrategyCurve {
-  const matched = positions
-    .filter((position) => strategyVersion(position) === version)
+  const points = history
     .slice()
-    .sort((left, right) => left.closed_at_ms - right.closed_at_ms || left.id - right.id);
-  let cumulativePnl = 0;
-  let peak = 0;
+    .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
+    .map((point) => ({
+      timestampMs: point.timestamp_ms,
+      equity: point.equity,
+      equityChange: point.equity - initialBalance,
+      realizedPnl: point.realized_pnl,
+      unrealizedPnl: point.unrealized_pnl,
+      openPositionsCount: point.open_positions_count,
+    }));
+  return summarizeEquityCurve(points, initialBalance);
+}
+
+function summarizeEquityCurve(
+  points: StrategyCurvePoint[],
+  initialBalance: number,
+): StrategyCurve {
+  let runningPeak = initialBalance;
   let maxDrawdown = 0;
-  let bestCumulative = 0;
-  let worstCumulative = 0;
-  const points = matched.map((position, index) => {
-    cumulativePnl += position.realized_pnl;
-    peak = Math.max(peak, cumulativePnl);
-    maxDrawdown = Math.min(maxDrawdown, cumulativePnl - peak);
-    bestCumulative = Math.max(bestCumulative, cumulativePnl);
-    worstCumulative = Math.min(worstCumulative, cumulativePnl);
-    return {
-      closedAtMs: position.closed_at_ms,
-      cumulativePnl,
-      instId: position.inst_id,
-      realizedPnl: position.realized_pnl,
-      tradeIndex: index + 1,
-    };
+  let peakEquity = initialBalance;
+  let troughEquity = initialBalance;
+  points.forEach((point) => {
+    runningPeak = Math.max(runningPeak, point.equity);
+    maxDrawdown = Math.min(maxDrawdown, point.equity - runningPeak);
+    peakEquity = Math.max(peakEquity, point.equity);
+    troughEquity = Math.min(troughEquity, point.equity);
   });
+  const currentEquity = points[points.length - 1]?.equity ?? initialBalance;
 
   return {
-    bestCumulative,
-    finalPnl: cumulativePnl,
+    currentEquity,
+    equityChange: currentEquity - initialBalance,
     maxDrawdown,
+    peakEquity,
     points,
-    worstCumulative,
+    troughEquity,
   };
 }
 
@@ -1409,9 +1455,11 @@ function filterStrategyCurve(curve: StrategyCurve, range: StrategyCurveRange): S
   }
   const rangeMs =
     range === "7d" ? 7 * DAY_MS : range === "30d" ? 30 * DAY_MS : 90 * DAY_MS;
-  const endMs = curve.points[curve.points.length - 1].closedAtMs;
-  const points = curve.points.filter((point) => point.closedAtMs >= endMs - rangeMs);
-  return points.length === 0 ? curve : { ...curve, points };
+  const endMs = curve.points[curve.points.length - 1].timestampMs;
+  const points = curve.points.filter((point) => point.timestampMs >= endMs - rangeMs);
+  return points.length === 0
+    ? curve
+    : summarizeEquityCurve(points, curve.currentEquity - curve.equityChange);
 }
 
 function buildSignalAttribution(

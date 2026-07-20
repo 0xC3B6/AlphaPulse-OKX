@@ -62,6 +62,29 @@ const activePaper: PaperAccountSnapshot = {
   profit_factor: 4.07,
   largest_winning_pnl: 236.94,
   largest_losing_pnl: -58.22,
+  equity_history: [
+    {
+      timestamp_ms: 1782392800000,
+      equity: 10000,
+      realized_pnl: 0,
+      unrealized_pnl: 0,
+      open_positions_count: 1,
+    },
+    {
+      timestamp_ms: 1782396400000,
+      equity: 9941.78,
+      realized_pnl: -58.22,
+      unrealized_pnl: 0,
+      open_positions_count: 1,
+    },
+    {
+      timestamp_ms: 1782400000000,
+      equity: 10250.44,
+      realized_pnl: 207.58,
+      unrealized_pnl: 42.86,
+      open_positions_count: 2,
+    },
+  ],
   strategy_stats: [
     {
       strategy_name: "Scalping Optimization Design",
@@ -867,13 +890,13 @@ describe("App", () => {
     expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("ACTIVE");
     fireEvent.click(screen.getByRole("row", { name: /Scalping Optimization Design v0\.1\.3/ }));
     expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("v0.1.3");
-    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("1.79%");
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("2.50%");
     expect(within(screen.getByTestId("paper-strategy-curve")).getByRole("button", { name: "7D" })).toBeInTheDocument();
     expect(within(screen.getByTestId("paper-strategy-curve")).getByRole("button", { name: "ALL" })).toBeInTheDocument();
     expect(screen.getByTestId("paper-strategy-recharts")).toBeInTheDocument();
     expect(screen.getByTestId("paper-strategy-axis-summary")).toHaveTextContent("时间轴");
-    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("盈利");
-    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("亏损");
+    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益增长");
+    expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益回撤");
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("信号归因");
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("策略医生");
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("PRIMARY SIGNAL");
@@ -902,6 +925,51 @@ describe("App", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     expect(screen.getByTestId("review-page")).not.toHaveTextContent("BREV-USDT-SWAP");
+  });
+
+  it("shows the v0.1.3 equity curve while positions are open and no trade is closed", async () => {
+    const openOnlyPaper: PaperAccountSnapshot = {
+      ...paper,
+      equity: 10004,
+      unrealized_pnl: 4,
+      available_balance: 9504,
+      used_margin: 500,
+      positions: [activePaper.positions[0]],
+      position_history: [],
+      strategy_stats: [],
+      equity_history: [
+        {
+          timestamp_ms: 1782392800000,
+          equity: 10000,
+          realized_pnl: 0,
+          unrealized_pnl: 0,
+          open_positions_count: 0,
+        },
+        {
+          timestamp_ms: 1782400000000,
+          equity: 10004,
+          realized_pnl: 0,
+          unrealized_pnl: 4,
+          open_positions_count: 1,
+        },
+      ],
+    };
+    mockSnapshot({ ...snapshot, paper: openOnlyPaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+
+    const curve = screen.getByTestId("paper-strategy-curve");
+    expect(curve).toHaveTextContent("v0.1.3 权益资金曲线");
+    expect(curve).toHaveTextContent("当前权益");
+    expect(curve).toHaveTextContent("10,004.00 USDT");
+    expect(curve).toHaveTextContent("权益变化");
+    expect(curve).toHaveTextContent("+4.00 USDT");
+    expect(curve).not.toHaveTextContent("该版本暂无已平仓记录");
+    expect(screen.getByTestId("paper-strategy-recharts")).toBeInTheDocument();
   });
 
   it("paginates Review position history and resets the page after search", async () => {

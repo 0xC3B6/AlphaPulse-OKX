@@ -150,9 +150,18 @@ export interface PaperAccountSnapshot {
   equity: number;
   used_margin: number;
   available_balance: number;
+  equity_history?: PaperEquityPoint[];
   positions: PaperPositionSnapshot[];
   position_history?: PaperClosedPositionSnapshot[];
   trades: PaperTrade[];
+}
+
+export interface PaperEquityPoint {
+  timestamp_ms: number;
+  equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  open_positions_count: number;
 }
 
 export interface PersistenceHealthSnapshot {

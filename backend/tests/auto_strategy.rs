@@ -680,6 +680,7 @@ fn paper_account(equity: f64, positions: Vec<PaperPositionSnapshot>) -> PaperAcc
         equity,
         used_margin,
         available_balance: equity - used_margin,
+        equity_history: Vec::new(),
         positions,
         position_history: Vec::new(),
         trades: Vec::new(),

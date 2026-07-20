@@ -94,7 +94,7 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
             state
         }
         None => {
-            let state = PaperState::fresh_restored_v3(identity);
+            let state = PaperState::fresh_restored_v3(identity.clone());
             persistence
                 .persist_checkpoint(
                     &state,
@@ -105,7 +105,14 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
             state
         }
     };
-    Ok(RadarState::with_persistence(persistence, paper))
+    let equity_history = persistence
+        .load_equity_history(&identity, paper.run_id())
+        .await?;
+    Ok(RadarState::with_persistence_and_equity_history(
+        persistence,
+        paper,
+        equity_history,
+    ))
 }
 
 async fn health() -> &'static str {

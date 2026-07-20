@@ -19,8 +19,8 @@ use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 use crate::{
     config::AppConfig,
     paper::{
-        PaperAccountSnapshot, PaperOrderRequest, PaperSide, PaperState, PaperTrade,
-        PaperTradeAction,
+        compact_equity_history, PaperAccountSnapshot, PaperEquityPoint, PaperOrderRequest,
+        PaperSide, PaperState, PaperTrade, PaperTradeAction, MAX_EQUITY_HISTORY_POINTS,
     },
     state::DashboardSnapshot,
     strategy_identity::StrategyIdentity,
@@ -316,6 +316,52 @@ impl PersistenceLayer {
             serde_json::from_value(payload.0).context("failed to decode persisted paper state")
         })
         .transpose()
+    }
+
+    pub async fn load_equity_history(
+        &self,
+        identity: &StrategyIdentity,
+        run_id: &str,
+    ) -> anyhow::Result<Vec<PaperEquityPoint>> {
+        let rows = sqlx::query_as::<_, (i64, f64, f64, f64, i64)>(
+            "WITH ordered AS (\
+                 SELECT timestamp_ms, equity::DOUBLE PRECISION AS equity, \
+                        realized_pnl::DOUBLE PRECISION AS realized_pnl, \
+                        unrealized_pnl::DOUBLE PRECISION AS unrealized_pnl, open_positions_count, \
+                        ROW_NUMBER() OVER (ORDER BY timestamp_ms) AS sample_index, \
+                        COUNT(*) OVER () AS total_rows \
+                 FROM equity_snapshots \
+                 WHERE version_code = $1 AND strategy_build_id = $2 AND run_id = $3\
+             ) \
+             SELECT timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count \
+             FROM ordered \
+             WHERE total_rows <= $4 OR sample_index = 1 OR sample_index = total_rows \
+                OR MOD(sample_index - 1, GREATEST(1, (total_rows + $4 - 1) / $4)) = 0 \
+             ORDER BY timestamp_ms",
+        )
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(run_id)
+        .bind(MAX_EQUITY_HISTORY_POINTS as i64)
+        .fetch_all(&self.postgres)
+        .await?;
+        let mut history = rows
+            .into_iter()
+            .map(
+                |(timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count)| {
+                    PaperEquityPoint {
+                        timestamp_ms,
+                        equity,
+                        realized_pnl,
+                        unrealized_pnl,
+                        open_positions_count: usize::try_from(open_positions_count)
+                            .unwrap_or_default(),
+                    }
+                },
+            )
+            .collect();
+        compact_equity_history(&mut history);
+        Ok(history)
     }
 
     pub async fn persist_transition(&self, transition: &PersistedTransition) -> anyhow::Result<()> {

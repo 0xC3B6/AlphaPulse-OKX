@@ -153,9 +153,56 @@ pub struct PaperAccountSnapshot {
     pub equity: f64,
     pub used_margin: f64,
     pub available_balance: f64,
+    #[serde(default)]
+    pub equity_history: Vec<PaperEquityPoint>,
     pub positions: Vec<PaperPositionSnapshot>,
     pub position_history: Vec<PaperClosedPositionSnapshot>,
     pub trades: Vec<PaperTrade>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PaperEquityPoint {
+    pub timestamp_ms: i64,
+    pub equity: f64,
+    pub realized_pnl: f64,
+    pub unrealized_pnl: f64,
+    pub open_positions_count: usize,
+}
+
+pub const MAX_EQUITY_HISTORY_POINTS: usize = 2_048;
+
+impl PaperEquityPoint {
+    pub fn from_snapshot(timestamp_ms: i64, snapshot: &PaperAccountSnapshot) -> Self {
+        Self {
+            timestamp_ms,
+            equity: snapshot.equity,
+            realized_pnl: snapshot.realized_pnl,
+            unrealized_pnl: snapshot.unrealized_pnl,
+            open_positions_count: snapshot.positions.len(),
+        }
+    }
+}
+
+pub fn append_equity_point(history: &mut Vec<PaperEquityPoint>, point: PaperEquityPoint) {
+    match history.binary_search_by_key(&point.timestamp_ms, |item| item.timestamp_ms) {
+        Ok(index) => history[index] = point,
+        Err(index) => history.insert(index, point),
+    }
+    compact_equity_history(history);
+}
+
+pub fn compact_equity_history(history: &mut Vec<PaperEquityPoint>) {
+    if history.len() <= MAX_EQUITY_HISTORY_POINTS {
+        return;
+    }
+    let last_index = history.len() - 1;
+    let sampled = (0..MAX_EQUITY_HISTORY_POINTS)
+        .map(|index| {
+            let source_index = index * last_index / (MAX_EQUITY_HISTORY_POINTS - 1);
+            history[source_index].clone()
+        })
+        .collect();
+    *history = sampled;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -493,6 +540,7 @@ impl PaperState {
             equity,
             used_margin,
             available_balance,
+            equity_history: Vec::new(),
             positions,
             position_history,
             trades: self.trades.iter().rev().cloned().collect(),

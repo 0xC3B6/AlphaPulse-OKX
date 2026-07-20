@@ -13,8 +13,8 @@ use crate::{
     },
     domain::SymbolSnapshot,
     paper::{
-        PaperAccountSnapshot, PaperError, PaperOrderRequest, PaperSide, PaperState,
-        SCALPING_OPTIMIZATION_SOURCE,
+        append_equity_point, PaperAccountSnapshot, PaperEquityPoint, PaperError, PaperOrderRequest,
+        PaperSide, PaperState, SCALPING_OPTIMIZATION_SOURCE,
     },
     persistence::{
         PersistedOrderIntent, PersistedTransition, PersistenceHealthSnapshot, PersistenceLayer,
@@ -71,6 +71,7 @@ struct RadarStateInner {
     last_scan_at_ms: Option<i64>,
     websocket_connected: bool,
     paper: PaperState,
+    equity_history: Vec<PaperEquityPoint>,
     persistence: PersistenceHealthSnapshot,
 }
 
@@ -117,6 +118,25 @@ impl RadarStateInner {
     fn paper_snapshot(&self) -> PaperAccountSnapshot {
         let mut snapshot = self.paper.snapshot(&self.price_map());
         snapshot.persistence = self.persistence.clone();
+        let mut equity_history = self.equity_history.clone();
+        if let Some(timestamp_ms) = self
+            .latest_prices
+            .values()
+            .map(|latest| latest.updated_at_ms)
+            .max()
+            .filter(|timestamp_ms| {
+                equity_history
+                    .last()
+                    .map(|point| *timestamp_ms >= point.timestamp_ms)
+                    .unwrap_or(true)
+            })
+        {
+            append_equity_point(
+                &mut equity_history,
+                PaperEquityPoint::from_snapshot(timestamp_ms, &snapshot),
+            );
+        }
+        snapshot.equity_history = equity_history;
         snapshot
     }
 
@@ -143,20 +163,33 @@ impl RadarStateInner {
 
 impl Default for RadarState {
     fn default() -> Self {
-        Self::new(None, PaperState::default())
+        Self::new(None, PaperState::default(), Vec::new())
     }
 }
 
 impl RadarState {
     pub fn with_persistence(persistence: PersistenceLayer, paper: PaperState) -> Self {
-        Self::new(Some(persistence), paper)
+        Self::new(Some(persistence), paper, Vec::new())
     }
 
-    fn new(persistence: Option<PersistenceLayer>, paper: PaperState) -> Self {
+    pub fn with_persistence_and_equity_history(
+        persistence: PersistenceLayer,
+        paper: PaperState,
+        equity_history: Vec<PaperEquityPoint>,
+    ) -> Self {
+        Self::new(Some(persistence), paper, equity_history)
+    }
+
+    fn new(
+        persistence: Option<PersistenceLayer>,
+        paper: PaperState,
+        equity_history: Vec<PaperEquityPoint>,
+    ) -> Self {
         let (events, _) = broadcast::channel(256);
         Self {
             inner: Arc::new(RwLock::new(RadarStateInner {
                 paper,
+                equity_history,
                 ..RadarStateInner::default()
             })),
             events,
@@ -494,9 +527,14 @@ impl RadarState {
             self.pause_persistence(error).await;
             return Err(PaperTransitionError::persistence(error));
         }
+        let equity_history = persistence
+            .load_equity_history(&expected, restored.run_id())
+            .await
+            .map_err(PaperTransitionError::persistence)?;
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.paper = restored;
+            inner.equity_history = equity_history;
             inner.persistence = PersistenceHealthSnapshot::healthy(Utc::now().timestamp_millis());
             inner.dashboard()
         };
@@ -519,6 +557,7 @@ impl RadarState {
         if self.persistence.is_some() {
             snapshot.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
         }
+        let equity_point = PaperEquityPoint::from_snapshot(ts_ms, &snapshot);
         if let Some(persistence) = &self.persistence {
             let transition = PersistedTransition {
                 event_type: "scan_checkpoint".to_string(),
@@ -535,6 +574,7 @@ impl RadarState {
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.last_scan_at_ms = Some(ts_ms);
+            append_equity_point(&mut inner.equity_history, equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
             }
@@ -715,6 +755,7 @@ impl RadarState {
         if self.persistence.is_some() {
             snapshot.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
         }
+        let equity_point = PaperEquityPoint::from_snapshot(committed_at_ms, &snapshot);
         if let Some(persistence) = &self.persistence {
             let transition = PersistedTransition {
                 event_type: event_type.to_string(),
@@ -732,11 +773,13 @@ impl RadarState {
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.paper = candidate;
+            append_equity_point(&mut inner.equity_history, equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
             }
             inner.dashboard()
         };
+        let snapshot = dashboard.paper.clone();
         let _ = self.events.send(BackendEvent::PaperUpdated {
             data: snapshot.clone(),
         });
@@ -813,5 +856,27 @@ fn decision_score(symbol: &SymbolSnapshot, decision: &AutoStrategyDecision) -> u
             .max()
             .unwrap_or_default(),
         _ => symbol.trend_score.value.max(symbol.range_score.value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn dashboard_exposes_equity_history_without_closed_positions() {
+        let point = PaperEquityPoint {
+            timestamp_ms: 1_000,
+            equity: 10_004.0,
+            realized_pnl: 0.0,
+            unrealized_pnl: 4.0,
+            open_positions_count: 1,
+        };
+        let state = RadarState::new(None, PaperState::default(), vec![point.clone()]);
+
+        let paper = state.paper_snapshot().await;
+
+        assert_eq!(paper.closed_position_count, 0);
+        assert_eq!(paper.equity_history, vec![point]);
     }
 }

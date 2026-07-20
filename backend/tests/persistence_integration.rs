@@ -72,6 +72,18 @@ async fn restart_restores_balance_positions_protection_history_and_ids() {
         .unwrap();
     persistence.clear_cache().await.unwrap();
 
+    let equity_history = persistence
+        .load_equity_history(&identity, original.run_id())
+        .await
+        .unwrap();
+    assert_eq!(equity_history.len(), 1);
+    assert_eq!(equity_history[0].timestamp_ms, 100);
+    assert_eq!(equity_history[0].equity, original_snapshot.equity);
+    assert_eq!(
+        equity_history[0].unrealized_pnl,
+        original_snapshot.unrealized_pnl
+    );
+
     let restored = persistence
         .load_paper_state(&identity)
         .await
