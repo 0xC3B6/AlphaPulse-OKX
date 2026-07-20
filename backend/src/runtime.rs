@@ -113,6 +113,7 @@ async fn scan_once(
     state: &RadarState,
     rest: &OkxRestClient,
 ) -> anyhow::Result<()> {
+    state.prepare_scan().await?;
     let tickers = rest.fetch_swap_tickers().await?;
     let instruments = rest.fetch_swap_instruments().await?;
     let ticker_map: Arc<HashMap<String, TickerRow>> = Arc::new(
@@ -123,13 +124,13 @@ async fn scan_once(
             .collect(),
     );
     state
-        .update_latest_prices(
+        .try_update_latest_prices(
             ticker_map
                 .values()
                 .map(|ticker| (ticker.inst_id.clone(), ticker.last, ticker.ts_ms))
                 .collect(),
         )
-        .await;
+        .await?;
 
     let seed_activity: Vec<MarketActivity> = ticker_map
         .values()
@@ -173,7 +174,7 @@ async fn scan_once(
         }
     }
 
-    state.mark_scan(Utc::now().timestamp_millis()).await;
+    state.mark_scan(Utc::now().timestamp_millis()).await?;
     Ok(())
 }
 

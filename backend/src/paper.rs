@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::SymbolSnapshot;
+use crate::strategy_identity::{StrategyIdentity, INITIAL_RUN_ID};
 use crate::time_regime::TradeTag;
 
 const DEFAULT_INITIAL_BALANCE: f64 = 10_000.0;
@@ -288,6 +289,10 @@ pub enum PaperError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperState {
+    #[serde(default = "default_strategy_identity")]
+    strategy_identity: StrategyIdentity,
+    #[serde(default = "default_run_id")]
+    run_id: String,
     #[serde(default = "default_initial_balance")]
     initial_balance: f64,
     #[serde(default)]
@@ -343,6 +348,8 @@ struct PaperPosition {
 impl Default for PaperState {
     fn default() -> Self {
         Self {
+            strategy_identity: StrategyIdentity::restored_v3(),
+            run_id: INITIAL_RUN_ID.to_string(),
             initial_balance: DEFAULT_INITIAL_BALANCE,
             realized_pnl: 0.0,
             fee_rate: DEFAULT_FEE_RATE,
@@ -356,6 +363,25 @@ impl Default for PaperState {
 }
 
 impl PaperState {
+    pub fn fresh_restored_v3(strategy_identity: StrategyIdentity) -> Self {
+        Self {
+            strategy_identity,
+            ..Self::default()
+        }
+    }
+
+    pub fn strategy_identity(&self) -> &StrategyIdentity {
+        &self.strategy_identity
+    }
+
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub fn next_trade_id(&self) -> u64 {
+        self.next_trade_id
+    }
+
     pub fn snapshot<T: PaperMarkPrice>(
         &self,
         prices: &BTreeMap<String, T>,
@@ -579,7 +605,7 @@ impl PaperState {
         }
 
         let trade = PaperTrade {
-            id: self.next_trade_id(),
+            id: self.allocate_trade_id(),
             inst_id: request.inst_id,
             side: request.side,
             action: PaperTradeAction::Open,
@@ -652,7 +678,7 @@ impl PaperState {
         self.realized_pnl += realized_pnl;
 
         let trade = PaperTrade {
-            id: self.next_trade_id(),
+            id: self.allocate_trade_id(),
             inst_id: position.inst_id.clone(),
             side: position.side,
             action: PaperTradeAction::Close,
@@ -761,7 +787,7 @@ impl PaperState {
         }
     }
 
-    fn next_trade_id(&mut self) -> u64 {
+    fn allocate_trade_id(&mut self) -> u64 {
         let id = self.next_trade_id;
         self.next_trade_id += 1;
         id
@@ -949,6 +975,14 @@ fn default_slippage_rate() -> f64 {
 
 fn default_next_trade_id() -> u64 {
     1
+}
+
+fn default_strategy_identity() -> StrategyIdentity {
+    StrategyIdentity::restored_v3()
+}
+
+fn default_run_id() -> String {
+    INITIAL_RUN_ID.to_string()
 }
 
 fn manual_trade_source() -> String {

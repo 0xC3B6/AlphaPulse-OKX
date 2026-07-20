@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     extract::{
@@ -21,9 +21,11 @@ use crate::{
     indicators::{fvg::detect_fvgs, patterns::detect_patterns},
     macro_cycle,
     okx::rest::OkxRestClient,
-    paper::{PaperError, PaperOrderRequest},
+    paper::{PaperError, PaperOrderRequest, PaperState},
+    persistence::PersistenceLayer,
     runtime,
-    state::{BackendEvent, RadarState},
+    state::{BackendEvent, PaperTransitionError, RadarState},
+    strategy_identity::StrategyIdentity,
     valuation::CoinglassValuationClient,
 };
 
@@ -62,7 +64,7 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
 }
 
 pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
-    let state = RadarState::default();
+    let state = initialize_state(&config).await?;
     let scanner_config = config.clone();
     let scanner_state = state.clone();
     tokio::spawn(async move {
@@ -77,6 +79,33 @@ pub async fn serve(config: AppConfig) -> anyhow::Result<()> {
     tracing::info!("backend listening on http://{}", addr);
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> {
+    let persistence = PersistenceLayer::connect_required(config).await?;
+    persistence.initialize().await?;
+    let identity = StrategyIdentity::restored_v3();
+    let paper = match persistence.load_paper_state(&identity).await? {
+        Some(state) => {
+            anyhow::ensure!(
+                state.strategy_identity() == &identity,
+                "persisted paper checkpoint identity does not match restored v0.1.3"
+            );
+            state
+        }
+        None => {
+            let state = PaperState::fresh_restored_v3(identity);
+            persistence
+                .persist_checkpoint(
+                    &state,
+                    &state.snapshot(&BTreeMap::<String, f64>::new()),
+                    Utc::now().timestamp_millis(),
+                )
+                .await?;
+            state
+        }
+    };
+    Ok(RadarState::with_persistence(persistence, paper))
 }
 
 async fn health() -> &'static str {
@@ -235,6 +264,19 @@ impl From<PaperError> for ApiError {
         Self {
             status,
             message: error.to_string(),
+        }
+    }
+}
+
+impl From<PaperTransitionError> for ApiError {
+    fn from(error: PaperTransitionError) -> Self {
+        match error {
+            PaperTransitionError::Paper(error) => error.into(),
+            PaperTransitionError::PersistencePaused(message)
+            | PaperTransitionError::Persistence(message) => Self {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message,
+            },
         }
     }
 }

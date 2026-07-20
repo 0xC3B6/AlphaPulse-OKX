@@ -1,4 +1,8 @@
-use std::{str::FromStr, time::Duration};
+use std::{
+    str::FromStr,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use anyhow::{anyhow, Context};
 use redis::AsyncCommands;
@@ -9,12 +13,16 @@ use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 
 use crate::{
     config::AppConfig,
-    paper::{PaperAccountSnapshot, PaperSide, PaperState, PaperTradeAction},
+    paper::{
+        PaperAccountSnapshot, PaperOrderRequest, PaperSide, PaperState, PaperTrade,
+        PaperTradeAction,
+    },
     state::DashboardSnapshot,
-    strategy_identity::{StrategyIdentity, INITIAL_RUN_ID},
+    strategy_identity::StrategyIdentity,
 };
 
 const DASHBOARD_CACHE_KEY: &str = "alphapulse:dashboard:snapshot";
+static REJECTED_INTENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct PersistenceLayer {
@@ -38,6 +46,137 @@ pub struct PersistedOrderIntent {
     pub status: String,
     pub rejection_reason: Option<String>,
     pub created_at_ms: i64,
+}
+
+impl PersistedOrderIntent {
+    pub fn accepted_open(
+        state: &PaperState,
+        order: &PaperOrderRequest,
+        trade: &PaperTrade,
+        score: u8,
+    ) -> Self {
+        Self::accepted_trade(state, trade, score, order.reason.as_deref())
+    }
+
+    pub fn accepted_close(state: &PaperState, trade: &PaperTrade, score: u8) -> Self {
+        Self::accepted_trade(state, trade, score, Some(&trade.reason))
+    }
+
+    pub fn rejected_open(
+        state: &PaperState,
+        order: &PaperOrderRequest,
+        score: u8,
+        created_at_ms: i64,
+        error: impl Into<String>,
+    ) -> Self {
+        Self::rejected(
+            state,
+            &order.inst_id,
+            order.side,
+            PaperTradeAction::Open,
+            score,
+            order.primary_signal.as_deref().unwrap_or("manual"),
+            order.reason.as_deref().unwrap_or("paper open"),
+            order.signal_tags.clone(),
+            created_at_ms,
+            error,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn rejected_close(
+        state: &PaperState,
+        symbol: &str,
+        side: PaperSide,
+        score: u8,
+        primary_signal: &str,
+        reason: &str,
+        tags: Vec<String>,
+        created_at_ms: i64,
+        error: impl Into<String>,
+    ) -> Self {
+        Self::rejected(
+            state,
+            symbol,
+            side,
+            PaperTradeAction::Close,
+            score,
+            primary_signal,
+            reason,
+            tags,
+            created_at_ms,
+            error,
+        )
+    }
+
+    fn accepted_trade(
+        state: &PaperState,
+        trade: &PaperTrade,
+        score: u8,
+        reason: Option<&str>,
+    ) -> Self {
+        let mut tags = trade.signal_tags.clone();
+        tags.extend(trade.tags.iter().map(|tag| tag.label.clone()));
+        Self {
+            client_intent_id: format!(
+                "{}:trade:{}:{}",
+                state.run_id(),
+                trade.id,
+                action_name(trade.action)
+            ),
+            run_id: state.run_id().to_string(),
+            identity: state.strategy_identity().clone(),
+            symbol: trade.inst_id.clone(),
+            side: trade.side,
+            action: trade.action,
+            score,
+            primary_signal: if trade.primary_signal.is_empty() {
+                "manual".to_string()
+            } else {
+                trade.primary_signal.clone()
+            },
+            reason: reason.unwrap_or(&trade.reason).to_string(),
+            tags,
+            status: "accepted".to_string(),
+            rejection_reason: None,
+            created_at_ms: trade.ts_ms,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn rejected(
+        state: &PaperState,
+        symbol: &str,
+        side: PaperSide,
+        action: PaperTradeAction,
+        score: u8,
+        primary_signal: &str,
+        reason: &str,
+        tags: Vec<String>,
+        created_at_ms: i64,
+        error: impl Into<String>,
+    ) -> Self {
+        let sequence = REJECTED_INTENT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        Self {
+            client_intent_id: format!(
+                "{}:rejected:{}:{created_at_ms}:{sequence}",
+                state.run_id(),
+                action_name(action)
+            ),
+            run_id: state.run_id().to_string(),
+            identity: state.strategy_identity().clone(),
+            symbol: symbol.to_string(),
+            side,
+            action,
+            score,
+            primary_signal: primary_signal.to_string(),
+            reason: reason.to_string(),
+            tags,
+            status: "rejected".to_string(),
+            rejection_reason: Some(error.into()),
+            created_at_ms,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,12 +276,12 @@ impl PersistenceLayer {
             .intent
             .as_ref()
             .map(|intent| intent.identity.clone())
-            .unwrap_or_else(StrategyIdentity::restored_v3);
+            .unwrap_or_else(|| transition.state.strategy_identity().clone());
         let run_id = transition
             .intent
             .as_ref()
             .map(|intent| intent.run_id.as_str())
-            .unwrap_or(INITIAL_RUN_ID);
+            .unwrap_or_else(|| transition.state.run_id());
         let mut transaction = self.postgres.begin().await?;
         if let Some(intent) = &transition.intent {
             insert_intent(&mut transaction, intent).await?;
@@ -195,12 +334,12 @@ impl PersistenceLayer {
         snapshot: &PaperAccountSnapshot,
         ts_ms: i64,
     ) -> anyhow::Result<()> {
-        let identity = StrategyIdentity::restored_v3();
+        let identity = state.strategy_identity();
         let mut transaction = self.postgres.begin().await?;
         persist_state_rows(
             &mut transaction,
-            &identity,
-            INITIAL_RUN_ID,
+            identity,
+            state.run_id(),
             state,
             snapshot,
             "checkpoint",
@@ -364,7 +503,8 @@ async fn persist_state_rows(
             "INSERT INTO fills \
              (trade_id, order_intent_id, run_id, version_code, strategy_build_id, symbol, side, action, \
               price, quantity, fee, slippage, filled_at_ms) \
-             VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
+             VALUES ($1, (SELECT id FROM order_intents WHERE client_intent_id = \
+                 $2 || ':trade:' || $1::text || ':' || $7), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
              ON CONFLICT (run_id, trade_id) DO UPDATE SET price = EXCLUDED.price, \
              quantity = EXCLUDED.quantity, fee = EXCLUDED.fee, slippage = EXCLUDED.slippage",
         )
@@ -500,7 +640,7 @@ async fn insert_identity_and_run(
     let realized = snapshot.map(|value| value.realized_pnl).unwrap_or(0.0);
     let unrealized = snapshot.map(|value| value.unrealized_pnl).unwrap_or(0.0);
     let fees = snapshot.map(|value| value.total_fees).unwrap_or(0.0);
-    sqlx::query(
+    let statement = if snapshot.is_some() {
         "INSERT INTO strategy_runs \
          (run_id, version_code, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
           realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
@@ -508,22 +648,30 @@ async fn insert_identity_and_run(
          VALUES ($1, $2, $3, $4, 'paper', $5, $6, $7, $8, $9, $10, 'running', $11, NULL, '0.05% per fill', '0.02% adverse', $12) \
          ON CONFLICT (run_id) DO UPDATE SET current_equity = EXCLUDED.current_equity, \
          realized_pnl = EXCLUDED.realized_pnl, unrealized_pnl = EXCLUDED.unrealized_pnl, \
-         fee_total = EXCLUDED.fee_total, max_drawdown = EXCLUDED.max_drawdown, status = 'running'",
-    )
-    .bind(run_id)
-    .bind(&identity.version_code)
-    .bind(&identity.strategy_build_id)
-    .bind(&identity.config_hash)
-    .bind(decimal_or_zero(initial))
-    .bind(decimal_or_zero(equity))
-    .bind(decimal_or_zero(realized))
-    .bind(decimal_or_zero(unrealized))
-    .bind(decimal_or_zero(fees))
-    .bind(decimal_or_zero((initial - equity).max(0.0)))
-    .bind(ts_ms)
-    .bind(Json(json!({"config_hash": identity.config_hash})))
-    .execute(&mut **transaction)
-    .await?;
+         fee_total = EXCLUDED.fee_total, max_drawdown = EXCLUDED.max_drawdown, status = 'running'"
+    } else {
+        "INSERT INTO strategy_runs \
+         (run_id, version_code, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
+          realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
+          fee_model, slippage_model, config_snapshot) \
+         VALUES ($1, $2, $3, $4, 'paper', $5, $6, $7, $8, $9, $10, 'running', $11, NULL, '0.05% per fill', '0.02% adverse', $12) \
+         ON CONFLICT (run_id) DO NOTHING"
+    };
+    sqlx::query(statement)
+        .bind(run_id)
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(&identity.config_hash)
+        .bind(decimal_or_zero(initial))
+        .bind(decimal_or_zero(equity))
+        .bind(decimal_or_zero(realized))
+        .bind(decimal_or_zero(unrealized))
+        .bind(decimal_or_zero(fees))
+        .bind(decimal_or_zero((initial - equity).max(0.0)))
+        .bind(ts_ms)
+        .bind(Json(json!({"config_hash": identity.config_hash})))
+        .execute(&mut **transaction)
+        .await?;
     Ok(())
 }
 

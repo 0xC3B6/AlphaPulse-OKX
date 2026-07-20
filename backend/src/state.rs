@@ -5,7 +5,7 @@ use std::{
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::{
     auto_strategy::{
@@ -13,9 +13,14 @@ use crate::{
     },
     domain::SymbolSnapshot,
     paper::{
-        PaperAccountSnapshot, PaperError, PaperOrderRequest, PaperState,
+        PaperAccountSnapshot, PaperError, PaperOrderRequest, PaperSide, PaperState,
         SCALPING_OPTIMIZATION_SOURCE,
     },
+    persistence::{
+        PersistedOrderIntent, PersistedTransition, PersistenceHealthSnapshot, PersistenceLayer,
+        PersistenceStatus,
+    },
+    strategy_identity::StrategyIdentity,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +29,7 @@ pub struct DashboardSnapshot {
     pub last_scan_at_ms: Option<i64>,
     pub websocket_connected: bool,
     pub paper: PaperAccountSnapshot,
+    pub persistence: PersistenceHealthSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,25 +40,61 @@ pub enum BackendEvent {
     PaperUpdated { data: PaperAccountSnapshot },
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum PaperTransitionError {
+    #[error(transparent)]
+    Paper(#[from] PaperError),
+    #[error("paper persistence is paused: {0}")]
+    PersistencePaused(String),
+    #[error("paper persistence failed: {0}")]
+    Persistence(String),
+}
+
+impl PaperTransitionError {
+    fn persistence(error: impl std::fmt::Display) -> Self {
+        Self::Persistence(error.to_string())
+    }
+}
+
 #[derive(Clone)]
 pub struct RadarState {
     inner: Arc<RwLock<RadarStateInner>>,
     events: broadcast::Sender<BackendEvent>,
+    persistence: Option<PersistenceLayer>,
+    paper_transition: Arc<Mutex<()>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct RadarStateInner {
     symbols: BTreeMap<String, SymbolSnapshot>,
     latest_prices: BTreeMap<String, LatestPrice>,
     last_scan_at_ms: Option<i64>,
     websocket_connected: bool,
     paper: PaperState,
+    persistence: PersistenceHealthSnapshot,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct LatestPrice {
     price: f64,
     updated_at_ms: i64,
+}
+
+impl Default for RadarStateInner {
+    fn default() -> Self {
+        Self {
+            symbols: BTreeMap::new(),
+            latest_prices: BTreeMap::new(),
+            last_scan_at_ms: None,
+            websocket_connected: false,
+            paper: PaperState::default(),
+            persistence: PersistenceHealthSnapshot {
+                status: PersistenceStatus::Healthy,
+                last_committed_at_ms: None,
+                last_error: None,
+            },
+        }
+    }
 }
 
 impl RadarStateInner {
@@ -79,6 +121,16 @@ impl RadarStateInner {
         prices
     }
 
+    fn dashboard(&self) -> DashboardSnapshot {
+        DashboardSnapshot {
+            symbols: self.symbols.values().cloned().collect(),
+            last_scan_at_ms: self.last_scan_at_ms,
+            websocket_connected: self.websocket_connected,
+            paper: self.paper.snapshot(&self.price_map()),
+            persistence: self.persistence.clone(),
+        }
+    }
+
     fn set_latest_price(&mut self, inst_id: &str, price: f64, updated_at_ms: i64) {
         if !valid_price(price) {
             return;
@@ -102,29 +154,39 @@ impl RadarStateInner {
 
 impl Default for RadarState {
     fn default() -> Self {
-        let (events, _) = broadcast::channel(256);
-        Self {
-            inner: Arc::new(RwLock::new(RadarStateInner::default())),
-            events,
-        }
+        Self::new(None, PaperState::default())
     }
 }
 
 impl RadarState {
-    pub async fn snapshot(&self) -> DashboardSnapshot {
-        let inner = self.inner.read().await;
-        let prices = inner.price_map();
-        DashboardSnapshot {
-            symbols: inner.symbols.values().cloned().collect(),
-            last_scan_at_ms: inner.last_scan_at_ms,
-            websocket_connected: inner.websocket_connected,
-            paper: inner.paper.snapshot(&prices),
+    pub fn with_persistence(persistence: PersistenceLayer, paper: PaperState) -> Self {
+        Self::new(Some(persistence), paper)
+    }
+
+    fn new(persistence: Option<PersistenceLayer>, paper: PaperState) -> Self {
+        let (events, _) = broadcast::channel(256);
+        Self {
+            inner: Arc::new(RwLock::new(RadarStateInner {
+                paper,
+                ..RadarStateInner::default()
+            })),
+            events,
+            persistence,
+            paper_transition: Arc::new(Mutex::new(())),
         }
+    }
+
+    pub async fn snapshot(&self) -> DashboardSnapshot {
+        self.inner.read().await.dashboard()
     }
 
     pub async fn paper_snapshot(&self) -> PaperAccountSnapshot {
         let inner = self.inner.read().await;
         inner.paper.snapshot(&inner.price_map())
+    }
+
+    pub async fn persistence_health(&self) -> PersistenceHealthSnapshot {
+        self.inner.read().await.persistence.clone()
     }
 
     pub async fn upsert_symbol(&self, symbol: SymbolSnapshot) {
@@ -139,7 +201,17 @@ impl RadarState {
     }
 
     pub async fn update_latest_prices(&self, prices: Vec<(String, f64, i64)>) {
-        let (updated_symbols, paper_update) = {
+        if let Err(error) = self.try_update_latest_prices(prices).await {
+            tracing::warn!(?error, "paper transition failed after price update");
+        }
+    }
+
+    pub async fn try_update_latest_prices(
+        &self,
+        prices: Vec<(String, f64, i64)>,
+    ) -> Result<(), PaperTransitionError> {
+        let _transition = self.paper_transition.lock().await;
+        let (updated_symbols, updated_ids, decision_ts_ms) = {
             let mut inner = self.inner.write().await;
             let mut updated_ids = BTreeSet::new();
             let mut decision_ts_ms = Utc::now().timestamp_millis();
@@ -158,45 +230,7 @@ impl RadarState {
                     updated_symbols.push(symbol.clone());
                 }
             }
-
-            let mut changed_paper = false;
-            for inst_id in inner.paper.open_position_inst_ids() {
-                if updated_ids.contains(&inst_id) {
-                    changed_paper |=
-                        apply_auto_exit_for_inst_id(&mut inner, &inst_id, decision_ts_ms);
-                }
-            }
-
-            for inst_id in &updated_ids {
-                let Some(symbol) = inner.symbols.get(inst_id).cloned() else {
-                    continue;
-                };
-                let price_map = inner.price_map();
-                let paper = inner.paper.snapshot(&price_map);
-                let Some(decision) = evaluate_auto_strategy_at(
-                    &symbol,
-                    &paper,
-                    AutoStrategyConfig::default(),
-                    decision_ts_ms,
-                ) else {
-                    continue;
-                };
-                match apply_strategy_decision(
-                    &mut inner.paper,
-                    &price_map,
-                    decision,
-                    decision_ts_ms,
-                ) {
-                    Ok(()) => changed_paper = true,
-                    Err(error) => {
-                        tracing::debug!(%inst_id, ?error, "automatic entry failed after price update")
-                    }
-                }
-            }
-
-            let paper_update = (changed_paper || inner.paper.has_open_positions())
-                .then(|| inner.paper.snapshot(&inner.price_map()));
-            (updated_symbols, paper_update)
+            (updated_symbols, updated_ids, decision_ts_ms)
         };
 
         for symbol in updated_symbols {
@@ -204,9 +238,63 @@ impl RadarState {
                 .events
                 .send(BackendEvent::SymbolUpdated { data: symbol });
         }
-        if let Some(paper) = paper_update {
+
+        let mut closed_ids = BTreeSet::new();
+        let open_ids = self.inner.read().await.paper.open_position_inst_ids();
+        for inst_id in open_ids {
+            if !updated_ids.contains(&inst_id) {
+                continue;
+            }
+            let (decision, prices) = {
+                let inner = self.inner.read().await;
+                let prices = inner.price_map();
+                let paper = inner.paper.snapshot(&prices);
+                (
+                    evaluate_auto_exit(&inst_id, &paper, AutoStrategyConfig::default()),
+                    prices,
+                )
+            };
+            if let Some(decision) = decision {
+                self.apply_strategy_decision_locked(decision, &prices, 0, decision_ts_ms)
+                    .await?;
+                closed_ids.insert(inst_id);
+            }
+        }
+
+        if !self.persistence_is_paused().await {
+            for inst_id in &updated_ids {
+                if closed_ids.contains(inst_id) {
+                    continue;
+                }
+                let (symbol, decision, prices) = {
+                    let inner = self.inner.read().await;
+                    let Some(symbol) = inner.symbols.get(inst_id).cloned() else {
+                        continue;
+                    };
+                    let prices = inner.price_map();
+                    let paper = inner.paper.snapshot(&prices);
+                    let decision = evaluate_auto_strategy_at(
+                        &symbol,
+                        &paper,
+                        AutoStrategyConfig::default(),
+                        decision_ts_ms,
+                    );
+                    (symbol, decision, prices)
+                };
+                let Some(decision) = decision else {
+                    continue;
+                };
+                let score = decision_score(&symbol, &decision);
+                self.apply_strategy_decision_locked(decision, &prices, score, decision_ts_ms)
+                    .await?;
+            }
+        }
+
+        let paper = self.paper_snapshot().await;
+        if !paper.positions.is_empty() {
             let _ = self.events.send(BackendEvent::PaperUpdated { data: paper });
         }
+        Ok(())
     }
 
     pub async fn ticker_sync_inst_ids(&self, fixed_watchlist: &[String]) -> Vec<String> {
@@ -231,55 +319,133 @@ impl RadarState {
     pub async fn open_paper_order(
         &self,
         order: PaperOrderRequest,
-    ) -> Result<PaperAccountSnapshot, PaperError> {
-        let snapshot = {
-            let mut inner = self.inner.write().await;
-            let inst_id = order.inst_id.clone();
-            let price = inner
-                .price_for(&inst_id)
-                .ok_or_else(|| PaperError::PriceUnavailable(inst_id.clone()))?;
-            let prices = inner.price_map();
-            let available_balance = inner.paper.snapshot(&prices).available_balance;
-            inner.paper.open(
-                order,
-                price,
-                available_balance,
-                Utc::now().timestamp_millis(),
-            )?;
-            inner.paper.snapshot(&prices)
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        let _transition = self.paper_transition.lock().await;
+        self.ensure_entry_allowed().await?;
+        let committed_at_ms = Utc::now().timestamp_millis();
+        let (mut candidate, prices, price) = {
+            let inner = self.inner.read().await;
+            (
+                inner.paper.clone(),
+                inner.price_map(),
+                inner.price_for(&order.inst_id),
+            )
         };
-        let _ = self.events.send(BackendEvent::PaperUpdated {
-            data: snapshot.clone(),
-        });
-        Ok(snapshot)
+        let Some(price) = price else {
+            let error = PaperError::PriceUnavailable(order.inst_id.clone());
+            let intent = PersistedOrderIntent::rejected_open(
+                &candidate,
+                &order,
+                0,
+                committed_at_ms,
+                error.to_string(),
+            );
+            return Err(self.persist_rejection(intent, error).await);
+        };
+        let available_balance = candidate.snapshot(&prices).available_balance;
+        let trade = match candidate.open(order.clone(), price, available_balance, committed_at_ms) {
+            Ok(trade) => trade,
+            Err(error) => {
+                let intent = PersistedOrderIntent::rejected_open(
+                    &candidate,
+                    &order,
+                    0,
+                    committed_at_ms,
+                    error.to_string(),
+                );
+                return Err(self.persist_rejection(intent, error).await);
+            }
+        };
+        let intent = PersistedOrderIntent::accepted_open(&candidate, &order, &trade, 0);
+        self.commit_paper_candidate(
+            candidate,
+            &prices,
+            "paper_open",
+            Some(intent),
+            committed_at_ms,
+        )
+        .await
     }
 
     pub async fn close_paper_position(
         &self,
         inst_id: &str,
-    ) -> Result<PaperAccountSnapshot, PaperError> {
-        let snapshot = {
-            let mut inner = self.inner.write().await;
-            let price = inner
-                .price_for(inst_id)
-                .ok_or_else(|| PaperError::PriceUnavailable(inst_id.to_string()))?;
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        let _transition = self.paper_transition.lock().await;
+        let committed_at_ms = Utc::now().timestamp_millis();
+        let (mut candidate, prices, price, prior) = {
+            let inner = self.inner.read().await;
             let prices = inner.price_map();
-            inner
+            let prior = inner
                 .paper
-                .close(inst_id, price, Utc::now().timestamp_millis())?;
-            inner.paper.snapshot(&prices)
+                .snapshot(&prices)
+                .positions
+                .into_iter()
+                .find(|position| position.inst_id == inst_id);
+            let price = inner.price_for(inst_id);
+            (inner.paper.clone(), prices, price, prior)
         };
-        let _ = self.events.send(BackendEvent::PaperUpdated {
-            data: snapshot.clone(),
-        });
-        Ok(snapshot)
+        let Some(price) = price else {
+            let error = PaperError::PriceUnavailable(inst_id.to_string());
+            let intent = PersistedOrderIntent::rejected_close(
+                &candidate,
+                inst_id,
+                prior
+                    .as_ref()
+                    .map(|position| position.side)
+                    .unwrap_or(PaperSide::Long),
+                0,
+                prior
+                    .as_ref()
+                    .map(|position| position.primary_signal.as_str())
+                    .unwrap_or("manual"),
+                "manual close",
+                Vec::new(),
+                committed_at_ms,
+                error.to_string(),
+            );
+            return Err(self.persist_rejection(intent, error).await);
+        };
+        let trade = match candidate.close(inst_id, price, committed_at_ms) {
+            Ok(trade) => trade,
+            Err(error) => {
+                let side = prior
+                    .as_ref()
+                    .map(|position| position.side)
+                    .unwrap_or(PaperSide::Long);
+                let intent = PersistedOrderIntent::rejected_close(
+                    &candidate,
+                    inst_id,
+                    side,
+                    0,
+                    prior
+                        .as_ref()
+                        .map(|position| position.primary_signal.as_str())
+                        .unwrap_or("manual"),
+                    "manual close",
+                    Vec::new(),
+                    committed_at_ms,
+                    error.to_string(),
+                );
+                return Err(self.persist_rejection(intent, error).await);
+            }
+        };
+        let intent = PersistedOrderIntent::accepted_close(&candidate, &trade, 0);
+        self.commit_paper_candidate(
+            candidate,
+            &prices,
+            "paper_close",
+            Some(intent),
+            committed_at_ms,
+        )
+        .await
     }
 
     pub async fn run_auto_strategy_for_symbol(
         &self,
         symbol: &SymbolSnapshot,
         config: AutoStrategyConfig,
-    ) -> Result<Option<PaperAccountSnapshot>, PaperError> {
+    ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
         self.run_auto_strategy_for_symbol_at(symbol, config, Utc::now().timestamp_millis())
             .await
     }
@@ -289,27 +455,102 @@ impl RadarState {
         symbol: &SymbolSnapshot,
         config: AutoStrategyConfig,
         now_ms: i64,
-    ) -> Result<Option<PaperAccountSnapshot>, PaperError> {
-        let snapshot = {
+    ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
+        let _transition = self.paper_transition.lock().await;
+        let (decision, prices) = {
             let mut inner = self.inner.write().await;
             inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
             let prices = inner.price_map();
             let paper = inner.paper.snapshot(&prices);
-            let Some(decision) = evaluate_auto_strategy_at(symbol, &paper, config, now_ms) else {
-                return Ok(None);
-            };
-            apply_strategy_decision(&mut inner.paper, &prices, decision, now_ms)?;
-            inner.paper.snapshot(&prices)
+            (
+                evaluate_auto_strategy_at(symbol, &paper, config, now_ms),
+                prices,
+            )
         };
-        let _ = self.events.send(BackendEvent::PaperUpdated {
-            data: snapshot.clone(),
-        });
-        Ok(Some(snapshot))
+        let Some(decision) = decision else {
+            return Ok(None);
+        };
+        if matches!(decision, AutoStrategyDecision::Open { .. })
+            && self.persistence_is_paused().await
+        {
+            return Ok(None);
+        }
+        let score = decision_score(symbol, &decision);
+        self.apply_strategy_decision_locked(decision, &prices, score, now_ms)
+            .await
+            .map(Some)
     }
 
-    pub async fn mark_scan(&self, ts_ms: i64) {
-        let mut inner = self.inner.write().await;
-        inner.last_scan_at_ms = Some(ts_ms);
+    pub async fn prepare_scan(&self) -> Result<(), PaperTransitionError> {
+        let Some(persistence) = &self.persistence else {
+            return Ok(());
+        };
+        let _transition = self.paper_transition.lock().await;
+        if !persistence.postgres_ready().await {
+            let error = "PostgreSQL readiness check failed";
+            self.pause_persistence(error).await;
+            return Err(PaperTransitionError::persistence(error));
+        }
+        if !self.persistence_is_paused().await {
+            return Ok(());
+        }
+
+        let expected = StrategyIdentity::restored_v3();
+        let restored = persistence
+            .load_paper_state(&expected)
+            .await
+            .map_err(|error| PaperTransitionError::persistence(&error))?
+            .ok_or_else(|| PaperTransitionError::persistence("missing restored v3 checkpoint"))?;
+        if restored.strategy_identity() != &expected {
+            let error = "restored checkpoint identity mismatch";
+            self.pause_persistence(error).await;
+            return Err(PaperTransitionError::persistence(error));
+        }
+        let dashboard = {
+            let mut inner = self.inner.write().await;
+            inner.paper = restored;
+            inner.persistence = PersistenceHealthSnapshot::healthy(Utc::now().timestamp_millis());
+            inner.dashboard()
+        };
+        let _ = self.events.send(BackendEvent::Snapshot {
+            data: dashboard.clone(),
+        });
+        if let Err(error) = persistence.rebuild_cache(&dashboard).await {
+            tracing::warn!(?error, "failed to rebuild Redis after persistence recovery");
+        }
+        Ok(())
+    }
+
+    pub async fn mark_scan(&self, ts_ms: i64) -> Result<(), PaperTransitionError> {
+        let _transition = self.paper_transition.lock().await;
+        let (paper, prices) = {
+            let inner = self.inner.read().await;
+            (inner.paper.clone(), inner.price_map())
+        };
+        let snapshot = paper.snapshot(&prices);
+        if let Some(persistence) = &self.persistence {
+            let transition = PersistedTransition {
+                event_type: "scan_checkpoint".to_string(),
+                intent: None,
+                state: paper,
+                snapshot,
+                committed_at_ms: ts_ms,
+            };
+            if let Err(error) = persistence.persist_transition(&transition).await {
+                self.pause_persistence(error.to_string()).await;
+                return Err(PaperTransitionError::persistence(error));
+            }
+        }
+        let dashboard = {
+            let mut inner = self.inner.write().await;
+            inner.last_scan_at_ms = Some(ts_ms);
+            if self.persistence.is_some() {
+                inner.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
+            }
+            inner.dashboard()
+        };
+        self.rebuild_cache_after_commit(&dashboard).await;
+        Ok(())
     }
 
     pub async fn set_websocket_connected(&self, connected: bool) {
@@ -320,80 +561,263 @@ impl RadarState {
     pub fn subscribe(&self) -> broadcast::Receiver<BackendEvent> {
         self.events.subscribe()
     }
+
+    async fn apply_strategy_decision_locked(
+        &self,
+        decision: AutoStrategyDecision,
+        prices: &BTreeMap<String, f64>,
+        score: u8,
+        now_ms: i64,
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        let mut candidate = self.inner.read().await.paper.clone();
+        match decision {
+            AutoStrategyDecision::Close {
+                inst_id,
+                reason,
+                tags,
+                execution_price,
+                ..
+            } => {
+                let prior = candidate
+                    .snapshot(prices)
+                    .positions
+                    .into_iter()
+                    .find(|position| position.inst_id == inst_id);
+                let price = execution_price
+                    .filter(|price| valid_price(*price))
+                    .or_else(|| {
+                        prices
+                            .get(&inst_id)
+                            .copied()
+                            .filter(|price| valid_price(*price))
+                    });
+                let Some(price) = price else {
+                    let error = PaperError::PriceUnavailable(inst_id.clone());
+                    let intent = PersistedOrderIntent::rejected_close(
+                        &candidate,
+                        &inst_id,
+                        prior
+                            .as_ref()
+                            .map(|position| position.side)
+                            .unwrap_or(PaperSide::Long),
+                        score,
+                        prior
+                            .as_ref()
+                            .map(|position| position.primary_signal.as_str())
+                            .unwrap_or("automatic_exit"),
+                        &reason,
+                        tags.iter().map(|tag| tag.label.clone()).collect(),
+                        now_ms,
+                        error.to_string(),
+                    );
+                    return Err(self.persist_rejection(intent, error).await);
+                };
+                let trade = match candidate.close_with_meta_and_tags(
+                    &inst_id,
+                    price,
+                    now_ms,
+                    SCALPING_OPTIMIZATION_SOURCE,
+                    &reason,
+                    tags.clone(),
+                ) {
+                    Ok(trade) => trade,
+                    Err(error) => {
+                        let intent = PersistedOrderIntent::rejected_close(
+                            &candidate,
+                            &inst_id,
+                            prior
+                                .as_ref()
+                                .map(|position| position.side)
+                                .unwrap_or(PaperSide::Long),
+                            score,
+                            prior
+                                .as_ref()
+                                .map(|position| position.primary_signal.as_str())
+                                .unwrap_or("automatic_exit"),
+                            &reason,
+                            tags.into_iter().map(|tag| tag.label).collect(),
+                            now_ms,
+                            error.to_string(),
+                        );
+                        return Err(self.persist_rejection(intent, error).await);
+                    }
+                };
+                let intent = PersistedOrderIntent::accepted_close(&candidate, &trade, score);
+                self.commit_paper_candidate(
+                    candidate,
+                    prices,
+                    "automatic_close",
+                    Some(intent),
+                    now_ms,
+                )
+                .await
+            }
+            AutoStrategyDecision::Open {
+                order,
+                reason,
+                tags,
+            } => {
+                if self.persistence_is_paused().await {
+                    return Err(PaperTransitionError::PersistencePaused(
+                        "new entries are disabled until PostgreSQL recovers".to_string(),
+                    ));
+                }
+                let price = prices
+                    .get(&order.inst_id)
+                    .copied()
+                    .filter(|price| valid_price(*price));
+                let Some(price) = price else {
+                    let error = PaperError::PriceUnavailable(order.inst_id.clone());
+                    let intent = PersistedOrderIntent::rejected_open(
+                        &candidate,
+                        &order,
+                        score,
+                        now_ms,
+                        error.to_string(),
+                    );
+                    return Err(self.persist_rejection(intent, error).await);
+                };
+                let available_balance = candidate.snapshot(prices).available_balance;
+                let trade = match candidate.open_with_meta_and_tags(
+                    order.clone(),
+                    price,
+                    available_balance,
+                    now_ms,
+                    SCALPING_OPTIMIZATION_SOURCE,
+                    &reason,
+                    tags,
+                ) {
+                    Ok(trade) => trade,
+                    Err(error) => {
+                        let intent = PersistedOrderIntent::rejected_open(
+                            &candidate,
+                            &order,
+                            score,
+                            now_ms,
+                            error.to_string(),
+                        );
+                        return Err(self.persist_rejection(intent, error).await);
+                    }
+                };
+                let intent = PersistedOrderIntent::accepted_open(&candidate, &order, &trade, score);
+                self.commit_paper_candidate(
+                    candidate,
+                    prices,
+                    "automatic_open",
+                    Some(intent),
+                    now_ms,
+                )
+                .await
+            }
+        }
+    }
+
+    async fn commit_paper_candidate(
+        &self,
+        candidate: PaperState,
+        prices: &BTreeMap<String, f64>,
+        event_type: &str,
+        intent: Option<PersistedOrderIntent>,
+        committed_at_ms: i64,
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        let snapshot = candidate.snapshot(prices);
+        if let Some(persistence) = &self.persistence {
+            let transition = PersistedTransition {
+                event_type: event_type.to_string(),
+                intent,
+                state: candidate.clone(),
+                snapshot: snapshot.clone(),
+                committed_at_ms,
+            };
+            if let Err(error) = persistence.persist_transition(&transition).await {
+                self.pause_persistence(error.to_string()).await;
+                return Err(PaperTransitionError::persistence(error));
+            }
+        }
+
+        let dashboard = {
+            let mut inner = self.inner.write().await;
+            inner.paper = candidate;
+            if self.persistence.is_some() {
+                inner.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
+            }
+            inner.dashboard()
+        };
+        let _ = self.events.send(BackendEvent::PaperUpdated {
+            data: snapshot.clone(),
+        });
+        self.rebuild_cache_after_commit(&dashboard).await;
+        Ok(snapshot)
+    }
+
+    async fn persist_rejection(
+        &self,
+        intent: PersistedOrderIntent,
+        paper_error: PaperError,
+    ) -> PaperTransitionError {
+        if let Some(persistence) = &self.persistence {
+            if let Err(error) = persistence.persist_rejection(&intent).await {
+                self.pause_persistence(error.to_string()).await;
+                return PaperTransitionError::persistence(error);
+            }
+        }
+        PaperTransitionError::Paper(paper_error)
+    }
+
+    async fn ensure_entry_allowed(&self) -> Result<(), PaperTransitionError> {
+        let health = self.persistence_health().await;
+        if health.status == PersistenceStatus::PersistencePaused {
+            return Err(PaperTransitionError::PersistencePaused(
+                health
+                    .last_error
+                    .unwrap_or_else(|| "PostgreSQL is unavailable".to_string()),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn persistence_is_paused(&self) -> bool {
+        self.inner.read().await.persistence.status == PersistenceStatus::PersistencePaused
+    }
+
+    async fn pause_persistence(&self, error: impl Into<String>) {
+        let dashboard = {
+            let mut inner = self.inner.write().await;
+            let last_committed_at_ms = inner.persistence.last_committed_at_ms;
+            inner.persistence = PersistenceHealthSnapshot::paused(error);
+            inner.persistence.last_committed_at_ms = last_committed_at_ms;
+            inner.dashboard()
+        };
+        let _ = self.events.send(BackendEvent::Snapshot { data: dashboard });
+    }
+
+    async fn rebuild_cache_after_commit(&self, dashboard: &DashboardSnapshot) {
+        let Some(persistence) = &self.persistence else {
+            return;
+        };
+        if let Err(error) = persistence.rebuild_cache(dashboard).await {
+            tracing::warn!(?error, "Redis cache refresh failed after PostgreSQL commit");
+        }
+    }
 }
 
 fn valid_price(price: f64) -> bool {
     price > 0.0 && price.is_finite()
 }
 
-fn apply_strategy_decision(
-    paper: &mut PaperState,
-    prices: &BTreeMap<String, f64>,
-    decision: AutoStrategyDecision,
-    now_ms: i64,
-) -> Result<(), PaperError> {
-    match decision {
-        AutoStrategyDecision::Close {
-            inst_id,
-            reason,
-            tags,
-            execution_price,
-            ..
-        } => {
-            let price = execution_price
-                .filter(|price| valid_price(*price))
-                .or_else(|| {
-                    prices
-                        .get(&inst_id)
-                        .copied()
-                        .filter(|price| valid_price(*price))
-                })
-                .ok_or_else(|| PaperError::PriceUnavailable(inst_id.clone()))?;
-            paper.close_with_meta_and_tags(
-                &inst_id,
-                price,
-                now_ms,
-                SCALPING_OPTIMIZATION_SOURCE,
-                &reason,
-                tags,
-            )?;
-        }
-        AutoStrategyDecision::Open {
-            order,
-            reason,
-            tags,
-        } => {
-            let price = prices
-                .get(&order.inst_id)
-                .copied()
-                .filter(|price| valid_price(*price))
-                .ok_or_else(|| PaperError::PriceUnavailable(order.inst_id.clone()))?;
-            let available_balance = paper.snapshot(prices).available_balance;
-            paper.open_with_meta_and_tags(
-                order,
-                price,
-                available_balance,
-                now_ms,
-                SCALPING_OPTIMIZATION_SOURCE,
-                &reason,
-                tags,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn apply_auto_exit_for_inst_id(inner: &mut RadarStateInner, inst_id: &str, now_ms: i64) -> bool {
-    let prices = inner.price_map();
-    let paper = inner.paper.snapshot(&prices);
-    let Some(decision) = evaluate_auto_exit(inst_id, &paper, AutoStrategyConfig::default()) else {
-        return false;
+fn decision_score(symbol: &SymbolSnapshot, decision: &AutoStrategyDecision) -> u8 {
+    let AutoStrategyDecision::Open { order, .. } = decision else {
+        return 0;
     };
-    match apply_strategy_decision(&mut inner.paper, &prices, decision, now_ms) {
-        Ok(()) => true,
-        Err(error) => {
-            tracing::debug!(%inst_id, ?error, "automatic exit failed after price update");
-            false
-        }
+    match order.primary_signal.as_deref() {
+        Some(signal) if signal.starts_with("trend_") => symbol.trend_score.value,
+        Some(signal) if signal.starts_with("range_") => symbol.range_score.value,
+        Some(signal) if signal.starts_with("pattern_") => symbol
+            .pattern_signals
+            .iter()
+            .map(|pattern| pattern.trade_score)
+            .max()
+            .unwrap_or_default(),
+        _ => symbol.trend_score.value.max(symbol.range_score.value),
     }
 }
