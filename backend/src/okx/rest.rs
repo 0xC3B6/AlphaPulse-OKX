@@ -16,6 +16,7 @@ pub struct TickerRow {
     pub inst_id: String,
     pub last: f64,
     pub quote_volume_24h: f64,
+    pub change_24h_pct: f64,
     pub ts_ms: i64,
 }
 
@@ -29,6 +30,7 @@ struct OkxResponse<T> {
 struct RawTicker {
     inst_id: String,
     last: String,
+    open24h: Option<String>,
     vol_ccy24h: String,
     ts: String,
 }
@@ -47,10 +49,19 @@ pub fn parse_tickers(json: &str) -> anyhow::Result<Vec<TickerRow>> {
         .data
         .into_iter()
         .map(|row| {
+            let last = row.last.parse()?;
+            let change_24h_pct = row
+                .open24h
+                .as_deref()
+                .and_then(|value| value.parse::<f64>().ok())
+                .filter(|open| *open > 0.0)
+                .map(|open| (last - open) / open)
+                .unwrap_or(0.0);
             Ok(TickerRow {
                 inst_id: row.inst_id,
-                last: row.last.parse()?,
+                last,
                 quote_volume_24h: row.vol_ccy24h.parse()?,
+                change_24h_pct,
                 ts_ms: row.ts.parse()?,
             })
         })

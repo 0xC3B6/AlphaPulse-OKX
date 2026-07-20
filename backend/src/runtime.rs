@@ -14,6 +14,7 @@ use crate::{
         patterns::detect_patterns,
         scalping::scalping_metrics,
     },
+    market_context::classify_overextension,
     okx::{
         rest::{OkxRestClient, TickerRow},
         ws::{self, TickerEvent},
@@ -156,6 +157,9 @@ async fn build_symbol_snapshot(
     let mut pool_tags = symbol.tags.clone();
     for tag in history_decision.tags {
         add_tag(&mut pool_tags, &tag);
+    }
+    for tag in classify_overextension(&candles_1h, ticker.change_24h_pct) {
+        add_tag(&mut pool_tags, tag);
     }
 
     let price = ticker.last;
