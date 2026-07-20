@@ -912,7 +912,13 @@ describe("App", () => {
     expect(screen.getByTestId("review-page")).toHaveTextContent("平均单笔盈亏");
     expect(screen.getByTestId("review-page")).toHaveTextContent("+89.36 USDT");
     expect(screen.getByTestId("review-page")).not.toHaveTextContent("暂不可用");
-    expect(screen.getByTestId("review-realized-recharts")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "账户权益曲线" })).toBeInTheDocument();
+    expect(screen.getByTestId("review-equity-recharts")).toHaveAttribute("data-point-count", "3");
+    expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("最高权益");
+    expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("10,250.44 USDT");
+    expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("最低权益");
+    expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("9,941.78 USDT");
+    expect(screen.queryByTestId("review-realized-recharts")).not.toBeInTheDocument();
     expect(screen.getByTestId("paper-strategy-stats")).toHaveTextContent("Scalping Optimization Design");
     expect(screen.getByTestId("review-page")).toHaveTextContent("历史持仓");
 
@@ -999,6 +1005,39 @@ describe("App", () => {
     expect(curve).toHaveTextContent("+4.00 USDT");
     expect(curve).not.toHaveTextContent("该版本暂无已平仓记录");
     expect(screen.getByTestId("paper-strategy-recharts")).toBeInTheDocument();
+  });
+
+  it("anchors a one-snapshot account equity curve at the initial balance", async () => {
+    const oneSnapshotPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      equity: 10020.07,
+      realized_pnl: 20.07,
+      unrealized_pnl: 0,
+      positions: [],
+      equity_history: [
+        {
+          timestamp_ms: 1782400000000,
+          equity: 10020.07,
+          realized_pnl: 20.07,
+          unrealized_pnl: 0,
+          open_positions_count: 0,
+        },
+      ],
+    };
+    mockSnapshot({ ...snapshot, paper: oneSnapshotPaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+
+    const curve = screen.getByTestId("review-equity-curve");
+    expect(curve).toHaveTextContent("账户权益曲线");
+    expect(curve).toHaveTextContent("初始资金");
+    expect(curve).toHaveTextContent("10,000.00 USDT");
+    expect(curve).toHaveTextContent("当前权益");
+    expect(curve).toHaveTextContent("10,020.07 USDT");
+    expect(screen.getByTestId("review-equity-recharts")).toHaveAttribute("data-point-count", "2");
   });
 
   it("paginates Review position history and resets the page after search", async () => {

@@ -365,7 +365,8 @@ export const translations = {
     },
     review: {
       performance: "表现总览",
-      realizedCurve: "已实现盈亏曲线",
+      equityCurve: "账户权益曲线",
+      equityCurveDescription: "初始资金 + 已实现盈亏 + 浮动盈亏，随持仓标记价持续更新。",
       tradeRecords: "成交记录",
       strategyUnavailable: "策略版本数据暂不可用",
       historyUnavailable: "历史持仓数据暂不可用",
@@ -768,7 +769,9 @@ export const translations = {
     },
     review: {
       performance: "Performance",
-      realizedCurve: "Realized PnL curve",
+      equityCurve: "Account equity curve",
+      equityCurveDescription:
+        "Initial balance plus realized and unrealized PnL, updated with position mark prices.",
       tradeRecords: "Trade records",
       strategyUnavailable: "Strategy version data unavailable",
       historyUnavailable: "Position history data unavailable",

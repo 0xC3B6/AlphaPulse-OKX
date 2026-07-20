@@ -322,15 +322,7 @@ function OverviewSection({
         <MetricCard label={copy.paper.totalFees} value={formatUsdt(paper.total_fees ?? 0)} />
       </section>
       <section className="review-grid">
-        <section className="detail-section review-chart-card">
-          <header className="panel-heading">
-            <div>
-              <h2>{copy.review.realizedCurve}</h2>
-              <p>{copy.paper.realized}: {formatSignedUsdt(paper.realized_pnl)}</p>
-            </div>
-          </header>
-          <RealizedCurve points={summary.realizedPath} />
-        </section>
+        <AccountEquityCurve copy={copy} paper={paper} />
         <section className="detail-section review-strategy-card">
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
@@ -343,6 +335,70 @@ function OverviewSection({
         </section>
       </section>
     </>
+  );
+}
+
+function AccountEquityCurve({
+  copy,
+  paper,
+}: {
+  copy: Copy;
+  paper: PaperAccountSnapshot;
+}) {
+  const [range, setRange] = useState<StrategyCurveRange>("all");
+  const curve = useMemo(
+    () => buildStrategyCurve(buildAccountEquityHistory(paper), paper.initial_balance),
+    [paper],
+  );
+  const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
+  const rangeOptions: Array<[StrategyCurveRange, string]> = [
+    ["7d", "7D"],
+    ["30d", "30D"],
+    ["90d", "90D"],
+    ["all", "ALL"],
+  ];
+
+  return (
+    <section
+      className="detail-section review-chart-card review-equity-card"
+      data-testid="review-equity-curve"
+    >
+      <header className="paper-card-header paper-strategy-curve-header">
+        <div>
+          <h2>{copy.review.equityCurve}</h2>
+          <p>{copy.review.equityCurveDescription}</p>
+        </div>
+        <div className="paper-strategy-range-tabs" role="group" aria-label={copy.review.equityCurve}>
+          {rangeOptions.map(([value, label]) => (
+            <button
+              aria-pressed={range === value}
+              className={range === value ? "active" : ""}
+              key={value}
+              onClick={() => setRange(value)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div className="paper-strategy-curve-metrics review-equity-metrics">
+        <Metric label={copy.paper.initialBalance} value={formatUsdt(paper.initial_balance)} />
+        <Metric label={copy.paper.currentEquity} value={formatUsdt(chartCurve.currentEquity)} />
+        <Metric label={copy.paper.equityChange} value={formatSignedUsdt(chartCurve.equityChange)} />
+        <Metric label={copy.paper.maxDrawdown} value={formatSignedUsdt(chartCurve.maxDrawdown)} />
+        <Metric label={copy.paper.peakEquity} value={formatUsdt(chartCurve.peakEquity)} />
+        <Metric label={copy.paper.troughEquity} value={formatUsdt(chartCurve.troughEquity)} />
+      </div>
+      <StrategyCurveChart
+        ariaLabel={copy.review.equityCurve}
+        copy={copy}
+        curve={chartCurve}
+        initialBalance={paper.initial_balance}
+        testId="review-equity-recharts"
+        version={paper.strategy_version}
+      />
+    </section>
   );
 }
 
@@ -512,14 +568,18 @@ function StrategyCurvePanel({
 }
 
 function StrategyCurveChart({
+  ariaLabel,
   copy,
   curve,
   initialBalance,
+  testId = "paper-strategy-recharts",
   version,
 }: {
+  ariaLabel?: string;
   copy: Copy;
   curve: StrategyCurve;
   initialBalance: number;
+  testId?: string;
   version: string;
 }) {
   const rawStartMs = curve.points[0].timestampMs;
@@ -610,9 +670,10 @@ function StrategyCurveChart({
 
   return (
     <div
-      aria-label={`${version} ${copy.paper.strategyCurve}`}
+      aria-label={ariaLabel ?? `${version} ${copy.paper.strategyCurve}`}
       className="paper-strategy-chart-wrap"
-      data-testid="paper-strategy-recharts"
+      data-point-count={curve.points.length}
+      data-testid={testId}
       role="img"
     >
       <div className="paper-strategy-chart-legend" aria-hidden="true">
@@ -1139,82 +1200,6 @@ function TagChips({ tags }: { tags: TradeTag[] }) {
   );
 }
 
-function RealizedCurve({ points }: { points: Array<{ id: number; value: number }> }) {
-  if (points.length === 0) {
-    return <div className="review-empty-chart" />;
-  }
-
-  const data = points.map((point, index) => ({
-    id: point.id,
-    label: `#${index + 1}`,
-    value: point.value,
-  }));
-  const chart = (
-    <AreaChart
-      data={data}
-      margin={{ bottom: 8, left: -10, right: 10, top: 12 }}
-      {...(import.meta.env.MODE === "test" ? { height: 220, width: 720 } : {})}
-    >
-      <defs>
-        <linearGradient id="reviewRealizedFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
-          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <CartesianGrid stroke="rgba(74, 98, 120, 0.22)" strokeDasharray="3 3" />
-      <XAxis
-        dataKey="label"
-        tick={{ fill: "#4a6278", fontSize: 10 }}
-        tickLine={false}
-      />
-      <YAxis
-        tick={{ fill: "#4a6278", fontSize: 10 }}
-        tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
-        tickLine={false}
-        width={58}
-      />
-      <Tooltip
-        contentStyle={{
-          background: "#0b1220",
-          border: "1px solid rgba(74, 98, 120, 0.45)",
-          borderRadius: 8,
-          color: "#c8d8e8",
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-          fontSize: 12,
-        }}
-        formatter={(value) => [`$${Number(value).toFixed(2)}`, "PnL"]}
-        labelFormatter={(label) => `Trade ${label}`}
-      />
-      <ReferenceLine stroke="rgba(148, 174, 196, 0.24)" y={0} />
-      <Area
-        dataKey="value"
-        dot={{ fill: "#10b981", r: 3, stroke: "#0b1220", strokeWidth: 2 }}
-        fill="url(#reviewRealizedFill)"
-        isAnimationActive={false}
-        name="Realized PnL"
-        stroke="#10b981"
-        strokeWidth={2}
-        type="monotone"
-      />
-    </AreaChart>
-  );
-
-  return (
-    <div
-      aria-label="Realized PnL curve"
-      className="review-curve review-recharts-curve"
-      data-testid="review-realized-recharts"
-      role="img"
-    >
-      {import.meta.env.MODE === "test" ? chart : (
-        <ResponsiveContainer height="100%" width="100%">
-          {chart}
-        </ResponsiveContainer>
-      )}
-    </div>
-  );
-}
-
 function matchesHistoryFilter(position: PaperClosedPositionSnapshot, filter: HistoryFilter): boolean {
   if (filter === "long" || filter === "short") {
     return position.side === filter;
@@ -1319,7 +1304,7 @@ function buildStrategyCurve(
   history: PaperEquityPoint[],
   initialBalance: number,
 ): StrategyCurve {
-  const points = history
+  const points: StrategyCurvePoint[] = history
     .slice()
     .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
     .map((point) => ({
@@ -1330,17 +1315,112 @@ function buildStrategyCurve(
       unrealizedPnl: point.unrealized_pnl,
       openPositionsCount: point.open_positions_count,
     }));
+  const firstPoint = points[0];
+  if (firstPoint !== undefined && !isInitialEquityPoint(firstPoint, initialBalance)) {
+    const nextPoint = points[1];
+    const inferredStepMs =
+      nextPoint === undefined
+        ? 10 * MINUTE_MS
+        : Math.max(MINUTE_MS, Math.min(DAY_MS, nextPoint.timestampMs - firstPoint.timestampMs));
+    points.unshift({
+      timestampMs: firstPoint.timestampMs - inferredStepMs,
+      equity: initialBalance,
+      equityChange: 0,
+      realizedPnl: 0,
+      unrealizedPnl: 0,
+      openPositionsCount: 0,
+    });
+  } else if (firstPoint !== undefined && points.length === 1) {
+    points.push({
+      ...firstPoint,
+      timestampMs: firstPoint.timestampMs + 10 * MINUTE_MS,
+    });
+  }
   return summarizeEquityCurve(points, initialBalance);
+}
+
+function buildAccountEquityHistory(paper: PaperAccountSnapshot): PaperEquityPoint[] {
+  const history = (paper.equity_history ?? [])
+    .slice()
+    .sort((left, right) => left.timestamp_ms - right.timestamp_ms);
+  const latestHistoryPoint = history[history.length - 1];
+  if (latestHistoryPoint !== undefined) {
+    if (matchesCurrentAccountSnapshot(latestHistoryPoint, paper)) {
+      return history;
+    }
+    return [
+      ...history,
+      {
+        timestamp_ms: Math.max(
+          latestHistoryPoint.timestamp_ms + MINUTE_MS,
+          latestAccountTimestamp(paper),
+        ),
+        equity: paper.equity,
+        realized_pnl: paper.realized_pnl,
+        unrealized_pnl: paper.unrealized_pnl,
+        open_positions_count: paper.positions.length,
+      },
+    ];
+  }
+  const latestTimestampMs = latestAccountTimestamp(paper);
+  const currentTimestampMs = latestTimestampMs > 0 ? latestTimestampMs : Date.now();
+  return [
+    {
+      timestamp_ms: currentTimestampMs - 10 * MINUTE_MS,
+      equity: paper.initial_balance,
+      realized_pnl: 0,
+      unrealized_pnl: 0,
+      open_positions_count: 0,
+    },
+    {
+      timestamp_ms: currentTimestampMs,
+      equity: paper.equity,
+      realized_pnl: paper.realized_pnl,
+      unrealized_pnl: paper.unrealized_pnl,
+      open_positions_count: paper.positions.length,
+    },
+  ];
+}
+
+function latestAccountTimestamp(paper: PaperAccountSnapshot): number {
+  return Math.max(
+    paper.persistence.last_committed_at_ms ?? 0,
+    ...paper.trades.map((trade) => trade.ts_ms),
+    ...paper.positions.map((position) => position.opened_at_ms),
+  );
+}
+
+function matchesCurrentAccountSnapshot(
+  point: PaperEquityPoint,
+  paper: PaperAccountSnapshot,
+): boolean {
+  const epsilon = 0.000001;
+  return (
+    Math.abs(point.equity - paper.equity) < epsilon &&
+    Math.abs(point.realized_pnl - paper.realized_pnl) < epsilon &&
+    Math.abs(point.unrealized_pnl - paper.unrealized_pnl) < epsilon &&
+    point.open_positions_count === paper.positions.length
+  );
+}
+
+function isInitialEquityPoint(point: StrategyCurvePoint, initialBalance: number): boolean {
+  const epsilon = 0.000001;
+  return (
+    Math.abs(point.equity - initialBalance) < epsilon &&
+    Math.abs(point.realizedPnl) < epsilon &&
+    Math.abs(point.unrealizedPnl) < epsilon
+  );
 }
 
 function summarizeEquityCurve(
   points: StrategyCurvePoint[],
   initialBalance: number,
 ): StrategyCurve {
-  let runningPeak = initialBalance;
+  const startingEquity = points[0]?.equity ?? initialBalance;
+  let runningPeak = startingEquity;
   let maxDrawdown = 0;
-  let peakEquity = initialBalance;
-  let troughEquity = initialBalance;
+  let peakEquity = startingEquity;
+  let troughEquity = startingEquity;
   points.forEach((point) => {
     runningPeak = Math.max(runningPeak, point.equity);
     maxDrawdown = Math.min(maxDrawdown, point.equity - runningPeak);

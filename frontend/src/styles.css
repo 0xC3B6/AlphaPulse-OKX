@@ -2766,6 +2766,26 @@ input {
   min-width: 0;
 }
 
+.review-equity-card {
+  min-width: 0;
+}
+
+.review-equity-card .paper-strategy-curve-header h2 {
+  margin: 0;
+}
+
+.review-equity-card .paper-strategy-curve-header p {
+  max-width: 680px;
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-equity-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .review-trades-panel {
   grid-column: 1 / -1;
   overflow-x: auto;
@@ -4127,7 +4147,8 @@ select {
   }
 
   .review-history-filter-grid,
-  .paper-strategy-curve-metrics {
+  .paper-strategy-curve-metrics,
+  .review-equity-metrics {
     grid-template-columns: 1fr;
   }
 
