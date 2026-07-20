@@ -4,6 +4,10 @@ use crate::domain::{
 };
 
 const MAX_SCAN_BARS: usize = 80;
+const SECOND_TOUCH_HEIGHT_RATIO: f64 = 0.20;
+const MIN_EXTENSION_HEIGHT_RATIO: f64 = 0.30;
+const MAX_EXTENSION_HEIGHT_RATIO: f64 = 0.40;
+const RETEST_HEIGHT_RATIO: f64 = 0.20;
 
 #[derive(Debug, Clone, Copy)]
 struct PatternParams {
@@ -13,7 +17,6 @@ struct PatternParams {
     atr: f64,
     tolerance: f64,
     confirm_buffer: f64,
-    retest_zone: f64,
     hold_buffer: f64,
     min_height_pct: f64,
 }
@@ -23,6 +26,14 @@ struct PatternScores {
     structure: u8,
     confirmation: u8,
     hold: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DoublePatternGeometry {
+    neckline: f64,
+    invalidation: f64,
+    height: f64,
+    direction: Direction,
 }
 
 impl PatternScores {
@@ -75,7 +86,6 @@ fn detect_double_bottom(
     params: PatternParams,
 ) -> Option<PatternSignal> {
     let mut best: Option<PatternSignal> = None;
-    let touch_tolerance = (params.tolerance * 1.4).min(0.04);
 
     for left_index in 0..candles.len().saturating_sub(4) {
         if !is_local_low(candles, left_index, params.pivot_window) {
@@ -94,7 +104,10 @@ fn detect_double_bottom(
                 let left_low = candles[left_index].low;
                 let right_low = candles[right_index].low;
                 let higher_low = left_low.max(right_low);
-                if pct_distance(left_low, right_low) > touch_tolerance {
+                let pattern_height = neckline - left_low;
+                if pattern_height <= 0.0
+                    || (right_low - left_low).abs() > pattern_height * SECOND_TOUCH_HEIGHT_RATIO
+                {
                     continue;
                 }
                 if neckline <= higher_low * (1.0 + params.tolerance * 1.8) {
@@ -114,10 +127,10 @@ fn detect_double_bottom(
                 let confirm_index = confirm_offset.map(|offset| right_index + 1 + offset);
                 let status = double_bottom_status(
                     candles,
-                    right_index,
                     confirm_index,
                     neckline,
                     right_low,
+                    pattern_height,
                     params,
                 );
                 let scores = score_double_pattern(
@@ -166,7 +179,7 @@ fn detect_double_bottom(
                             price: right_low,
                         },
                     ],
-                    level_zone: Some(level_zone(neckline, params.tolerance)),
+                    level_zone: Some(double_retest_zone(neckline, pattern_height)),
                     reasons,
                     warnings: Vec::new(),
                 };
@@ -184,7 +197,6 @@ fn detect_double_top(
     params: PatternParams,
 ) -> Option<PatternSignal> {
     let mut best: Option<PatternSignal> = None;
-    let touch_tolerance = (params.tolerance * 1.4).min(0.04);
 
     for left_index in 0..candles.len().saturating_sub(4) {
         if !is_local_high(candles, left_index, params.pivot_window) {
@@ -203,7 +215,10 @@ fn detect_double_top(
                 let left_high = candles[left_index].high;
                 let right_high = candles[right_index].high;
                 let lower_high = left_high.min(right_high);
-                if pct_distance(left_high, right_high) > touch_tolerance {
+                let pattern_height = left_high - neckline;
+                if pattern_height <= 0.0
+                    || (right_high - left_high).abs() > pattern_height * SECOND_TOUCH_HEIGHT_RATIO
+                {
                     continue;
                 }
                 if neckline >= lower_high * (1.0 - params.tolerance * 1.8) {
@@ -223,10 +238,10 @@ fn detect_double_top(
                 let confirm_index = confirm_offset.map(|offset| right_index + 1 + offset);
                 let status = double_top_status(
                     candles,
-                    right_index,
                     confirm_index,
                     neckline,
                     right_high,
+                    pattern_height,
                     params,
                 );
                 let scores = score_double_pattern(
@@ -275,7 +290,7 @@ fn detect_double_top(
                             price: right_high,
                         },
                     ],
-                    level_zone: Some(level_zone(neckline, params.tolerance)),
+                    level_zone: Some(double_retest_zone(neckline, pattern_height)),
                     reasons,
                     warnings: Vec::new(),
                 };
@@ -309,81 +324,78 @@ fn detect_high_sweep_failure(
 ) -> Option<PatternSignal> {
     let mut best = None;
     for reference_index in 0..candles.len().saturating_sub(1) {
-        let reference_high = candles[reference_index].high;
-        for sweep_index in (reference_index + 1)..candles.len() {
-            let sweep = &candles[sweep_index];
-            let sweep_break = sweep.high - reference_high;
-            if sweep_break < sweep_break_buffer(reference_high, params) {
-                continue;
-            }
-            if sweep.close >= reference_high {
-                continue;
-            }
-            if upper_wick_ratio(sweep) < 0.40 {
-                continue;
-            }
-            if candle_close_position(sweep) > 0.5 {
-                continue;
-            }
-            if !volume_expanded(candles, sweep_index, 1.2) {
-                continue;
-            }
-            let after_sweep = &candles[(sweep_index + 1)..];
-            let invalidated = after_sweep
-                .iter()
-                .any(|candle| candle.close > sweep.high + params.hold_buffer);
-            let holding = after_sweep.first().is_some_and(|next| {
-                next.close < reference_high - params.hold_buffer
-                    && next.high <= sweep.high + params.hold_buffer
-            });
-            let status = if invalidated {
-                PatternStatus::Invalidated
-            } else if holding {
-                PatternStatus::Holding
-            } else {
-                PatternStatus::Confirmed
-            };
-            let scores = score_sweep_pattern(candles, reference_index, sweep_index, status, params);
-            let score = scores.trade_score();
-            let signal = PatternSignal {
-                kind: PatternKind::SweepFailure,
-                direction: Direction::Short,
-                timeframe,
-                status,
-                score,
-                structure_score: scores.structure,
-                confirmation_score: scores.confirmation,
-                hold_score: scores.hold,
-                trade_score: score,
-                neckline: Some(reference_high),
-                invalidation_level: Some(sweep.high),
-                start_ts_ms: candles[reference_index].ts_ms,
-                confirm_ts_ms: Some(sweep.ts_ms),
-                pivots: vec![
-                    PatternPivot {
-                        role: PatternPivotRole::SweepReference,
-                        ts_ms: candles[reference_index].ts_ms,
-                        price: reference_high,
-                    },
-                    PatternPivot {
-                        role: PatternPivotRole::Sweep,
-                        ts_ms: sweep.ts_ms,
-                        price: sweep.high,
-                    },
-                ],
-                level_zone: Some(level_zone(reference_high, params.tolerance)),
-                reasons: vec![
-                    "swept recent high and closed back below".to_string(),
-                    if status == PatternStatus::Holding {
-                        "failed reclaim is holding".to_string()
-                    } else {
-                        "failed reclaim confirmed".to_string()
-                    },
-                ],
-                warnings: Vec::new(),
-            };
-            best = choose_better(best, signal);
+        if !is_local_high(candles, reference_index, params.pivot_window) {
+            continue;
         }
+        let reference_high = candles[reference_index].high;
+        let Some(sweep_index) = ((reference_index + 1)..candles.len()).find(|index| {
+            candles[*index].high - reference_high >= sweep_break_buffer(reference_high, params)
+        }) else {
+            continue;
+        };
+        let sweep = &candles[sweep_index];
+        if sweep.close >= reference_high
+            || upper_wick_ratio(sweep) < 0.40
+            || candle_close_position(sweep) > 0.5
+            || !volume_expanded(candles, sweep_index, 1.2)
+        {
+            continue;
+        }
+        let after_sweep = &candles[(sweep_index + 1)..];
+        let invalidated = after_sweep
+            .iter()
+            .any(|candle| candle.close > sweep.high + params.hold_buffer);
+        let holding = after_sweep.first().is_some_and(|next| {
+            next.close < reference_high - params.hold_buffer
+                && next.high <= sweep.high + params.hold_buffer
+        });
+        let status = if invalidated {
+            PatternStatus::Invalidated
+        } else if holding {
+            PatternStatus::Holding
+        } else {
+            PatternStatus::Confirmed
+        };
+        let scores = score_sweep_pattern(candles, reference_index, sweep_index, status, params);
+        let score = scores.trade_score();
+        let signal = PatternSignal {
+            kind: PatternKind::SweepFailure,
+            direction: Direction::Short,
+            timeframe,
+            status,
+            score,
+            structure_score: scores.structure,
+            confirmation_score: scores.confirmation,
+            hold_score: scores.hold,
+            trade_score: score,
+            neckline: Some(reference_high),
+            invalidation_level: Some(sweep.high),
+            start_ts_ms: candles[reference_index].ts_ms,
+            confirm_ts_ms: Some(sweep.ts_ms),
+            pivots: vec![
+                PatternPivot {
+                    role: PatternPivotRole::SweepReference,
+                    ts_ms: candles[reference_index].ts_ms,
+                    price: reference_high,
+                },
+                PatternPivot {
+                    role: PatternPivotRole::Sweep,
+                    ts_ms: sweep.ts_ms,
+                    price: sweep.high,
+                },
+            ],
+            level_zone: Some(level_zone(reference_high, params.tolerance)),
+            reasons: vec![
+                "swept recent high and closed back below".to_string(),
+                if status == PatternStatus::Holding {
+                    "failed reclaim is holding".to_string()
+                } else {
+                    "failed reclaim confirmed".to_string()
+                },
+            ],
+            warnings: Vec::new(),
+        };
+        best = choose_better(best, signal);
     }
     best
 }
@@ -395,91 +407,88 @@ fn detect_low_sweep_failure(
 ) -> Option<PatternSignal> {
     let mut best = None;
     for reference_index in 0..candles.len().saturating_sub(1) {
-        let reference_low = candles[reference_index].low;
-        for sweep_index in (reference_index + 1)..candles.len() {
-            let sweep = &candles[sweep_index];
-            let sweep_break = reference_low - sweep.low;
-            if sweep_break < sweep_break_buffer(reference_low, params) {
-                continue;
-            }
-            if sweep.close <= reference_low {
-                continue;
-            }
-            if lower_wick_ratio(sweep) < 0.40 {
-                continue;
-            }
-            if candle_close_position(sweep) < 0.5 {
-                continue;
-            }
-            if !volume_expanded(candles, sweep_index, 1.2) {
-                continue;
-            }
-            let after_sweep = &candles[(sweep_index + 1)..];
-            let invalidated = after_sweep
-                .iter()
-                .any(|candle| candle.close < sweep.low - params.hold_buffer);
-            let holding = after_sweep.first().is_some_and(|next| {
-                next.close > reference_low + params.hold_buffer
-                    && next.low >= sweep.low - params.hold_buffer
-            });
-            let status = if invalidated {
-                PatternStatus::Invalidated
-            } else if holding {
-                PatternStatus::Holding
-            } else {
-                PatternStatus::Confirmed
-            };
-            let scores = score_sweep_pattern(candles, reference_index, sweep_index, status, params);
-            let score = scores.trade_score();
-            let signal = PatternSignal {
-                kind: PatternKind::SweepFailure,
-                direction: Direction::Long,
-                timeframe,
-                status,
-                score,
-                structure_score: scores.structure,
-                confirmation_score: scores.confirmation,
-                hold_score: scores.hold,
-                trade_score: score,
-                neckline: Some(reference_low),
-                invalidation_level: Some(sweep.low),
-                start_ts_ms: candles[reference_index].ts_ms,
-                confirm_ts_ms: Some(sweep.ts_ms),
-                pivots: vec![
-                    PatternPivot {
-                        role: PatternPivotRole::SweepReference,
-                        ts_ms: candles[reference_index].ts_ms,
-                        price: reference_low,
-                    },
-                    PatternPivot {
-                        role: PatternPivotRole::Sweep,
-                        ts_ms: sweep.ts_ms,
-                        price: sweep.low,
-                    },
-                ],
-                level_zone: Some(level_zone(reference_low, params.tolerance)),
-                reasons: vec![
-                    "swept recent low and closed back above".to_string(),
-                    if status == PatternStatus::Holding {
-                        "failed breakdown is holding".to_string()
-                    } else {
-                        "failed breakdown confirmed".to_string()
-                    },
-                ],
-                warnings: Vec::new(),
-            };
-            best = choose_better(best, signal);
+        if !is_local_low(candles, reference_index, params.pivot_window) {
+            continue;
         }
+        let reference_low = candles[reference_index].low;
+        let Some(sweep_index) = ((reference_index + 1)..candles.len()).find(|index| {
+            reference_low - candles[*index].low >= sweep_break_buffer(reference_low, params)
+        }) else {
+            continue;
+        };
+        let sweep = &candles[sweep_index];
+        if sweep.close <= reference_low
+            || lower_wick_ratio(sweep) < 0.40
+            || candle_close_position(sweep) < 0.5
+            || !volume_expanded(candles, sweep_index, 1.2)
+        {
+            continue;
+        }
+        let after_sweep = &candles[(sweep_index + 1)..];
+        let invalidated = after_sweep
+            .iter()
+            .any(|candle| candle.close < sweep.low - params.hold_buffer);
+        let holding = after_sweep.first().is_some_and(|next| {
+            next.close > reference_low + params.hold_buffer
+                && next.low >= sweep.low - params.hold_buffer
+        });
+        let status = if invalidated {
+            PatternStatus::Invalidated
+        } else if holding {
+            PatternStatus::Holding
+        } else {
+            PatternStatus::Confirmed
+        };
+        let scores = score_sweep_pattern(candles, reference_index, sweep_index, status, params);
+        let score = scores.trade_score();
+        let signal = PatternSignal {
+            kind: PatternKind::SweepFailure,
+            direction: Direction::Long,
+            timeframe,
+            status,
+            score,
+            structure_score: scores.structure,
+            confirmation_score: scores.confirmation,
+            hold_score: scores.hold,
+            trade_score: score,
+            neckline: Some(reference_low),
+            invalidation_level: Some(sweep.low),
+            start_ts_ms: candles[reference_index].ts_ms,
+            confirm_ts_ms: Some(sweep.ts_ms),
+            pivots: vec![
+                PatternPivot {
+                    role: PatternPivotRole::SweepReference,
+                    ts_ms: candles[reference_index].ts_ms,
+                    price: reference_low,
+                },
+                PatternPivot {
+                    role: PatternPivotRole::Sweep,
+                    ts_ms: sweep.ts_ms,
+                    price: sweep.low,
+                },
+            ],
+            level_zone: Some(level_zone(reference_low, params.tolerance)),
+            reasons: vec![
+                "swept recent low and closed back above".to_string(),
+                if status == PatternStatus::Holding {
+                    "failed breakdown is holding".to_string()
+                } else {
+                    "failed breakdown confirmed".to_string()
+                },
+            ],
+            warnings: Vec::new(),
+        };
+        best = choose_better(best, signal);
     }
     best
 }
 
 fn double_bottom_status(
     candles: &[Candle],
-    right_index: usize,
     confirm_index: Option<usize>,
     neckline: f64,
     right_low: f64,
+    pattern_height: f64,
     params: PatternParams,
 ) -> PatternStatus {
     let Some(confirm_index) = confirm_index else {
@@ -492,38 +501,32 @@ fn double_bottom_status(
     {
         return PatternStatus::Invalidated;
     }
-    let retest_index = after_confirm.iter().position(|candle| {
-        candle.low <= neckline + params.retest_zone && candle.high >= neckline - params.retest_zone
-    });
-    if let Some(offset) = retest_index {
-        let absolute_index = confirm_index + 1 + offset;
-        let retest_close_held = candles[absolute_index].close >= neckline - params.hold_buffer;
-        let next_close_held = candles
-            .get(absolute_index + 1)
+    if let Some(retest_index) = find_double_retest_index(
+        candles,
+        confirm_index,
+        neckline,
+        pattern_height,
+        Direction::Long,
+    ) {
+        let retest_close_held = candles[retest_index].close >= neckline;
+        let next_close_reclaimed = candles
+            .get(retest_index + 1)
             .is_some_and(|next| next.close >= neckline);
-        return if retest_close_held && next_close_held {
+        return if retest_close_held || next_close_reclaimed {
             PatternStatus::Holding
         } else {
             PatternStatus::Retest
         };
     }
-    if candles
-        .iter()
-        .skip(right_index + 1)
-        .any(|candle| candle.close >= neckline)
-    {
-        PatternStatus::Confirmed
-    } else {
-        PatternStatus::Forming
-    }
+    PatternStatus::Confirmed
 }
 
 fn double_top_status(
     candles: &[Candle],
-    right_index: usize,
     confirm_index: Option<usize>,
     neckline: f64,
     right_high: f64,
+    pattern_height: f64,
     params: PatternParams,
 ) -> PatternStatus {
     let Some(confirm_index) = confirm_index else {
@@ -536,30 +539,24 @@ fn double_top_status(
     {
         return PatternStatus::Invalidated;
     }
-    let retest_index = after_confirm.iter().position(|candle| {
-        candle.high >= neckline - params.retest_zone && candle.low <= neckline + params.retest_zone
-    });
-    if let Some(offset) = retest_index {
-        let absolute_index = confirm_index + 1 + offset;
-        let retest_close_held = candles[absolute_index].close <= neckline + params.hold_buffer;
-        let next_close_held = candles
-            .get(absolute_index + 1)
+    if let Some(retest_index) = find_double_retest_index(
+        candles,
+        confirm_index,
+        neckline,
+        pattern_height,
+        Direction::Short,
+    ) {
+        let retest_close_held = candles[retest_index].close <= neckline;
+        let next_close_rejected = candles
+            .get(retest_index + 1)
             .is_some_and(|next| next.close <= neckline);
-        return if retest_close_held && next_close_held {
+        return if retest_close_held || next_close_rejected {
             PatternStatus::Holding
         } else {
             PatternStatus::Retest
         };
     }
-    if candles
-        .iter()
-        .skip(right_index + 1)
-        .any(|candle| candle.close <= neckline)
-    {
-        PatternStatus::Confirmed
-    } else {
-        PatternStatus::Forming
-    }
+    PatternStatus::Confirmed
 }
 
 fn double_bottom_reasons(status: PatternStatus, confirmed: bool) -> Vec<String> {
@@ -637,10 +634,13 @@ fn score_double_pattern(
             candles,
             confirm_index,
             status,
-            neckline,
-            right,
+            DoublePatternGeometry {
+                neckline,
+                invalidation: right,
+                height: (neckline - left).abs(),
+                direction,
+            },
             params,
-            direction,
         ),
     }
 }
@@ -655,7 +655,9 @@ fn double_structure_score(
     params: PatternParams,
 ) -> u8 {
     let pivot_quality = 12.0;
-    let symmetry = (1.0 - (pct_distance(left, right) / 0.04).min(1.0)) * 10.0;
+    let pattern_height = (neckline - left).abs().max(0.00000001);
+    let symmetry_ratio = (left - right).abs() / pattern_height;
+    let symmetry = (1.0 - (symmetry_ratio / SECOND_TOUCH_HEIGHT_RATIO).min(1.0)) * 10.0;
     let avg_pivot = (left + right) / 2.0;
     let height = (neckline - avg_pivot).abs();
     let min_height = (params.atr * 1.2).max(avg_pivot.abs() * params.min_height_pct);
@@ -726,10 +728,8 @@ fn hold_score(
     candles: &[Candle],
     confirm_index: Option<usize>,
     status: PatternStatus,
-    neckline: f64,
-    invalidation: f64,
+    geometry: DoublePatternGeometry,
     params: PatternParams,
-    direction: Direction,
 ) -> u8 {
     if !matches!(status, PatternStatus::Retest | PatternStatus::Holding) {
         return 0;
@@ -737,14 +737,20 @@ fn hold_score(
     let Some(confirm_index) = confirm_index else {
         return 0;
     };
-    let Some(retest_index) = find_retest_index(candles, confirm_index, neckline, params) else {
+    let Some(retest_index) = find_double_retest_index(
+        candles,
+        confirm_index,
+        geometry.neckline,
+        geometry.height,
+        geometry.direction,
+    ) else {
         return 0;
     };
     let retest = &candles[retest_index];
     let mut score = 5_u8;
-    let retest_close_held = match direction {
-        Direction::Long => retest.close >= neckline - params.hold_buffer,
-        Direction::Short => retest.close <= neckline + params.hold_buffer,
+    let retest_close_held = match geometry.direction {
+        Direction::Long => retest.close >= geometry.neckline,
+        Direction::Short => retest.close <= geometry.neckline,
         Direction::Neutral => false,
     };
     if retest_close_held {
@@ -755,15 +761,15 @@ fn hold_score(
     }
     let next_held = candles
         .get(retest_index + 1)
-        .is_some_and(|next| match direction {
-            Direction::Long => next.close >= neckline,
-            Direction::Short => next.close <= neckline,
+        .is_some_and(|next| match geometry.direction {
+            Direction::Long => next.close >= geometry.neckline,
+            Direction::Short => next.close <= geometry.neckline,
             Direction::Neutral => false,
         });
     if next_held {
         score += 4;
     }
-    let stop_distance = (neckline - invalidation).abs();
+    let stop_distance = (geometry.neckline - geometry.invalidation).abs();
     if stop_distance <= params.atr * 1.8 {
         score += 2;
     }
@@ -814,19 +820,49 @@ fn level_zone(level: f64, tolerance: f64) -> PatternLevelZone {
     }
 }
 
-fn find_retest_index(
+fn find_double_retest_index(
     candles: &[Candle],
     confirm_index: usize,
     neckline: f64,
-    params: PatternParams,
+    pattern_height: f64,
+    direction: Direction,
 ) -> Option<usize> {
-    candles[(confirm_index + 1)..]
-        .iter()
-        .position(|candle| {
-            candle.low <= neckline + params.retest_zone
-                && candle.high >= neckline - params.retest_zone
-        })
-        .map(|offset| confirm_index + 1 + offset)
+    if pattern_height <= 0.0 || direction == Direction::Neutral {
+        return None;
+    }
+    let retest_width = pattern_height * RETEST_HEIGHT_RATIO;
+    for retest_index in (confirm_index + 1)..candles.len() {
+        let retest = &candles[retest_index];
+        let touches_zone =
+            retest.low <= neckline + retest_width && retest.high >= neckline - retest_width;
+        if !touches_zone {
+            continue;
+        }
+        let extension = match direction {
+            Direction::Long => candles[confirm_index..retest_index]
+                .iter()
+                .map(|candle| candle.high - neckline)
+                .fold(f64::NEG_INFINITY, f64::max),
+            Direction::Short => candles[confirm_index..retest_index]
+                .iter()
+                .map(|candle| neckline - candle.low)
+                .fold(f64::NEG_INFINITY, f64::max),
+            Direction::Neutral => return None,
+        };
+        let extension_ratio = extension / pattern_height;
+        if (MIN_EXTENSION_HEIGHT_RATIO..=MAX_EXTENSION_HEIGHT_RATIO).contains(&extension_ratio) {
+            return Some(retest_index);
+        }
+    }
+    None
+}
+
+fn double_retest_zone(neckline: f64, pattern_height: f64) -> PatternLevelZone {
+    let width = pattern_height * RETEST_HEIGHT_RATIO;
+    PatternLevelZone {
+        lower: neckline - width,
+        upper: neckline + width,
+    }
 }
 
 fn pattern_height_ok(left: f64, right: f64, neckline: f64, params: PatternParams) -> bool {
@@ -870,7 +906,7 @@ fn is_lowest_between(candles: &[Candle], index: usize, start: usize, end: usize)
 }
 
 fn pattern_params(candles: &[Candle], timeframe: Timeframe, current_price: f64) -> PatternParams {
-    let atr = average_true_range(candles, 14).unwrap_or_else(|| current_price * 0.008);
+    let atr = average_true_range(candles, 14).unwrap_or(current_price * 0.008);
     let tolerance = pattern_tolerance(candles, current_price);
     let (pivot_window, min_leg_bars, max_width_bars, min_height_pct) = match timeframe {
         Timeframe::M15 => (2, 8, 60, 0.008),
@@ -885,7 +921,6 @@ fn pattern_params(candles: &[Candle], timeframe: Timeframe, current_price: f64) 
         atr,
         tolerance,
         confirm_buffer,
-        retest_zone: (atr * 0.35).max(current_price * tolerance),
         hold_buffer: (atr * 0.10).max(current_price * 0.0008),
         min_height_pct,
     }
@@ -930,11 +965,6 @@ fn average_true_range(candles: &[Candle], period: usize) -> Option<f64> {
     let start = ranges.len().saturating_sub(period);
     let recent = &ranges[start..];
     Some(recent.iter().sum::<f64>() / recent.len() as f64)
-}
-
-fn pct_distance(left: f64, right: f64) -> f64 {
-    let denominator = ((left.abs() + right.abs()) / 2.0).max(0.00000001);
-    (left - right).abs() / denominator
 }
 
 fn directional_body_quality(candle: &Candle, direction: Direction) -> bool {
@@ -1036,9 +1066,8 @@ mod tests {
             candle(10, 100.0, 101.0, 97.2, 98.5),
             candle(11, 98.5, 100.0, 96.3, 97.8),
             candle(12, 97.8, 101.0, 97.5, 100.5),
-            candle(13, 100.5, 105.2, 100.0, 104.8),
+            candle(13, 100.5, 106.8, 100.0, 104.8),
             candle(14, 104.8, 105.0, 103.8, 104.0),
-            candle(15, 104.0, 105.5, 103.9, 104.8),
         ];
 
         let signals = detect_patterns(&candles, Timeframe::M15, 104.8);
@@ -1072,9 +1101,8 @@ mod tests {
             candle(10, 102.0, 105.0, 99.0, 104.0),
             candle(11, 104.0, 105.8, 101.0, 105.0),
             candle(12, 105.0, 105.1, 100.0, 101.0),
-            candle(13, 101.0, 101.2, 94.8, 95.0),
+            candle(13, 101.0, 101.2, 92.5, 95.0),
             candle(14, 95.0, 96.2, 94.5, 95.8),
-            candle(15, 95.8, 96.0, 94.0, 95.2),
         ];
 
         let signals = detect_patterns(&candles, Timeframe::H1, 95.2);
@@ -1091,10 +1119,13 @@ mod tests {
     #[test]
     fn detects_failed_high_sweep() {
         let candles = vec![
-            candle_with_volume(0, 100.0, 105.0, 99.0, 104.0, 100.0),
-            candle_with_volume(1, 104.0, 104.5, 100.0, 101.0, 100.0),
-            candle_with_volume(2, 101.0, 106.8, 100.0, 102.0, 180.0),
-            candle_with_volume(3, 102.0, 103.0, 98.5, 99.0, 110.0),
+            candle_with_volume(0, 100.0, 101.0, 99.0, 100.0, 100.0),
+            candle_with_volume(1, 100.0, 103.0, 99.5, 102.0, 100.0),
+            candle_with_volume(2, 102.0, 105.0, 101.0, 104.0, 100.0),
+            candle_with_volume(3, 104.0, 104.5, 100.5, 101.0, 100.0),
+            candle_with_volume(4, 101.0, 104.0, 100.0, 103.0, 100.0),
+            candle_with_volume(5, 103.0, 106.8, 100.0, 102.0, 180.0),
+            candle_with_volume(6, 102.0, 103.0, 98.5, 99.0, 110.0),
         ];
 
         let signals = detect_patterns(&candles, Timeframe::M15, 99.0);
@@ -1110,10 +1141,13 @@ mod tests {
     #[test]
     fn detects_failed_low_sweep() {
         let candles = vec![
-            candle_with_volume(0, 100.0, 101.0, 95.0, 96.0, 100.0),
-            candle_with_volume(1, 96.0, 100.0, 95.5, 99.0, 100.0),
-            candle_with_volume(2, 99.0, 100.0, 93.2, 98.0, 180.0),
-            candle_with_volume(3, 98.0, 101.5, 97.0, 101.0, 110.0),
+            candle_with_volume(0, 100.0, 101.0, 99.0, 100.0, 100.0),
+            candle_with_volume(1, 100.0, 100.5, 97.0, 98.0, 100.0),
+            candle_with_volume(2, 98.0, 99.0, 95.0, 96.0, 100.0),
+            candle_with_volume(3, 96.0, 100.0, 95.5, 99.0, 100.0),
+            candle_with_volume(4, 99.0, 100.0, 96.0, 97.0, 100.0),
+            candle_with_volume(5, 97.0, 100.0, 93.2, 98.0, 180.0),
+            candle_with_volume(6, 98.0, 101.5, 97.0, 101.0, 110.0),
         ];
 
         let signals = detect_patterns(&candles, Timeframe::M15, 101.0);
@@ -1125,11 +1159,49 @@ mod tests {
             .expect("failed low sweep should be detected");
 
         assert_eq!(signal.status, PatternStatus::Holding);
-        assert_eq!(signal.structure_score, 54);
+        assert_eq!(signal.structure_score, 51);
         assert_eq!(signal.confirmation_score, 18);
         assert_eq!(signal.hold_score, 18);
-        assert_eq!(signal.trade_score, 90);
+        assert_eq!(signal.trade_score, 87);
         assert_eq!(signal.score, signal.trade_score);
+    }
+
+    #[test]
+    fn first_high_breach_consumes_the_old_sweep_reference() {
+        let candles = vec![
+            candle_with_volume(0, 100.0, 101.0, 99.0, 100.0, 100.0),
+            candle_with_volume(1, 100.0, 103.0, 99.5, 102.0, 100.0),
+            candle_with_volume(2, 102.0, 105.0, 101.0, 104.0, 100.0),
+            candle_with_volume(3, 104.0, 104.5, 101.0, 102.0, 100.0),
+            candle_with_volume(4, 102.0, 104.0, 100.5, 103.0, 100.0),
+            candle_with_volume(5, 103.0, 106.2, 102.5, 105.8, 180.0),
+            candle_with_volume(6, 102.5, 107.5, 101.0, 102.0, 220.0),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::M15, 102.0);
+
+        assert!(signals.iter().all(|signal| {
+            signal.kind != PatternKind::SweepFailure || signal.direction != Direction::Short
+        }));
+    }
+
+    #[test]
+    fn first_low_breach_consumes_the_old_sweep_reference() {
+        let candles = vec![
+            candle_with_volume(0, 100.0, 101.0, 99.0, 100.0, 100.0),
+            candle_with_volume(1, 100.0, 100.5, 97.0, 98.0, 100.0),
+            candle_with_volume(2, 98.0, 99.0, 95.0, 96.0, 100.0),
+            candle_with_volume(3, 96.0, 99.0, 95.5, 98.0, 100.0),
+            candle_with_volume(4, 98.0, 99.5, 96.0, 97.0, 100.0),
+            candle_with_volume(5, 97.0, 97.5, 93.8, 94.2, 180.0),
+            candle_with_volume(6, 97.5, 100.0, 92.5, 98.0, 220.0),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::M15, 98.0);
+
+        assert!(signals.iter().all(|signal| {
+            signal.kind != PatternKind::SweepFailure || signal.direction != Direction::Long
+        }));
     }
 
     #[test]
@@ -1175,7 +1247,45 @@ mod tests {
     }
 
     #[test]
-    fn holding_requires_follow_through_after_retest() {
+    fn retest_below_neckline_waits_for_follow_through() {
+        let mut candles = vec![
+            candle(0, 100.0, 101.0, 99.0, 100.0),
+            candle(1, 100.0, 101.0, 98.5, 99.5),
+            candle(2, 99.5, 100.2, 98.2, 99.0),
+            candle(3, 99.0, 100.0, 96.0, 97.0),
+            candle(4, 97.0, 99.0, 96.8, 98.8),
+            candle(5, 98.8, 101.0, 98.5, 100.0),
+            candle(6, 100.0, 103.0, 99.5, 102.0),
+            candle(7, 102.0, 104.0, 101.5, 103.5),
+            candle(8, 103.5, 103.8, 101.0, 102.0),
+            candle(9, 102.0, 102.5, 99.2, 100.0),
+            candle(10, 100.0, 101.0, 97.2, 98.5),
+            candle(11, 98.5, 100.0, 96.3, 97.8),
+            candle(12, 97.8, 101.0, 97.5, 100.5),
+            candle(13, 100.5, 106.8, 100.0, 104.8),
+            candle(14, 104.8, 105.0, 103.6, 103.7),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::M15, 103.9);
+        let signal = signals
+            .iter()
+            .find(|signal| signal.kind == PatternKind::DoubleBottom)
+            .expect("double bottom should be detected");
+
+        assert_eq!(signal.status, PatternStatus::Retest);
+
+        candles.push(candle(15, 103.7, 104.5, 103.5, 104.2));
+        let signals = detect_patterns(&candles, Timeframe::M15, 104.2);
+        let signal = signals
+            .iter()
+            .find(|signal| signal.kind == PatternKind::DoubleBottom)
+            .expect("double bottom should remain visible");
+
+        assert_eq!(signal.status, PatternStatus::Holding);
+    }
+
+    #[test]
+    fn breakout_and_retest_without_d_extension_is_not_holding() {
         let candles = vec![
             candle(0, 100.0, 101.0, 99.0, 100.0),
             candle(1, 100.0, 101.0, 98.5, 99.5),
@@ -1194,13 +1304,98 @@ mod tests {
             candle(14, 104.8, 105.0, 103.8, 104.0),
         ];
 
-        let signals = detect_patterns(&candles, Timeframe::M15, 103.9);
+        let signals = detect_patterns(&candles, Timeframe::M15, 104.0);
         let signal = signals
             .iter()
             .find(|signal| signal.kind == PatternKind::DoubleBottom)
-            .expect("double bottom should be detected");
+            .expect("double bottom should remain visible");
 
-        assert_eq!(signal.status, PatternStatus::Retest);
+        assert_eq!(signal.status, PatternStatus::Confirmed);
+    }
+
+    #[test]
+    fn double_top_breakdown_without_d_extension_is_not_holding() {
+        let candles = vec![
+            candle(0, 100.0, 101.0, 99.0, 100.0),
+            candle(1, 100.0, 102.0, 99.0, 101.0),
+            candle(2, 101.0, 104.0, 100.0, 103.0),
+            candle(3, 103.0, 106.0, 102.0, 105.0),
+            candle(4, 105.0, 105.2, 101.0, 102.0),
+            candle(5, 102.0, 103.0, 99.0, 100.0),
+            candle(6, 100.0, 101.0, 97.0, 98.0),
+            candle(7, 98.0, 100.0, 96.0, 97.0),
+            candle(8, 97.0, 101.0, 96.8, 100.0),
+            candle(9, 100.0, 103.0, 97.0, 102.0),
+            candle(10, 102.0, 105.0, 99.0, 104.0),
+            candle(11, 104.0, 105.8, 101.0, 105.0),
+            candle(12, 105.0, 105.1, 100.0, 101.0),
+            candle(13, 101.0, 101.2, 94.8, 95.0),
+            candle(14, 95.0, 96.2, 94.5, 95.8),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::H1, 95.8);
+        let signal = signals
+            .iter()
+            .find(|signal| signal.kind == PatternKind::DoubleTop)
+            .expect("double top should remain visible");
+
+        assert_eq!(signal.status, PatternStatus::Confirmed);
+    }
+
+    #[test]
+    fn extension_above_forty_percent_height_is_not_entry_eligible() {
+        let candles = vec![
+            candle(0, 100.0, 101.0, 99.0, 100.0),
+            candle(1, 100.0, 101.0, 98.5, 99.5),
+            candle(2, 99.5, 100.2, 98.2, 99.0),
+            candle(3, 99.0, 100.0, 96.0, 97.0),
+            candle(4, 97.0, 99.0, 96.8, 98.8),
+            candle(5, 98.8, 101.0, 98.5, 100.0),
+            candle(6, 100.0, 103.0, 99.5, 102.0),
+            candle(7, 102.0, 104.0, 101.5, 103.5),
+            candle(8, 103.5, 103.8, 101.0, 102.0),
+            candle(9, 102.0, 102.5, 99.2, 100.0),
+            candle(10, 100.0, 101.0, 97.2, 98.5),
+            candle(11, 98.5, 100.0, 96.3, 97.8),
+            candle(12, 97.8, 101.0, 97.5, 100.5),
+            candle(13, 100.5, 108.2, 100.0, 105.0),
+            candle(14, 105.0, 105.2, 103.8, 104.0),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::M15, 104.0);
+        let signal = signals
+            .iter()
+            .find(|signal| signal.kind == PatternKind::DoubleBottom)
+            .expect("double bottom should remain visible");
+
+        assert_eq!(signal.status, PatternStatus::Confirmed);
+    }
+
+    #[test]
+    fn second_low_outside_twenty_percent_height_is_rejected() {
+        let candles = vec![
+            candle(0, 100.0, 101.0, 99.0, 100.0),
+            candle(1, 100.0, 101.0, 98.5, 99.5),
+            candle(2, 99.5, 100.2, 98.2, 99.0),
+            candle(3, 99.0, 100.0, 96.0, 97.0),
+            candle(4, 97.0, 99.0, 96.8, 98.8),
+            candle(5, 98.8, 101.0, 98.5, 100.0),
+            candle(6, 100.0, 103.0, 99.5, 102.0),
+            candle(7, 102.0, 104.0, 101.5, 103.5),
+            candle(8, 103.5, 103.8, 101.0, 102.0),
+            candle(9, 102.0, 102.5, 99.2, 100.0),
+            candle(10, 100.0, 101.0, 98.3, 99.0),
+            candle(11, 99.0, 100.0, 97.8, 98.2),
+            candle(12, 98.2, 101.0, 98.0, 100.5),
+            candle(13, 100.5, 106.8, 100.0, 104.8),
+            candle(14, 104.8, 105.0, 103.8, 104.0),
+        ];
+
+        let signals = detect_patterns(&candles, Timeframe::M15, 104.0);
+
+        assert!(signals
+            .iter()
+            .all(|signal| signal.kind != PatternKind::DoubleBottom));
     }
 
     #[test]
@@ -1219,7 +1414,7 @@ mod tests {
             candle(10, 100.0, 101.0, 97.2, 98.5),
             candle(11, 98.5, 100.0, 96.3, 97.8),
             candle(12, 97.8, 101.0, 97.5, 100.5),
-            candle(13, 100.5, 105.2, 100.0, 104.8),
+            candle(13, 100.5, 106.8, 100.0, 104.8),
             candle(14, 104.8, 105.0, 103.8, 104.0),
             candle(15, 104.0, 105.5, 103.9, 104.8),
         ];

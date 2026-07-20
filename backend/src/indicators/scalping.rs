@@ -155,3 +155,49 @@ fn recent(candles: &[Candle], limit: usize) -> &[Candle] {
 fn average(values: &[f64]) -> Option<f64> {
     (!values.is_empty()).then_some(values.iter().sum::<f64>() / values.len() as f64)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candle(index: i64, close: f64, volume: f64) -> Candle {
+        Candle {
+            ts_ms: index * 60_000,
+            open: close - 0.5,
+            high: close + 1.0,
+            low: close - 1.0,
+            close,
+            volume,
+        }
+    }
+
+    #[test]
+    fn computes_volume_weighted_price_and_atr_ratios() {
+        let candles_5m = vec![candle(0, 100.0, 1.0), candle(1, 110.0, 3.0)];
+        let candles_15m = (0..15)
+            .map(|index| candle(index, 100.0 + index as f64, 100.0))
+            .collect::<Vec<_>>();
+
+        let metrics = scalping_metrics(&candles_5m, &candles_15m, 114.0, 2.5);
+
+        assert_eq!(metrics.volume_ratio, 2.5);
+        assert!((metrics.vwap.unwrap() - 107.5).abs() < 0.000_001);
+        assert!((metrics.atr_15m_pct.unwrap() - (2.0 / 114.0)).abs() < 0.000_001);
+        assert!((metrics.vwap_distance_atr.unwrap() - 3.25).abs() < 0.000_001);
+        assert!((metrics.latest_move_atr.unwrap() - 0.5).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn leaves_period_metrics_empty_when_history_is_too_short() {
+        let candles = vec![candle(0, 100.0, 0.0)];
+
+        let metrics = scalping_metrics(&candles, &candles, 100.0, 1.0);
+
+        assert!(metrics.vwap.is_none());
+        assert!(metrics.atr_15m_pct.is_none());
+        assert!(metrics.vwap_distance_atr.is_none());
+        assert!(metrics.latest_move_atr.is_none());
+        assert!(metrics.adx_15m.is_none());
+        assert!(metrics.bollinger_width_pct.is_none());
+    }
+}

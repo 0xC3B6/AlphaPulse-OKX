@@ -42,7 +42,7 @@ async fn backfills_older_history_candles() {
         .route(
             "/api/v5/market/candles",
             get(|| async {
-                r#"{"data":[["3000","3","3","3","3","1"],["2000","2","2","2","2","1"]]}"#
+                r#"{"data":[["3000","3","3","3","3","1","0","0","1"],["2000","2","2","2","2","1","0","0","1"]]}"#
             }),
         )
         .route(
@@ -50,7 +50,7 @@ async fn backfills_older_history_candles() {
             get(
                 |Query(params): Query<std::collections::HashMap<String, String>>| async move {
                     assert_eq!(params.get("after").map(String::as_str), Some("2000"));
-                    r#"{"data":[["1000","1","1","1","1","1"]]}"#
+                    r#"{"data":[["1000","1","1","1","1","1","0","0","1"]]}"#
                 },
             ),
         );
@@ -81,7 +81,7 @@ async fn keeps_recent_candles_when_history_backfill_fails() {
         .route(
             "/api/v5/market/candles",
             get(|| async {
-                r#"{"data":[["3000","3","3","3","3","1"],["2000","2","2","2","2","1"]]}"#
+                r#"{"data":[["3000","3","3","3","3","1","0","0","1"],["2000","2","2","2","2","1","0","0","1"]]}"#
             }),
         )
         .route(

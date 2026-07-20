@@ -74,21 +74,29 @@ pub fn parse_instruments(json: &str) -> anyhow::Result<Vec<InstrumentMetadata>> 
 
 pub fn parse_candles(json: &str) -> anyhow::Result<Vec<Candle>> {
     let response: OkxResponse<Vec<Vec<String>>> = serde_json::from_str(json)?;
-    response
+    let parsed = response
         .data
         .into_iter()
         .map(|row| {
-            anyhow::ensure!(row.len() >= 6, "OKX candle row has fewer than 6 fields");
-            Ok(Candle {
+            anyhow::ensure!(row.len() >= 9, "OKX candle row has no confirmation flag");
+            anyhow::ensure!(
+                row[8] == "0" || row[8] == "1",
+                "OKX candle confirmation flag is invalid"
+            );
+            if row[8] == "0" {
+                return Ok(None);
+            }
+            Ok(Some(Candle {
                 ts_ms: row[0].parse()?,
                 open: row[1].parse()?,
                 high: row[2].parse()?,
                 low: row[3].parse()?,
                 close: row[4].parse()?,
                 volume: row[5].parse()?,
-            })
+            }))
         })
-        .collect()
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    Ok(parsed.into_iter().flatten().collect())
 }
 
 #[derive(Clone)]

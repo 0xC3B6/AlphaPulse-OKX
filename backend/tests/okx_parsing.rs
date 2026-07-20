@@ -21,6 +21,32 @@ fn parses_okx_candle_arrays() {
 }
 
 #[test]
+fn ignores_unfinished_okx_candles() {
+    let json = r#"{
+        "code":"0",
+        "msg":"",
+        "data":[
+            ["1782387000000","16.938","17.241","16.936","17.182","9847.3","98473","1685633.336","1"],
+            ["1782387900000","17.182","18.500","17.000","18.250","12345","123450","2200000","0"]
+        ]
+    }"#;
+
+    let candles = parse_candles(json).unwrap();
+
+    assert_eq!(candles.len(), 1);
+    assert_eq!(candles[0].ts_ms, 1782387000000);
+}
+
+#[test]
+fn rejects_candle_rows_without_confirmation_flag() {
+    let json = r#"{"data":[["1","1","1","1","1","1"]]}"#;
+
+    let error = parse_candles(json).unwrap_err();
+
+    assert!(error.to_string().contains("confirmation flag"));
+}
+
+#[test]
 fn parses_okx_ticker_rows() {
     let json = r#"{
         "code":"0",

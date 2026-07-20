@@ -5,6 +5,7 @@ use alphapulse_okx_backend::{
         Score, Timeframe,
     },
 };
+use serde_json::json;
 
 #[test]
 fn default_config_matches_v1_decisions() {
@@ -115,4 +116,35 @@ fn timeframe_maps_to_okx_bar_names() {
     assert_eq!(Timeframe::H1.okx_bar(), "1H");
     assert_eq!(Timeframe::D1.okx_bar(), "1D");
     assert_eq!(Timeframe::W1.okx_bar(), "1W");
+}
+
+#[test]
+fn snapshots_without_pattern_signals_remain_deserializable() {
+    let symbol = serde_json::from_value::<alphapulse_okx_backend::domain::SymbolSnapshot>(json!({
+        "inst_id": "BTC-USDT-SWAP",
+        "price": 100.0,
+        "change_5m_pct": 0.0,
+        "change_15m_pct": 0.0,
+        "change_1h_pct": 0.0,
+        "trend_score": {"value": 0, "direction": "neutral", "reasons": []},
+        "range_score": {"value": 0, "direction": "neutral", "reasons": []},
+        "pool_tags": [],
+        "trigger_reason": "",
+        "funding_rate": null,
+        "fvgs": [],
+        "levels": [],
+        "updated_at_ms": 1
+    }))
+    .unwrap();
+    let chart = serde_json::from_value::<alphapulse_okx_backend::domain::ChartSnapshot>(json!({
+        "inst_id": "BTC-USDT-SWAP",
+        "timeframe": "m15",
+        "candles": [],
+        "fvgs": [],
+        "updated_at_ms": 1
+    }))
+    .unwrap();
+
+    assert!(symbol.pattern_signals.is_empty());
+    assert!(chart.pattern_signals.is_empty());
 }

@@ -181,6 +181,7 @@ pub struct SymbolSnapshot {
     pub scalping_metrics: ScalpingMetrics,
     pub fvgs: Vec<FvgZone>,
     pub levels: Vec<LevelZone>,
+    #[serde(default)]
     pub pattern_signals: Vec<PatternSignal>,
     pub updated_at_ms: i64,
 }
@@ -191,6 +192,7 @@ pub struct ChartSnapshot {
     pub timeframe: Timeframe,
     pub candles: Vec<Candle>,
     pub fvgs: Vec<FvgZone>,
+    #[serde(default)]
     pub pattern_signals: Vec<PatternSignal>,
     pub updated_at_ms: i64,
 }

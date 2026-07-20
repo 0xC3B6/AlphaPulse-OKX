@@ -77,11 +77,9 @@ fn trend_score(input: &ScoringInput) -> Score {
         value += 5;
         reasons.push("funding rate is elevated".to_string());
     }
-    if let Some((pattern_direction, boost, reason)) = best_pattern_boost(input) {
-        if direction != Direction::Neutral && direction == pattern_direction {
-            value = value.saturating_add(boost);
-            reasons.push(reason);
-        }
+    if let Some((boost, reason)) = best_pattern_boost(input, direction) {
+        value = value.saturating_add(boost);
+        reasons.push(reason);
     }
 
     Score {
@@ -91,26 +89,28 @@ fn trend_score(input: &ScoringInput) -> Score {
     }
 }
 
-fn best_pattern_boost(input: &ScoringInput) -> Option<(Direction, u8, String)> {
+fn best_pattern_boost(input: &ScoringInput, direction: Direction) -> Option<(u8, String)> {
+    if direction == Direction::Neutral {
+        return None;
+    }
     input
         .pattern_signals
         .iter()
         .filter(|signal| {
-            matches!(
-                signal.status,
-                PatternStatus::Confirmed | PatternStatus::Retest | PatternStatus::Holding
-            ) && signal.trade_score >= 75
+            signal.direction == direction
+                && signal.status == PatternStatus::Holding
+                && signal.trade_score >= 75
         })
         .filter_map(|signal| {
             let status_cap = match signal.status {
-                PatternStatus::Retest => 26,
                 PatternStatus::Holding => 22,
-                PatternStatus::Confirmed => 12,
-                PatternStatus::Forming | PatternStatus::Invalidated => return None,
+                PatternStatus::Forming
+                | PatternStatus::Confirmed
+                | PatternStatus::Retest
+                | PatternStatus::Invalidated => return None,
             };
             let boost = ((signal.trade_score as f64 / 100.0) * status_cap as f64).round() as u8;
             Some((
-                signal.direction,
                 boost.max(8),
                 format!(
                     "pattern {} {} {}",
@@ -120,7 +120,7 @@ fn best_pattern_boost(input: &ScoringInput) -> Option<(Direction, u8, String)> {
                 ),
             ))
         })
-        .max_by_key(|(_, boost, _)| *boost)
+        .max_by_key(|(boost, _)| *boost)
 }
 
 fn pattern_kind_label(kind: PatternKind) -> &'static str {
@@ -287,6 +287,78 @@ mod tests {
         let scored = score_symbol(input);
 
         assert_eq!(scored.trend_score.direction, Direction::Long);
+        assert_eq!(scored.trend_score.value, 25);
+        assert!(!scored
+            .trend_score
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("pattern")));
+    }
+
+    #[test]
+    fn opposite_direction_pattern_does_not_hide_matching_boost() {
+        let mut input = base_input(vec![
+            pattern(
+                PatternKind::DoubleTop,
+                Direction::Short,
+                PatternStatus::Holding,
+                100,
+            ),
+            pattern(
+                PatternKind::DoubleBottom,
+                Direction::Long,
+                PatternStatus::Holding,
+                80,
+            ),
+        ]);
+        input.change_15m_pct = 0.03;
+        input.change_1h_pct = 0.04;
+
+        let scored = score_symbol(input);
+
+        assert_eq!(scored.trend_score.direction, Direction::Long);
+        assert!(scored.trend_score.value > 25);
+        assert!(scored
+            .trend_score
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("double bottom holding")));
+    }
+
+    #[test]
+    fn retest_pattern_is_observation_only() {
+        let mut input = base_input(vec![pattern(
+            PatternKind::DoubleBottom,
+            Direction::Long,
+            PatternStatus::Retest,
+            100,
+        )]);
+        input.change_15m_pct = 0.03;
+        input.change_1h_pct = 0.04;
+
+        let scored = score_symbol(input);
+
+        assert_eq!(scored.trend_score.value, 25);
+        assert!(!scored
+            .trend_score
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("pattern")));
+    }
+
+    #[test]
+    fn confirmed_pattern_is_observation_only() {
+        let mut input = base_input(vec![pattern(
+            PatternKind::DoubleBottom,
+            Direction::Long,
+            PatternStatus::Confirmed,
+            100,
+        )]);
+        input.change_15m_pct = 0.03;
+        input.change_1h_pct = 0.04;
+
+        let scored = score_symbol(input);
+
         assert_eq!(scored.trend_score.value, 25);
         assert!(!scored
             .trend_score
