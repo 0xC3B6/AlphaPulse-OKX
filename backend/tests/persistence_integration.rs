@@ -78,10 +78,10 @@ async fn restart_restores_balance_positions_protection_history_and_ids() {
         .unwrap();
     assert_eq!(equity_history.len(), 1);
     assert_eq!(equity_history[0].timestamp_ms, 100);
-    assert_eq!(equity_history[0].equity, original_snapshot.equity);
-    assert_eq!(
+    assert_persisted_decimal_eq(equity_history[0].equity, original_snapshot.equity);
+    assert_persisted_decimal_eq(
         equity_history[0].unrealized_pnl,
-        original_snapshot.unrealized_pnl
+        original_snapshot.unrealized_pnl,
     );
 
     let restored = persistence
@@ -299,4 +299,12 @@ fn symbol(inst_id: &str, price: f64) -> SymbolSnapshot {
         pattern_signals: Vec::new(),
         updated_at_ms: 1,
     }
+}
+
+fn assert_persisted_decimal_eq(actual: f64, expected: f64) {
+    // Persistence normalizes f64 values to eight decimal places before binding NUMERIC columns.
+    assert!(
+        (actual - expected).abs() <= 1e-8,
+        "persisted value {actual} differs from expected {expected}"
+    );
 }
