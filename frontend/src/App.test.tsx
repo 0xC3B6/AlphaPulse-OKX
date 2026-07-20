@@ -799,7 +799,7 @@ describe("App", () => {
     expect(screen.queryByTestId("strategy-page")).not.toBeInTheDocument();
   });
 
-  it("switches Strategy local tabs between attribution, feature analysis, and Shadow positions", async () => {
+  it("switches Strategy local tabs between attribution and feature analysis", async () => {
     mockSnapshot({ ...snapshot, paper: activePaper });
 
     render(<App />);
@@ -810,12 +810,11 @@ describe("App", () => {
     const strategyPage = screen.getByTestId("strategy-page");
     const attributionTab = within(strategyPage).getByRole("tab", { name: "信号归因" });
     const featureTab = within(strategyPage).getByRole("tab", { name: "特征分析" });
-    const shadowTab = within(strategyPage).getByRole("tab", { name: "Shadow 持仓" });
+    expect(within(strategyPage).getAllByRole("tab")).toHaveLength(2);
 
     expect(attributionTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("strategy-attribution-panel")).toHaveTextContent("trend short 84: volume 3.1x");
     expect(screen.queryByTestId("strategy-feature-panel")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("strategy-shadow-panel")).not.toBeInTheDocument();
 
     fireEvent.click(featureTab);
 
@@ -824,13 +823,7 @@ describe("App", () => {
     expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("near support");
     expect(screen.queryByTestId("strategy-attribution-panel")).not.toBeInTheDocument();
 
-    fireEvent.click(shadowTab);
-
-    expect(shadowTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("Shadow 持仓对照");
-    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("LAB-USDT-SWAP");
-    expect(screen.getByTestId("strategy-shadow-panel")).toHaveTextContent("DOGE-USDT-SWAP");
-    expect(screen.queryByTestId("strategy-feature-panel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Shadow/i })).not.toBeInTheDocument();
   });
 
   it("shows Review performance and trade records without Monitor filters", async () => {

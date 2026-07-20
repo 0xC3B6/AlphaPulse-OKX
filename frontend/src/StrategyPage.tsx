@@ -28,12 +28,11 @@ interface FeatureStat {
   shortCount: number;
 }
 
-type StrategyTab = "attribution" | "features" | "shadow";
+type StrategyTab = "attribution" | "features";
 
 const strategyTabs: Array<{ id: StrategyTab; label: string }> = [
   { id: "attribution", label: "信号归因" },
   { id: "features", label: "特征分析" },
-  { id: "shadow", label: "Shadow 持仓" },
 ];
 
 export function StrategyPage({
@@ -168,35 +167,6 @@ export function StrategyPage({
         </section>
       ) : null}
 
-      {activeTab === "shadow" ? (
-        <section
-          aria-labelledby="strategy-tab-shadow"
-          className="detail-section strategy-shadow-panel"
-          data-testid="strategy-shadow-panel"
-          id="strategy-panel-shadow"
-          role="tabpanel"
-        >
-        <header className="panel-heading compact">
-          <div>
-            <h2>Shadow 持仓对照</h2>
-            <p>把当前持仓和实时信号放在同一个策略视图里。</p>
-          </div>
-        </header>
-        {paper.positions.length === 0 ? (
-          <p className="muted panel-empty">暂无 Shadow 持仓</p>
-        ) : (
-          <ul className="strategy-position-list">
-            {paper.positions.map((position) => (
-              <li key={position.inst_id}>
-                <strong>{position.inst_id}</strong>
-                <span>{copy.directions[position.side]} · {position.leverage.toFixed(1)}x</span>
-                <span>{position.reason || "manual / paper position"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      ) : null}
     </section>
   );
 }
