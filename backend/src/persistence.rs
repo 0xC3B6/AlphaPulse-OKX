@@ -1,4 +1,8 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
@@ -9,6 +13,7 @@ use redis::AsyncCommands;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 
 use crate::{
@@ -23,12 +28,44 @@ use crate::{
 
 const DASHBOARD_CACHE_KEY: &str = "alphapulse:dashboard:snapshot";
 static REJECTED_INTENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+const STRATEGY_TABLES: &[&str] = &[
+    "strategy_versions",
+    "strategy_runs",
+    "order_intents",
+    "fills",
+    "positions",
+    "closed_trades",
+    "equity_snapshots",
+    "event_log",
+    "app_state_snapshots",
+];
 
 #[derive(Clone)]
 pub struct PersistenceLayer {
     postgres: PgPool,
     redis: Option<redis::Client>,
     redis_ttl_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct StrategyBackup {
+    pub manifest_path: PathBuf,
+    pub manifest: StrategyBackupManifest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyBackupManifest {
+    pub created_at_ms: i64,
+    pub version_codes: Vec<String>,
+    pub files: Vec<StrategyBackupFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyBackupFile {
+    pub table: String,
+    pub relative_path: String,
+    pub row_count: i64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -381,37 +418,7 @@ impl PersistenceLayer {
 
     pub async fn purge_strategy_data(&self, version_codes: &[&str]) -> anyhow::Result<()> {
         let mut transaction = self.postgres.begin().await?;
-        for version_code in version_codes {
-            for table in [
-                "fills",
-                "positions",
-                "closed_trades",
-                "equity_snapshots",
-                "order_intents",
-            ] {
-                let statement = format!("DELETE FROM {table} WHERE version_code = $1");
-                sqlx::query(&statement)
-                    .bind(version_code)
-                    .execute(&mut *transaction)
-                    .await?;
-            }
-            sqlx::query("DELETE FROM event_log WHERE version_code = $1")
-                .bind(version_code)
-                .execute(&mut *transaction)
-                .await?;
-            sqlx::query("DELETE FROM app_state_snapshots WHERE version_code = $1")
-                .bind(version_code)
-                .execute(&mut *transaction)
-                .await?;
-            sqlx::query("DELETE FROM strategy_runs WHERE version_code = $1")
-                .bind(version_code)
-                .execute(&mut *transaction)
-                .await?;
-            sqlx::query("DELETE FROM strategy_versions WHERE version_code = $1")
-                .bind(version_code)
-                .execute(&mut *transaction)
-                .await?;
-        }
+        purge_strategy_data_in_transaction(&mut transaction, version_codes).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -424,6 +431,333 @@ impl PersistenceLayer {
         connection.del::<_, ()>(DASHBOARD_CACHE_KEY).await?;
         Ok(())
     }
+
+    pub async fn export_strategy_backup(
+        &self,
+        output_root: &Path,
+        version_codes: &[&str],
+    ) -> anyhow::Result<StrategyBackup> {
+        anyhow::ensure!(
+            !version_codes.is_empty(),
+            "at least one version code is required"
+        );
+        let created_at_ms = chrono::Utc::now().timestamp_millis();
+        let output_dir = output_root.join(format!("strategy-{created_at_ms}"));
+        create_owner_only_dir(&output_dir)?;
+        let versions: Vec<String> = version_codes
+            .iter()
+            .map(|value| value.to_string())
+            .collect();
+        let mut tables: Vec<&str> = STRATEGY_TABLES.to_vec();
+        if self.table_exists("risk_guard_events").await? {
+            tables.push("risk_guard_events");
+        }
+
+        let mut files = Vec::with_capacity(tables.len());
+        for table in tables {
+            let rows = self.export_table_rows(table, &versions).await?;
+            let row_count = rows
+                .as_array()
+                .map(|rows| rows.len() as i64)
+                .ok_or_else(|| {
+                    anyhow!("PostgreSQL backup payload for {table} is not a JSON array")
+                })?;
+            let bytes = serde_json::to_vec_pretty(&rows)?;
+            let relative_path = format!("{table}.json");
+            write_owner_only_file(&output_dir.join(&relative_path), &bytes)?;
+            files.push(StrategyBackupFile {
+                table: table.to_string(),
+                relative_path,
+                row_count,
+                sha256: sha256_hex(&bytes),
+            });
+        }
+
+        let manifest = StrategyBackupManifest {
+            created_at_ms,
+            version_codes: versions,
+            files,
+        };
+        let manifest_path = output_dir.join("manifest.json");
+        write_owner_only_file(&manifest_path, &serde_json::to_vec_pretty(&manifest)?)?;
+        Ok(StrategyBackup {
+            manifest_path,
+            manifest,
+        })
+    }
+
+    pub async fn reset_restored_v3(
+        &self,
+        backup_manifest: &Path,
+        identity: &StrategyIdentity,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            identity == &StrategyIdentity::restored_v3(),
+            "reset identity must be the restored v0.1.3 build"
+        );
+        let manifest = verify_backup_manifest(backup_manifest)?;
+        for required in ["v0.1.3", "v0.1.4"] {
+            anyhow::ensure!(
+                manifest
+                    .version_codes
+                    .iter()
+                    .any(|version| version == required),
+                "backup manifest does not cover {required}"
+            );
+        }
+
+        let state = PaperState::fresh_restored_v3(identity.clone());
+        let snapshot = state.snapshot(&BTreeMap::<String, f64>::new());
+        let ts_ms = chrono::Utc::now().timestamp_millis();
+        let mut transaction = self.postgres.begin().await?;
+        purge_strategy_data_in_transaction(
+            &mut transaction,
+            &manifest
+                .version_codes
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        )
+        .await?;
+        persist_state_rows(
+            &mut transaction,
+            identity,
+            state.run_id(),
+            &state,
+            &snapshot,
+            "reset_restored_v3",
+            ts_ms,
+        )
+        .await?;
+        transaction.commit().await?;
+
+        if let Err(error) = self.clear_cache().await {
+            tracing::warn!(
+                ?error,
+                "strategy reset committed but Redis cache cleanup failed"
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn strategy_row_counts(
+        &self,
+        version_code: &str,
+        run_id: Option<&str>,
+    ) -> anyhow::Result<BTreeMap<String, i64>> {
+        let mut tables: Vec<&str> = STRATEGY_TABLES.to_vec();
+        if self.table_exists("risk_guard_events").await? {
+            tables.push("risk_guard_events");
+        }
+        let mut counts = BTreeMap::new();
+        for table in tables {
+            let count = if table == "strategy_versions" {
+                if let Some(run_id) = run_id {
+                    sqlx::query_scalar::<_, i64>(
+                        "SELECT COUNT(*) FROM strategy_versions versions \
+                         WHERE versions.version_code = $1 AND EXISTS (SELECT 1 FROM strategy_runs runs \
+                         WHERE runs.version_code = versions.version_code AND runs.run_id = $2)",
+                    )
+                    .bind(version_code)
+                    .bind(run_id)
+                    .fetch_one(&self.postgres)
+                    .await?
+                } else {
+                    sqlx::query_scalar::<_, i64>(
+                        "SELECT COUNT(*) FROM strategy_versions WHERE version_code = $1",
+                    )
+                    .bind(version_code)
+                    .fetch_one(&self.postgres)
+                    .await?
+                }
+            } else if let Some(run_id) = run_id {
+                let statement =
+                    format!("SELECT COUNT(*) FROM {table} WHERE version_code = $1 AND run_id = $2");
+                sqlx::query_scalar::<_, i64>(&statement)
+                    .bind(version_code)
+                    .bind(run_id)
+                    .fetch_one(&self.postgres)
+                    .await?
+            } else {
+                let statement = format!("SELECT COUNT(*) FROM {table} WHERE version_code = $1");
+                sqlx::query_scalar::<_, i64>(&statement)
+                    .bind(version_code)
+                    .fetch_one(&self.postgres)
+                    .await?
+            };
+            counts.insert(table.to_string(), count);
+        }
+        Ok(counts)
+    }
+
+    async fn table_exists(&self, table: &str) -> anyhow::Result<bool> {
+        let relation = format!("public.{table}");
+        Ok(
+            sqlx::query_scalar::<_, bool>("SELECT to_regclass($1) IS NOT NULL")
+                .bind(relation)
+                .fetch_one(&self.postgres)
+                .await?,
+        )
+    }
+
+    async fn export_table_rows(
+        &self,
+        table: &str,
+        version_codes: &[String],
+    ) -> anyhow::Result<serde_json::Value> {
+        let filter = if table == "app_state_snapshots" {
+            "version_code = ANY($1) OR version_code IS NULL"
+        } else {
+            "version_code = ANY($1)"
+        };
+        let statement = format!(
+            "SELECT COALESCE(jsonb_agg(to_jsonb(selected_rows)), '[]'::jsonb) \
+             FROM (SELECT * FROM {table} WHERE {filter}) selected_rows"
+        );
+        let Json(rows) = sqlx::query_scalar::<_, Json<serde_json::Value>>(&statement)
+            .bind(version_codes)
+            .fetch_one(&self.postgres)
+            .await?;
+        Ok(rows)
+    }
+}
+
+async fn purge_strategy_data_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    version_codes: &[&str],
+) -> anyhow::Result<()> {
+    for version_code in version_codes {
+        for table in [
+            "fills",
+            "positions",
+            "closed_trades",
+            "equity_snapshots",
+            "order_intents",
+        ] {
+            let statement = format!("DELETE FROM {table} WHERE version_code = $1");
+            sqlx::query(&statement)
+                .bind(version_code)
+                .execute(&mut **transaction)
+                .await?;
+        }
+        let risk_guard_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT to_regclass('public.risk_guard_events') IS NOT NULL",
+        )
+        .fetch_one(&mut **transaction)
+        .await?;
+        if risk_guard_exists {
+            sqlx::query("DELETE FROM risk_guard_events WHERE version_code = $1")
+                .bind(version_code)
+                .execute(&mut **transaction)
+                .await?;
+        }
+        sqlx::query("DELETE FROM event_log WHERE version_code = $1")
+            .bind(version_code)
+            .execute(&mut **transaction)
+            .await?;
+        sqlx::query("DELETE FROM app_state_snapshots WHERE version_code = $1")
+            .bind(version_code)
+            .execute(&mut **transaction)
+            .await?;
+        sqlx::query("DELETE FROM strategy_runs WHERE version_code = $1")
+            .bind(version_code)
+            .execute(&mut **transaction)
+            .await?;
+        sqlx::query("DELETE FROM strategy_versions WHERE version_code = $1")
+            .bind(version_code)
+            .execute(&mut **transaction)
+            .await?;
+    }
+    sqlx::query("DELETE FROM app_state_snapshots WHERE version_code IS NULL")
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
+fn verify_backup_manifest(path: &Path) -> anyhow::Result<StrategyBackupManifest> {
+    let bytes = fs::read(path)
+        .with_context(|| format!("failed to read backup manifest {}", path.display()))?;
+    let manifest: StrategyBackupManifest = serde_json::from_slice(&bytes)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("backup manifest has no parent directory"))?;
+    anyhow::ensure!(
+        !manifest.files.is_empty(),
+        "backup manifest contains no table exports"
+    );
+    let expected_tables: BTreeSet<&str> = STRATEGY_TABLES.iter().copied().collect();
+    let exported_tables: BTreeSet<&str> = manifest
+        .files
+        .iter()
+        .map(|file| file.table.as_str())
+        .collect();
+    anyhow::ensure!(
+        expected_tables.is_subset(&exported_tables),
+        "backup manifest is missing required strategy tables"
+    );
+    anyhow::ensure!(
+        exported_tables.len() == manifest.files.len(),
+        "backup manifest contains duplicate table exports"
+    );
+    for file in &manifest.files {
+        anyhow::ensure!(
+            expected_tables.contains(file.table.as_str()) || file.table == "risk_guard_events",
+            "unexpected backup table {}",
+            file.table
+        );
+        anyhow::ensure!(
+            file.relative_path == format!("{}.json", file.table),
+            "backup file name does not match table {}",
+            file.table
+        );
+        let relative = Path::new(&file.relative_path);
+        anyhow::ensure!(
+            relative.components().count() == 1 && relative.file_name().is_some(),
+            "unsafe backup file path {}",
+            file.relative_path
+        );
+        let payload = fs::read(parent.join(relative))?;
+        anyhow::ensure!(
+            sha256_hex(&payload) == file.sha256,
+            "backup hash mismatch for {}",
+            file.relative_path
+        );
+        let rows: Vec<serde_json::Value> = serde_json::from_slice(&payload)?;
+        anyhow::ensure!(
+            rows.len() as i64 == file.row_count,
+            "backup row count mismatch for {}",
+            file.relative_path
+        );
+    }
+    Ok(manifest)
+}
+
+fn create_owner_only_dir(path: &Path) -> anyhow::Result<()> {
+    fs::create_dir_all(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+fn write_owner_only_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 async fn insert_intent(
