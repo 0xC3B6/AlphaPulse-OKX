@@ -1,0 +1,24 @@
+[Unit]
+Description=AlphaPulse OKX restored v3 backend
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target redis-server.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=alphapulse
+Group=alphapulse
+WorkingDirectory=/opt/alphapulse-okx/current
+Environment=RUST_LOG=info
+EnvironmentFile=/etc/alphapulse-okx.env
+ExecStart=/opt/alphapulse-okx/current/bin/alphapulse_okx_backend
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/alphapulse-okx
+
+[Install]
+WantedBy=multi-user.target

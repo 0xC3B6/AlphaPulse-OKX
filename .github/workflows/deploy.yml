@@ -1,0 +1,148 @@
+name: Build and Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      reset_strategy_state:
+        description: Back up and replace old v3/v4 strategy rows with a fresh restored v3 checkpoint
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: alphapulse
+          POSTGRES_USER: alphapulse
+          POSTGRES_PASSWORD: alphapulse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alphapulse -d alphapulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+      ALPHAPULSE_TEST_DATABASE_URL: postgres://alphapulse:alphapulse@127.0.0.1:5432/alphapulse
+      ALPHAPULSE_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add x86_64-unknown-linux-musl
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test backend
+        run: |
+          cargo fmt --all --check
+          cargo test -p alphapulse_okx_backend
+          cargo clippy -p alphapulse_okx_backend --all-targets --all-features -- -D warnings
+
+      - name: Test PostgreSQL and Redis recovery paths
+        run: |
+          cargo test -p alphapulse_okx_backend --test persistence_integration -- --ignored --test-threads=1
+          cargo test -p alphapulse_okx_backend --test strategy_admin -- --ignored --test-threads=1
+
+      - name: Build backend binaries
+        run: cargo build --release --target x86_64-unknown-linux-musl --bins -p alphapulse_okx_backend
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          node --version
+          npm --version
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Verify deployment contract
+        run: |
+          python3 -m unittest scripts.tests.test_deploy_contract -v
+          bash -n deploy/install.sh
+
+      - name: Package release
+        run: |
+          set -euo pipefail
+          rm -rf release alphapulse-okx.tar.gz
+          mkdir -p release/bin release/frontend release/deploy
+          cp target/x86_64-unknown-linux-musl/release/alphapulse_okx_backend release/bin/alphapulse_okx_backend
+          cp target/x86_64-unknown-linux-musl/release/strategy_admin release/bin/strategy_admin
+          cp -R frontend/dist/. release/frontend/
+          cp deploy/install.sh release/deploy/install.sh
+          cp deploy/alphapulse-okx.service release/deploy/
+          cp deploy/nginx.alphapulse-okx.conf release/deploy/
+          tar -czf alphapulse-okx.tar.gz -C release .
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphapulse-okx-release
+          path: alphapulse-okx.tar.gz
+          if-no-files-found: error
+
+      - name: Install SSH key
+        env:
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY_B64"
+          install -m 700 -d ~/.ssh
+          printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/alphapulse-okx-deploy
+          chmod 600 ~/.ssh/alphapulse-okx-deploy
+          ssh-keygen -lf ~/.ssh/alphapulse-okx-deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          set -euo pipefail
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy -o IdentitiesOnly=yes alphapulse-okx.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/alphapulse-okx.tar.gz"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/alphapulse-okx-deploy -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "APP_SHA=$GITHUB_SHA RESET_STRATEGY_STATE='${{ inputs.reset_strategy_state }}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          STAGING="$(mktemp -d /tmp/alphapulse-okx-release.XXXXXX)"
+          cleanup() {
+            rm -rf "$STAGING" /tmp/alphapulse-okx.tar.gz
+          }
+          trap cleanup EXIT
+          tar -xzf /tmp/alphapulse-okx.tar.gz -C "$STAGING"
+          export APP_SHA RESET_STRATEGY_STATE
+          export RELEASE_SOURCE="$STAGING"
+          bash "$STAGING/deploy/install.sh"
+          REMOTE
