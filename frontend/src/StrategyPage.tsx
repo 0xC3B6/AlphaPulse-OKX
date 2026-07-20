@@ -4,7 +4,6 @@ import type { PaperAccountSnapshot, Score, SymbolSnapshot } from "./types";
 import {
   formatPct,
   formatPrice,
-  formatSignalDirection,
   formatTags,
   formatTimestamp,
   maxScore,
@@ -30,11 +29,6 @@ interface FeatureStat {
 
 type StrategyTab = "attribution" | "features";
 
-const strategyTabs: Array<{ id: StrategyTab; label: string }> = [
-  { id: "attribution", label: "信号归因" },
-  { id: "features", label: "特征分析" },
-];
-
 export function StrategyPage({
   copy,
   lastScanAt,
@@ -48,10 +42,14 @@ export function StrategyPage({
 }) {
   const candidates = useMemo(() => buildCandidates(symbols, paper), [paper, symbols]);
   const activeCandidates = candidates.filter((candidate) => isActionable(candidate.primaryScore));
-  const featureStats = useMemo(() => buildFeatureStats(symbols), [symbols]);
+  const featureStats = useMemo(() => buildFeatureStats(symbols, copy), [copy, symbols]);
   const longCount = activeCandidates.filter((candidate) => candidate.primaryScore.direction === "long").length;
   const shortCount = activeCandidates.filter((candidate) => candidate.primaryScore.direction === "short").length;
   const [activeTab, setActiveTab] = useState<StrategyTab>("attribution");
+  const strategyTabs: Array<{ id: StrategyTab; label: string }> = [
+    { id: "attribution", label: copy.strategy.attributionTab },
+    { id: "features", label: copy.strategy.featureTab },
+  ];
 
   return (
     <section className="strategy-page page-surface" data-testid="strategy-page">
@@ -73,11 +71,11 @@ export function StrategyPage({
       </section>
 
       <section className="page-metric-grid strategy-summary">
-        <MetricCard label="候选信号" value={String(activeCandidates.length)} />
-        <MetricCard label="LONG / SHORT" value={`${longCount} / ${shortCount}`} />
-        <MetricCard label="特征命中" value={String(featureStats.length)} />
-        <MetricCard label="当前持仓" value={String(paper.positions.length)} />
-        <MetricCard label="最近扫描" value={formatTimestamp(lastScanAt)} />
+        <MetricCard label={copy.strategy.candidateSignals} value={String(activeCandidates.length)} />
+        <MetricCard label={copy.strategy.longShort} value={`${longCount} / ${shortCount}`} />
+        <MetricCard label={copy.strategy.featureHits} value={String(featureStats.length)} />
+        <MetricCard label={copy.strategy.currentPositions} value={String(paper.positions.length)} />
+        <MetricCard label={copy.strategy.lastScan} value={formatTimestamp(lastScanAt)} />
       </section>
 
       {activeTab === "attribution" ? (
@@ -90,12 +88,12 @@ export function StrategyPage({
         >
           <header className="panel-heading compact">
             <div>
-              <h2>信号归因</h2>
-              <p>按趋势/震荡主评分排序，展示触发原因和贡献特征。</p>
+              <h2>{copy.strategy.attributionTitle}</h2>
+              <p>{copy.strategy.attributionDescription}</p>
             </div>
           </header>
           {candidates.length === 0 ? (
-            <p className="muted panel-empty">暂无可归因信号</p>
+            <p className="muted panel-empty">{copy.strategy.noAttribution}</p>
           ) : (
             <div className="strategy-signal-list">
               {candidates.slice(0, 12).map((candidate) => (
@@ -103,12 +101,16 @@ export function StrategyPage({
                   <header>
                     <div>
                       <strong>{candidate.symbol.inst_id}</strong>
-                      <span>{candidate.primaryKind === "trend" ? "趋势模型" : "震荡模型"}</span>
+                      <span>
+                        {candidate.primaryKind === "trend"
+                          ? copy.strategy.trendModel
+                          : copy.strategy.rangeModel}
+                      </span>
                     </div>
-                    <SignalBadge score={candidate.primaryScore} />
+                    <SignalBadge copy={copy} score={candidate.primaryScore} />
                   </header>
                   <dl className="strategy-score-grid">
-                    <Metric label="价格" value={formatPrice(candidate.symbol.price)} />
+                    <Metric label={copy.strategy.price} value={formatPrice(candidate.symbol.price)} />
                     <Metric label="1h" value={formatPct(candidate.symbol.change_1h_pct)} />
                     <Metric label="Trend" value={scoreText(candidate.symbol.trend_score, copy)} />
                     <Metric label="Range" value={scoreText(candidate.symbol.range_score, copy)} />
@@ -121,8 +123,8 @@ export function StrategyPage({
                   </ul>
                   <footer>
                     <span>{formatTags(candidate.symbol.pool_tags, copy)}</span>
-                    <span>{candidate.featureCount} features</span>
-                    {candidate.hasPosition ? <b>IN POSITION</b> : null}
+                    <span>{candidate.featureCount} {copy.strategy.features}</span>
+                    {candidate.hasPosition ? <b>{copy.strategy.inPosition}</b> : null}
                   </footer>
                 </article>
               ))}
@@ -141,12 +143,16 @@ export function StrategyPage({
         >
           <header className="panel-heading compact">
             <div>
-              <h2>特征分析</h2>
-              <p>聚合 score reasons、触发原因、标签、FVG 和支撑阻力。</p>
+              <h2>{copy.strategy.featureTitle}</h2>
+              <p>{copy.strategy.featureSummary}</p>
             </div>
           </header>
+          <aside className="strategy-feature-explainer">
+            <strong>{copy.strategy.featureExplanationTitle}</strong>
+            <p>{copy.strategy.featureExplanationBody}</p>
+          </aside>
           {featureStats.length === 0 ? (
-            <p className="muted panel-empty">暂无特征命中</p>
+            <p className="muted panel-empty">{copy.strategy.noFeatures}</p>
           ) : (
             <ul className="strategy-feature-list">
               {featureStats.slice(0, 12).map((feature) => (
@@ -154,7 +160,7 @@ export function StrategyPage({
                   <div>
                     <strong>{feature.label}</strong>
                     <span>
-                      {feature.count} hits · avg {feature.averageScore.toFixed(0)}
+                      {feature.count} {copy.strategy.hits} · {copy.strategy.average} {feature.averageScore.toFixed(0)}
                     </span>
                   </div>
                   <span className="strategy-feature-bias">
@@ -200,7 +206,7 @@ function buildCandidates(
     .sort((left, right) => maxScore(right.symbol) - maxScore(left.symbol));
 }
 
-function buildFeatureStats(symbols: SymbolSnapshot[]): FeatureStat[] {
+function buildFeatureStats(symbols: SymbolSnapshot[], copy: Copy): FeatureStat[] {
   const stats = new Map<string, { count: number; scoreTotal: number; longCount: number; shortCount: number }>();
 
   for (const symbol of symbols) {
@@ -210,9 +216,12 @@ function buildFeatureStats(symbols: SymbolSnapshot[]): FeatureStat[] {
     const features = uniqueStrings([
       symbol.trigger_reason,
       ...score.reasons,
-      ...symbol.pool_tags.map((tag) => `标签 ${tag}`),
+      ...symbol.pool_tags.map((tag) => `${copy.strategy.tagFeature} ${tag}`),
       ...symbol.fvgs.map((zone) => `FVG ${zone.timeframe} ${zone.direction}`),
-      ...symbol.levels.map((level) => `${level.kind} ${level.touches} touches`),
+      ...symbol.levels.map(
+        (level) =>
+          `${copy.levelKinds[level.kind]} ${level.touches} ${copy.strategy.touches}`,
+      ),
     ]);
 
     for (const feature of features) {
@@ -257,11 +266,11 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function SignalBadge({ score }: { score: Score }) {
+function SignalBadge({ copy, score }: { copy: Copy; score: Score }) {
   const tone = score.direction === "long" ? "positive" : score.direction === "short" ? "negative" : "";
   return (
     <span className={`signal-pill ${tone}`}>
-      {formatSignalDirection(score.direction)} {Math.round(score.value)}
+      {copy.directions[score.direction]} {Math.round(score.value)}
     </span>
   );
 }

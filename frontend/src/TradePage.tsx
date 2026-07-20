@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Copy } from "./i18n";
 import type {
   PaperAccountSnapshot,
@@ -49,6 +50,7 @@ export function TradePage({
   tradeError: string | null;
 }) {
   const knownSymbolIds = symbols.map((symbol) => symbol.inst_id);
+  const [reasonPosition, setReasonPosition] = useState<PaperPositionSnapshot | null>(null);
 
   return (
     <section className="trade-page page-surface" data-testid="trade-page">
@@ -151,8 +153,27 @@ export function TradePage({
                     <td>{formatOptionalPrice(position.stop_loss)}</td>
                     <td>{formatOptionalPrice(position.take_profit)}</td>
                     <td>{position.primary_signal || "—"}</td>
-                    <td className="trade-reason-cell" title={position.reason}>
-                      {position.reason || "—"}
+                    <td>
+                      <div className="trade-reason-cell">
+                        <span title={position.reason}>{position.reason || "—"}</span>
+                        {position.reason ? (
+                          <button
+                            aria-label={copy.trade.viewReasonDetails.replace(
+                              "{symbol}",
+                              position.inst_id,
+                            )}
+                            className="trade-reason-detail-button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSelectPosition(position.inst_id);
+                              setReasonPosition(position);
+                            }}
+                            type="button"
+                          >
+                            {copy.trade.reasonDetails}
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -316,7 +337,87 @@ export function TradePage({
           </section>
         </aside>
       </section>
+      {reasonPosition ? (
+        <ReasonDetailDialog
+          copy={copy}
+          onClose={() => setReasonPosition(null)}
+          position={reasonPosition}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ReasonDetailDialog({
+  copy,
+  onClose,
+  position,
+}: {
+  copy: Copy;
+  onClose: () => void;
+  position: PaperPositionSnapshot;
+}) {
+  const title = `${position.inst_id} ${copy.trade.reasonDetails}`;
+  const tags = position.tags ?? [];
+
+  return (
+    <div className="reason-modal-backdrop" onClick={onClose}>
+      <section
+        aria-label={title}
+        aria-modal="true"
+        className="reason-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <header>
+          <div>
+            <h2>{title}</h2>
+            <p>{position.strategy_version || position.source || "—"}</p>
+          </div>
+          <button aria-label={copy.trade.closeReasonDetails} onClick={onClose} type="button">
+            ×
+          </button>
+        </header>
+        <div className="reason-modal-body">
+          <dl className="reason-detail-grid">
+            <div>
+              <dt>{copy.trade.signal}</dt>
+              <dd>{position.primary_signal || "—"}</dd>
+            </div>
+            <div className="reason-detail-wide">
+              <dt>{copy.trade.decisionReason}</dt>
+              <dd>{position.reason || "—"}</dd>
+            </div>
+          </dl>
+          <section className="reason-tag-section">
+            <h3>{copy.trade.decisionTags}</h3>
+            {(position.signal_tags?.length ?? 0) === 0 && tags.length === 0 ? (
+              <p className="muted">{copy.trade.noDecisionTags}</p>
+            ) : (
+              <ul>
+                {(position.signal_tags ?? []).map((tag) => (
+                  <li key={`signal-${tag}`}>
+                    <strong>{tag}</strong>
+                  </li>
+                ))}
+                {tags.map((tag, index) => (
+                  <li key={`${tag.kind}-${tag.label}-${tag.ts_ms}-${index}`}>
+                    <div>
+                      <strong>{tag.label}</strong>
+                      <span>
+                        {copy.trade.scoreImpact}: {tag.score_impact >= 0 ? "+" : ""}
+                        {tag.score_impact}
+                      </span>
+                    </div>
+                    <p>{tag.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </section>
+    </div>
   );
 }
 

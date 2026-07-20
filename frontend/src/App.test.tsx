@@ -801,6 +801,23 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeInTheDocument();
   });
 
+  it("opens the full decision reason from the current-position table", async () => {
+    mockSnapshot({ ...snapshot, paper: activePaper });
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "交易" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 LAB-USDT-SWAP 原因详情" }));
+
+    const dialog = screen.getByRole("dialog", { name: "LAB-USDT-SWAP 原因详情" });
+    expect(dialog).toHaveTextContent("pattern_long");
+    expect(dialog).toHaveTextContent("W bottom retest held near neckline");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭原因详情" }));
+    expect(screen.queryByRole("dialog", { name: "LAB-USDT-SWAP 原因详情" })).not.toBeInTheDocument();
+  });
+
   it("shows live strategy signal attribution separately from Review", async () => {
     mockSnapshot({ ...snapshot, paper: activePaper });
 
@@ -843,8 +860,24 @@ describe("App", () => {
 
     expect(featureTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("特征分析");
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent(
+      "统计每个特征的命中次数、平均主评分和多空分布",
+    );
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent(
+      "不代表该特征已经通过历史盈亏验证",
+    );
     expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("near support");
     expect(screen.queryByTestId("strategy-attribution-panel")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "EN" }));
+
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent("Feature analysis");
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent(
+      "Counts each feature's hits, average primary score, and long/short distribution",
+    );
+    expect(screen.getByTestId("strategy-feature-panel")).toHaveTextContent(
+      "does not mean the feature has been validated by historical PnL",
+    );
 
     expect(screen.queryByRole("tab", { name: /Shadow/i })).not.toBeInTheDocument();
   });
@@ -897,11 +930,7 @@ describe("App", () => {
     expect(screen.getByTestId("paper-strategy-axis-summary")).toHaveTextContent("时间轴");
     expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益增长");
     expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益回撤");
-    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("信号归因");
-    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("策略医生");
-    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("PRIMARY SIGNAL");
-    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("Multiday Reversal");
-    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("+178.72 USDT");
+    expect(screen.queryByTestId("paper-strategy-doctor")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
     expect(screen.getByLabelText("历史持仓币种")).toBeInTheDocument();
