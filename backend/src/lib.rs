@@ -1,4 +1,5 @@
 pub mod alerts;
+pub mod auto_strategy;
 pub mod config;
 pub mod domain;
 pub mod indicators;
@@ -11,6 +12,7 @@ pub mod runtime;
 pub mod scoring;
 pub mod server;
 pub mod state;
+pub mod strategy_identity;
 pub mod time_regime;
 pub mod universe;
 pub mod valuation;
