@@ -32,6 +32,15 @@ export function maxScore(symbol: SymbolSnapshot): number {
   return Math.max(symbol.trend_score.value, symbol.range_score.value);
 }
 
+export function compareSymbolsByAmplitude24h(
+  left: SymbolSnapshot,
+  right: SymbolSnapshot,
+): number {
+  const amplitudeOrder =
+    (right.amplitude_24h_pct ?? 0) - (left.amplitude_24h_pct ?? 0);
+  return amplitudeOrder || left.inst_id.localeCompare(right.inst_id);
+}
+
 export function primaryScore(symbol: SymbolSnapshot): Score {
   return symbol.trend_score.value >= symbol.range_score.value
     ? symbol.trend_score

@@ -300,6 +300,7 @@ async fn build_symbol_snapshot(
         change_5m_pct,
         change_15m_pct,
         change_1h_pct,
+        amplitude_24h_pct: ticker.amplitude_24h_pct,
         trend_score: scored.trend_score,
         range_score: scored.range_score,
         pool_tags,

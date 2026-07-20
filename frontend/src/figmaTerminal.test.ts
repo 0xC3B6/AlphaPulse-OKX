@@ -48,6 +48,7 @@ const lab: SymbolSnapshot = {
   change_5m_pct: -0.03,
   change_15m_pct: 0,
   change_1h_pct: 0.11,
+  amplitude_24h_pct: 0.18,
   trend_score: {
     value: 84,
     direction: "short",
@@ -84,7 +85,7 @@ describe("figma terminal adapters", () => {
 
     expect(row.id).toBe("LAB-USDT-SWAP");
     expect(row.base).toBe("LAB");
-    expect(row.chg).toBe(0.11);
+    expect(row.amplitude24h).toBe(0.18);
     expect(row.m5).toBe("DOWN");
     expect(row.m15).toBe("FLAT");
     expect(row.h1).toBe("UP");

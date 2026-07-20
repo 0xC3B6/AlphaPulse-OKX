@@ -10,6 +10,7 @@ fn snapshot(inst_id: &str, trend: u8, range: u8, direction: Direction) -> Symbol
         change_5m_pct: -0.03,
         change_15m_pct: -0.07,
         change_1h_pct: -0.11,
+        amplitude_24h_pct: 0.0,
         trend_score: Score {
             value: trend,
             direction,

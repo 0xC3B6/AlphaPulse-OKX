@@ -343,6 +343,7 @@ function buildSymbol(index: number, overrides: Partial<SymbolSnapshot> = {}): Sy
     change_5m_pct: 0.001 * index,
     change_15m_pct: 0.002 * index,
     change_1h_pct: 0.003 * index,
+    amplitude_24h_pct: 0.01 * index,
     trend_score: { value: 100 - index, direction: "long", reasons: [] },
     range_score: { value: 20 + index, direction: "neutral", reasons: [] },
     pool_tags: ["dynamic"],
@@ -649,7 +650,7 @@ describe("App", () => {
     expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
     expect(screen.getByTestId("monitor-terminal")).toBeInTheDocument();
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("信号");
-    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("Chg%");
+    expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("24H AMP%");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("Tags");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("▼DN");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("dynamic");
@@ -694,6 +695,36 @@ describe("App", () => {
     await waitFor(() => {
       expect(table).toHaveTextContent("PAGE-01-USDT-SWAP");
     });
+  });
+
+  it("keeps descending 24h amplitude ranking after Monitor filters with stable ties", async () => {
+    const amplitudeSnapshot: DashboardSnapshot = {
+      ...snapshot,
+      symbols: [
+        buildSymbol(1, { inst_id: "ETH-USDT-SWAP", amplitude_24h_pct: 0.03, pool_tags: ["fixed"] }),
+        buildSymbol(2, { inst_id: "SOL-USDT-SWAP", amplitude_24h_pct: 0.12, pool_tags: ["fixed"] }),
+        buildSymbol(3, { inst_id: "ADA-USDT-SWAP", amplitude_24h_pct: 0.12, pool_tags: ["fixed"] }),
+      ],
+    };
+    mockSnapshot(amplitudeSnapshot);
+
+    render(<App />);
+    expect((await screen.findAllByText("ADA-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    const rows = within(screen.getByTestId("radar-terminal-table")).getAllByRole("row").slice(1);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("ADA-USDT-SWAP"),
+      expect.stringContaining("SOL-USDT-SWAP"),
+      expect.stringContaining("ETH-USDT-SWAP"),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "固定" }));
+    const fixedRows = within(screen.getByTestId("radar-terminal-table")).getAllByRole("row").slice(1);
+    expect(fixedRows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("ADA-USDT-SWAP"),
+      expect.stringContaining("SOL-USDT-SWAP"),
+      expect.stringContaining("ETH-USDT-SWAP"),
+    ]);
   });
 
   it("paginates long FVG lists in the symbol detail panel", async () => {

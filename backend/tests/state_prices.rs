@@ -265,6 +265,7 @@ fn symbol(inst_id: &str, price: f64, trend_score: Score, range_score: Score) -> 
         change_5m_pct: 0.0,
         change_15m_pct: 0.0,
         change_1h_pct: 0.0,
+        amplitude_24h_pct: 0.0,
         trend_score,
         range_score,
         pool_tags: vec!["dynamic".to_string()],

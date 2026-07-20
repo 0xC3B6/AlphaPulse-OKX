@@ -22,8 +22,8 @@ import { defaultLanguage, translations } from "./i18n";
 import type { Language } from "./i18n";
 import { buildTerminalOverview } from "./figmaTerminal";
 import {
+  compareSymbolsByAmplitude24h,
   matchesFilter,
-  maxScore,
   type Filter,
   type ThemeMode,
   type ViewMode,
@@ -195,10 +195,7 @@ export default function App() {
   }, []);
 
   const sortedSymbols = useMemo(
-    () =>
-      [...snapshot.symbols].sort(
-        (left, right) => maxScore(right) - maxScore(left),
-      ),
+    () => [...snapshot.symbols].sort(compareSymbolsByAmplitude24h),
     [snapshot.symbols],
   );
 

@@ -17,6 +17,7 @@ pub struct TickerRow {
     pub last: f64,
     pub quote_volume_24h: f64,
     pub change_24h_pct: f64,
+    pub amplitude_24h_pct: f64,
     pub ts_ms: i64,
 }
 
@@ -31,6 +32,8 @@ struct RawTicker {
     inst_id: String,
     last: String,
     open24h: Option<String>,
+    high24h: Option<String>,
+    low24h: Option<String>,
     vol_ccy24h: String,
     ts: String,
 }
@@ -57,11 +60,24 @@ pub fn parse_tickers(json: &str) -> anyhow::Result<Vec<TickerRow>> {
                 .filter(|open| *open > 0.0)
                 .map(|open| (last - open) / open)
                 .unwrap_or(0.0);
+            let amplitude_24h_pct = row
+                .high24h
+                .as_deref()
+                .and_then(|value| value.parse::<f64>().ok())
+                .zip(
+                    row.low24h
+                        .as_deref()
+                        .and_then(|value| value.parse::<f64>().ok()),
+                )
+                .filter(|(high, low)| *low > 0.0 && *high >= *low)
+                .map(|(high, low)| (high - low) / low)
+                .unwrap_or(0.0);
             Ok(TickerRow {
                 inst_id: row.inst_id,
                 last,
                 quote_volume_24h: row.vol_ccy24h.parse()?,
                 change_24h_pct,
+                amplitude_24h_pct,
                 ts_ms: row.ts.parse()?,
             })
         })

@@ -51,6 +51,7 @@ export interface SymbolSnapshot {
   change_5m_pct: number;
   change_15m_pct: number;
   change_1h_pct: number;
+  amplitude_24h_pct?: number;
   trend_score: Score;
   range_score: Score;
   pool_tags: string[];

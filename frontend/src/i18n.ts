@@ -83,6 +83,7 @@ export const translations = {
     table: {
       symbol: "合约",
       price: "价格",
+      amplitude24h: "24小时振幅",
       trend: "趋势",
       range: "震荡",
       signal: "信号",
@@ -485,6 +486,7 @@ export const translations = {
     table: {
       symbol: "Symbol",
       price: "Price",
+      amplitude24h: "24h amplitude",
       trend: "Trend",
       range: "Range",
       signal: "Signal",

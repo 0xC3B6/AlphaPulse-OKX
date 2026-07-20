@@ -172,6 +172,8 @@ pub struct SymbolSnapshot {
     pub change_5m_pct: f64,
     pub change_15m_pct: f64,
     pub change_1h_pct: f64,
+    #[serde(default)]
+    pub amplitude_24h_pct: f64,
     pub trend_score: Score,
     pub range_score: Score,
     pub pool_tags: Vec<String>,

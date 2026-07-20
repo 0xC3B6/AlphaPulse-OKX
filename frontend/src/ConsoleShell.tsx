@@ -214,7 +214,7 @@ export function ConsoleShell({
             </span>
             {hotTicker ? (
               <span className="terminal-hot-pill">
-                ⚠ {hotTicker.inst_id.replace(/-USDT-SWAP$/u, "")} {formatPct(hotTicker.change_1h_pct)}
+                ⚠ {hotTicker.inst_id.replace(/-USDT-SWAP$/u, "")} {formatPct(hotTicker.amplitude_24h_pct ?? 0)}
               </span>
             ) : (
               <span className="terminal-hot-pill">Waiting for market data</span>

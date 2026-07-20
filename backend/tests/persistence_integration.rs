@@ -280,6 +280,7 @@ fn symbol(inst_id: &str, price: f64) -> SymbolSnapshot {
         change_5m_pct: 0.0,
         change_15m_pct: 0.0,
         change_1h_pct: 0.0,
+        amplitude_24h_pct: 0.0,
         trend_score: Score {
             value: 0,
             direction: Direction::Neutral,

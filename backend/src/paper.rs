@@ -1084,6 +1084,7 @@ mod tests {
             change_5m_pct: 0.0,
             change_15m_pct: 0.0,
             change_1h_pct: 0.0,
+            amplitude_24h_pct: 0.0,
             trend_score: crate::domain::Score {
                 value: 0,
                 direction: crate::domain::Direction::Neutral,

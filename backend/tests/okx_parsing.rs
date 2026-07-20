@@ -51,7 +51,7 @@ fn parses_okx_ticker_rows() {
     let json = r#"{
         "code":"0",
         "msg":"",
-        "data":[{"instId":"LAB-USDT-SWAP","last":"17.187","open24h":"16.000","volCcy24h":"20113997","ts":"1782387679663"}]
+        "data":[{"instId":"LAB-USDT-SWAP","last":"17.187","open24h":"16.000","high24h":"18.400","low24h":"15.700","volCcy24h":"20113997","ts":"1782387679663"}]
     }"#;
 
     let tickers = parse_tickers(json).unwrap();
@@ -61,6 +61,7 @@ fn parses_okx_ticker_rows() {
     assert_eq!(tickers[0].last, 17.187);
     assert_eq!(tickers[0].quote_volume_24h, 20113997.0);
     assert!((tickers[0].change_24h_pct - 0.0741875).abs() < f64::EPSILON);
+    assert!((tickers[0].amplitude_24h_pct - ((18.4 - 15.7) / 15.7)).abs() < f64::EPSILON);
 }
 
 #[test]

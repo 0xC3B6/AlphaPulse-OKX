@@ -555,6 +555,7 @@ fn symbol(
         change_5m_pct: 0.0,
         change_15m_pct: 0.0,
         change_1h_pct: 0.0,
+        amplitude_24h_pct: 0.0,
         trend_score,
         range_score,
         pool_tags: pool_tags.into_iter().map(String::from).collect(),

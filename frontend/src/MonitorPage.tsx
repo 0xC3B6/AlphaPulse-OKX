@@ -2,7 +2,13 @@ import type { Copy } from "./i18n";
 import { RadarTable } from "./RadarTable";
 import { SymbolDetailPanel } from "./SymbolDetailPanel";
 import type { BtcMacroSnapshot, PaperAccountSnapshot, SymbolSnapshot } from "./types";
-import { formatPct, formatUsd, type Filter, type ThemeMode } from "./uiFormat";
+import {
+  compareSymbolsByAmplitude24h,
+  formatPct,
+  formatUsd,
+  type Filter,
+  type ThemeMode,
+} from "./uiFormat";
 
 export function MonitorPage({
   copy,
@@ -125,9 +131,7 @@ function FigmaStatBar({
 }) {
   const btcSymbol =
     filteredSymbols.find((symbol) => symbol.inst_id.startsWith("BTC-")) ?? filteredSymbols[0] ?? null;
-  const hotSymbols = [...filteredSymbols].sort(
-    (left, right) => Math.abs(right.change_1h_pct) - Math.abs(left.change_1h_pct),
-  );
+  const hotSymbols = [...filteredSymbols].sort(compareSymbolsByAmplitude24h);
   const hot = hotSymbols[0] ?? null;
   const runnerUp = hotSymbols[1] ?? null;
   const longCount = filteredSymbols.filter((symbol) => symbol.trend_score.direction === "long" || symbol.range_score.direction === "long").length;
@@ -158,8 +162,8 @@ function FigmaStatBar({
       />
       <StatCard
         label="热门异动"
-        value={hot ? `${shortSymbol(hot.inst_id)} ${formatPct(hot.change_1h_pct)}` : "-"}
-        sub={runnerUp ? `${shortSymbol(runnerUp.inst_id)} ${formatPct(runnerUp.change_1h_pct)}` : "等待异动"}
+        value={hot ? `${shortSymbol(hot.inst_id)} ${formatPct(hot.amplitude_24h_pct ?? 0)}` : "-"}
+        sub={runnerUp ? `${shortSymbol(runnerUp.inst_id)} ${formatPct(runnerUp.amplitude_24h_pct ?? 0)}` : "等待异动"}
         tone="amber"
       />
       <StatCard

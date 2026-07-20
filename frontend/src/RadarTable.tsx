@@ -32,7 +32,7 @@ export function RadarTable({
           <tr>
             <th>SYMBOL<span className="sr-only">{copy.table.symbol}</span></th>
             <th>PRICE<span className="sr-only">{copy.table.price}</span></th>
-            <th>Chg%</th>
+            <th>24H AMP%<span className="sr-only">{copy.table.amplitude24h}</span></th>
             <th>5m</th>
             <th>15m</th>
             <th>1h</th>
@@ -77,7 +77,7 @@ export function RadarTable({
                   </div>
                 </td>
                 <td>{formatPrice(symbol.price)}</td>
-                <td className={row.chg < 0 ? "negative" : "positive"}>{formatPct(row.chg)}</td>
+                <td className="terminal-amplitude">{formatPct(row.amplitude24h)}</td>
                 <td>
                   <TimeframeBadge value={row.m5} />
                 </td>

@@ -14,7 +14,7 @@ export interface TerminalSymbol {
   id: string;
   base: string;
   price: number;
-  chg: number;
+  amplitude24h: number;
   m5: TerminalTimeframeDirection;
   m15: TerminalTimeframeDirection;
   h1: TerminalTimeframeDirection;
@@ -66,7 +66,7 @@ export function toTerminalSymbol(
     id: symbol.inst_id,
     base: formatBaseSymbol(symbol.inst_id),
     price: symbol.price,
-    chg: symbol.change_1h_pct,
+    amplitude24h: symbol.amplitude_24h_pct ?? 0,
     m5: mapTerminalDirection(symbol.change_5m_pct),
     m15: mapTerminalDirection(symbol.change_15m_pct),
     h1: mapTerminalDirection(symbol.change_1h_pct),
