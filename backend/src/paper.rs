@@ -15,6 +15,22 @@ pub const SCALPING_OPTIMIZATION_SOURCE: &str = "scalping_optimization_design";
 pub const SCALPING_OPTIMIZATION_NAME: &str = "Scalping Optimization Design";
 pub const SCALPING_OPTIMIZATION_VERSION: &str = "v0.1.3";
 
+pub trait PaperMarkPrice {
+    fn paper_mark_price(&self) -> f64;
+}
+
+impl PaperMarkPrice for f64 {
+    fn paper_mark_price(&self) -> f64 {
+        *self
+    }
+}
+
+impl PaperMarkPrice for SymbolSnapshot {
+    fn paper_mark_price(&self) -> f64 {
+        self.price
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaperSide {
@@ -340,7 +356,10 @@ impl Default for PaperState {
 }
 
 impl PaperState {
-    pub fn snapshot(&self, prices: &BTreeMap<String, SymbolSnapshot>) -> PaperAccountSnapshot {
+    pub fn snapshot<T: PaperMarkPrice>(
+        &self,
+        prices: &BTreeMap<String, T>,
+    ) -> PaperAccountSnapshot {
         let positions: Vec<_> = self
             .positions
             .values()
@@ -698,14 +717,14 @@ impl PaperState {
         Ok(trade)
     }
 
-    fn position_snapshot(
+    fn position_snapshot<T: PaperMarkPrice>(
         &self,
         position: &PaperPosition,
-        prices: &BTreeMap<String, SymbolSnapshot>,
+        prices: &BTreeMap<String, T>,
     ) -> PaperPositionSnapshot {
         let mark_price = prices
             .get(&position.inst_id)
-            .map(|symbol| symbol.price)
+            .map(PaperMarkPrice::paper_mark_price)
             .filter(|price| *price > 0.0 && price.is_finite())
             .unwrap_or(position.entry_price);
         let unrealized_pnl = position

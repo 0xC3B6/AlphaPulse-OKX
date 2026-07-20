@@ -6,6 +6,7 @@ use futures_util::{stream, StreamExt};
 use tokio::{sync::mpsc, time};
 
 use crate::{
+    auto_strategy::AutoStrategyConfig,
     config::AppConfig,
     domain::{Candle, Direction, Score, SymbolSnapshot, Timeframe},
     indicators::{
@@ -21,14 +22,14 @@ use crate::{
     },
     quality::{add_tag, classify_history},
     scoring::{score_symbol, ScoringInput},
-    state::RadarState,
+    state::{BackendEvent, RadarState},
     universe::{build_filtered_symbol_universe, MarketActivity, UniverseSymbol},
 };
 
 pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result<()> {
     let rest = OkxRestClient::new();
     let (ticker_tx, mut ticker_rx) = mpsc::channel::<TickerEvent>(1024);
-    spawn_fixed_ticker_stream(config.fixed_watchlist.clone(), ticker_tx, state.clone());
+    spawn_ticker_stream(config.fixed_watchlist.clone(), ticker_tx, state.clone());
 
     if let Err(error) = scan_once(&config, &state, &rest).await {
         tracing::warn!(?error, "initial OKX scan failed");
@@ -53,21 +54,56 @@ pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result
     }
 }
 
-fn spawn_fixed_ticker_stream(
+fn spawn_ticker_stream(
     inst_ids: Vec<String>,
     sender: mpsc::Sender<TickerEvent>,
     state: RadarState,
 ) {
     tokio::spawn(async move {
         loop {
+            let stream_inst_ids = state.ticker_sync_inst_ids(&inst_ids).await;
+            if stream_inst_ids.is_empty() {
+                time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+            let mut events = state.subscribe();
+            let mut refresh_interval = time::interval(Duration::from_secs(30));
+            refresh_interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
             state.set_websocket_connected(false).await;
             state.set_websocket_connected(true).await;
-            match ws::stream_tickers(inst_ids.clone(), sender.clone()).await {
-                Ok(()) => tracing::warn!("OKX ticker stream closed"),
-                Err(error) => tracing::warn!(?error, "OKX ticker stream failed"),
+            let stream = ws::stream_tickers(stream_inst_ids.clone(), sender.clone());
+            tokio::pin!(stream);
+            let stream_result = loop {
+                tokio::select! {
+                    result = &mut stream => break Some(result),
+                    _ = refresh_interval.tick() => {
+                        if state.ticker_sync_inst_ids(&inst_ids).await != stream_inst_ids {
+                            break None;
+                        }
+                    }
+                    event = events.recv() => {
+                        match event {
+                            Ok(BackendEvent::PaperUpdated { .. }) => {
+                                if state.ticker_sync_inst_ids(&inst_ids).await != stream_inst_ids {
+                                    break None;
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(_) => break None,
+                        }
+                    }
+                }
+            };
+            match stream_result {
+                Some(Ok(())) => tracing::warn!("OKX ticker stream closed"),
+                Some(Err(error)) => tracing::warn!(?error, "OKX ticker stream failed"),
+                None => tracing::debug!(
+                    subscriptions = stream_inst_ids.len(),
+                    "refreshing OKX ticker subscriptions"
+                ),
             }
             state.set_websocket_connected(false).await;
-            time::sleep(Duration::from_secs(5)).await;
+            time::sleep(Duration::from_secs(1)).await;
         }
     });
 }
@@ -86,6 +122,14 @@ async fn scan_once(
             .map(|ticker| (ticker.inst_id.clone(), ticker))
             .collect(),
     );
+    state
+        .update_latest_prices(
+            ticker_map
+                .values()
+                .map(|ticker| (ticker.inst_id.clone(), ticker.last, ticker.ts_ms))
+                .collect(),
+        )
+        .await;
 
     let seed_activity: Vec<MarketActivity> = ticker_map
         .values()
@@ -116,7 +160,15 @@ async fn scan_once(
 
     while let Some((inst_id, result)) = snapshots.next().await {
         match result {
-            Ok(snapshot) => state.upsert_symbol(snapshot).await,
+            Ok(snapshot) => {
+                state.upsert_symbol(snapshot.clone()).await;
+                if let Err(error) = state
+                    .run_auto_strategy_for_symbol(&snapshot, AutoStrategyConfig::default())
+                    .await
+                {
+                    tracing::debug!(%inst_id, ?error, "automatic strategy evaluation failed");
+                }
+            }
             Err(error) => tracing::debug!(%inst_id, ?error, "symbol scan failed"),
         }
     }
