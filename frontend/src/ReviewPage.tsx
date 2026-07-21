@@ -84,6 +84,7 @@ interface StrategySignalAttribution {
   confidence: SignalConfidence;
   maxLoss: number | null;
   netPnl: number;
+  positions: PaperClosedPositionSnapshot[];
   profitFactor: number | null;
   recommendationKey: SignalRecommendationKey;
   sampleCount: number;
@@ -605,6 +606,8 @@ function StrategyDoctorSection({
   rows: StrategySignalAttribution[];
   version: string;
 }) {
+  const [selectedRow, setSelectedRow] = useState<StrategySignalAttribution | null>(null);
+
   return (
     <section className="paper-strategy-doctor" data-testid="paper-strategy-doctor">
       <header className="paper-strategy-doctor-header">
@@ -631,31 +634,246 @@ function StrategyDoctorSection({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.signal}>
-                  <td>{row.signal}</td>
-                  <td>{row.sampleCount}</td>
-                  <td className={pnlClass(row.netPnl)}>{formatSignedUsdt(row.netPnl)}</td>
-                  <td className={pnlClass((row.winRate ?? 0) - 0.5)}>
-                    {formatNullablePct(row.winRate)}
-                  </td>
-                  <td>{formatNullableRatio(row.profitFactor)}</td>
-                  <td className={pnlClass(row.maxLoss ?? 0)}>
-                    {formatNullableSignedUsdt(row.maxLoss)}
-                  </td>
-                  <td>
-                    <span className={`confidence-pill ${row.confidence}`}>
-                      {row.confidence}
-                    </span>
-                  </td>
-                  <td>{copy.paper[row.recommendationKey]}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const detailLabel = copy.paper.viewAttributionDetails.replace(
+                  "{signal}",
+                  row.signal,
+                );
+                return (
+                  <tr
+                    aria-label={detailLabel}
+                    className="paper-strategy-doctor-row"
+                    key={row.signal}
+                    onClick={() => setSelectedRow(row)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedRow(row);
+                      }
+                    }}
+                    tabIndex={0}
+                  >
+                    <td>
+                      <button
+                        aria-label={detailLabel}
+                        className="paper-strategy-doctor-detail-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedRow(row);
+                        }}
+                        type="button"
+                      >
+                        <span>{row.signal}</span>
+                        <small>{copy.paper.attributionDetails}</small>
+                      </button>
+                    </td>
+                    <td>{row.sampleCount}</td>
+                    <td className={pnlClass(row.netPnl)}>{formatSignedUsdt(row.netPnl)}</td>
+                    <td className={pnlClass((row.winRate ?? 0) - 0.5)}>
+                      {formatNullablePct(row.winRate)}
+                    </td>
+                    <td>{formatNullableRatio(row.profitFactor)}</td>
+                    <td className={pnlClass(row.maxLoss ?? 0)}>
+                      {formatNullableSignedUsdt(row.maxLoss)}
+                    </td>
+                    <td>
+                      <span className={`confidence-pill ${row.confidence}`}>
+                        {row.confidence}
+                      </span>
+                    </td>
+                    <td>{copy.paper[row.recommendationKey]}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+      {selectedRow ? (
+        <StrategyDoctorDetailDialog
+          copy={copy}
+          onClose={() => setSelectedRow(null)}
+          row={selectedRow}
+          version={version}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function StrategyDoctorDetailDialog({
+  copy,
+  onClose,
+  row,
+  version,
+}: {
+  copy: Copy;
+  onClose: () => void;
+  row: StrategySignalAttribution;
+  version: string;
+}) {
+  const title = `${row.signal} ${copy.paper.attributionDetails}`;
+  const components = signalAttributionComponents(row.positions);
+
+  return (
+    <div className="reason-modal-backdrop" onClick={onClose}>
+      <section
+        aria-label={title}
+        aria-modal="true"
+        className="reason-modal strategy-doctor-detail-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <header>
+          <div>
+            <h2>{title}</h2>
+            <p>{version}</p>
+          </div>
+          <button aria-label={copy.paper.closeAttributionDetails} onClick={onClose} type="button">
+            ×
+          </button>
+        </header>
+        <div className="reason-modal-body">
+          <dl className="reason-detail-grid strategy-doctor-detail-summary">
+            <div>
+              <dt>{copy.paper.sampleCount}</dt>
+              <dd>{row.sampleCount}</dd>
+            </div>
+            <div>
+              <dt>{copy.paper.netPnl}</dt>
+              <dd className={pnlClass(row.netPnl)}>{formatSignedUsdt(row.netPnl)}</dd>
+            </div>
+            <div>
+              <dt>{copy.paper.winRate}</dt>
+              <dd>{formatNullablePct(row.winRate)}</dd>
+            </div>
+            <div>
+              <dt>{copy.paper.profitFactor}</dt>
+              <dd>{formatNullableRatio(row.profitFactor)}</dd>
+            </div>
+            <div>
+              <dt>{copy.paper.confidence}</dt>
+              <dd>
+                <span className={`confidence-pill ${row.confidence}`}>{row.confidence}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>{copy.paper.recommendation}</dt>
+              <dd>{copy.paper[row.recommendationKey]}</dd>
+            </div>
+          </dl>
+
+          <section className="strategy-doctor-combination">
+            <h3>{copy.paper.signalCombination}</h3>
+            <p>{copy.paper.signalCombinationDescription}</p>
+            {components.length === 0 ? (
+              <p className="muted">{copy.trade.noDecisionTags}</p>
+            ) : (
+              <div className="strategy-doctor-signal-chips">
+                {components.map((component) => (
+                  <span key={component}>{component}</span>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="strategy-doctor-samples">
+            <h3>
+              {copy.paper.tradeSampleDetails} <span>{row.positions.length}</span>
+            </h3>
+            <div className="strategy-doctor-sample-list">
+              {row.positions.map((position) => (
+                <StrategyDoctorSample copy={copy} key={position.id} position={position} />
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function StrategyDoctorSample({
+  copy,
+  position,
+}: {
+  copy: Copy;
+  position: PaperClosedPositionSnapshot;
+}) {
+  const decisionTags = strategyPositionTags(position);
+  const signalTags = uniqueStrings([
+    position.primary_signal ?? "",
+    ...(position.signal_tags ?? []),
+  ]);
+
+  return (
+    <article className="strategy-doctor-sample">
+      <header>
+        <div>
+          <strong>{position.inst_id}</strong>
+          <span>
+            {copy.directions[position.side]} · {formatTimestamp(position.closed_at_ms)}
+          </span>
+        </div>
+        <strong className={pnlClass(position.realized_pnl)}>
+          {formatSignedUsdt(position.realized_pnl)}
+        </strong>
+      </header>
+      <dl className="strategy-doctor-sample-metrics">
+        <div>
+          <dt>{copy.paper.entry}</dt>
+          <dd>{formatPrice(position.entry_price)}</dd>
+        </div>
+        <div>
+          <dt>{copy.paper.exit}</dt>
+          <dd>{formatPrice(position.exit_price)}</dd>
+        </div>
+        <div>
+          <dt>{copy.paper.openedAt}</dt>
+          <dd>{formatTimestamp(position.opened_at_ms)}</dd>
+        </div>
+        <div>
+          <dt>{copy.paper.duration}</dt>
+          <dd>{formatDuration(position.duration_ms)}</dd>
+        </div>
+      </dl>
+      <div className="strategy-doctor-sample-reasons">
+        <div>
+          <span>{copy.paper.openReason}</span>
+          <p>{position.reason || "—"}</p>
+        </div>
+        <div>
+          <span>{copy.paper.closeReason}</span>
+          <p>{position.close_reason || "—"}</p>
+        </div>
+      </div>
+      {signalTags.length > 0 ? (
+        <div className="strategy-doctor-signal-chips compact">
+          {signalTags.map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </div>
+      ) : null}
+      {decisionTags.length > 0 ? (
+        <section className="reason-tag-section strategy-doctor-tag-section">
+          <h3>{copy.trade.decisionTags}</h3>
+          <ul>
+            {decisionTags.map((tag, index) => (
+              <li key={`${tag.kind}-${tag.label}-${tag.ts_ms}-${index}`}>
+                <div>
+                  <strong>{tag.label}</strong>
+                  <span>
+                    {copy.trade.scoreImpact}: {tag.score_impact >= 0 ? "+" : ""}
+                    {tag.score_impact}
+                  </span>
+                </div>
+                <p>{tag.reason}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </article>
   );
 }
 
@@ -1622,6 +1840,7 @@ function buildSignalAttribution(
         confidence,
         maxLoss,
         netPnl,
+        positions: [...group].sort((left, right) => right.closed_at_ms - left.closed_at_ms),
         profitFactor,
         recommendationKey: signalRecommendation(confidence),
         sampleCount: group.length,
@@ -1632,12 +1851,30 @@ function buildSignalAttribution(
     .sort((left, right) => right.netPnl - left.netPnl || right.sampleCount - left.sampleCount);
 }
 
-function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
-  const tagLabel = [
+function signalAttributionComponents(positions: PaperClosedPositionSnapshot[]): string[] {
+  return uniqueStrings(
+    positions.flatMap((position) => [
+      position.primary_signal ?? "",
+      ...(position.signal_tags ?? []),
+      ...strategyPositionTags(position).map((tag) => tag.label),
+    ]),
+  );
+}
+
+function strategyPositionTags(position: PaperClosedPositionSnapshot): TradeTag[] {
+  return [
     ...(position.open_tags ?? []),
     ...(position.tags ?? []),
     ...(position.close_tags ?? []),
-  ]
+  ];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
+  const tagLabel = strategyPositionTags(position)
     .map((tag) => tag.label.trim())
     .find((label) => label.length > 0);
   if (tagLabel !== undefined) {

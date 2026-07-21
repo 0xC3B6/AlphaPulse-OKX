@@ -212,6 +212,8 @@ const activePaper: PaperAccountSnapshot = {
       source: "scalping_optimization_design",
       strategy_name: "Scalping Optimization Design",
       strategy_version: "v0.1.3",
+      primary_signal: "multiday_reversal_short",
+      signal_tags: ["multiday", "extension", "reversal"],
       reason: "scalping v0.1.3 multiday extension reversal short 90",
       close_source: "scalping_optimization_design",
       close_reason: "scalping v0.1.3 take profit 132.68%",
@@ -235,6 +237,8 @@ const activePaper: PaperAccountSnapshot = {
       source: "scalping_optimization_design",
       strategy_name: "Scalping Optimization Design",
       strategy_version: "v0.1.3",
+      primary_signal: "multiday_reversal_short",
+      signal_tags: ["multiday", "extension", "reversal"],
       reason: "scalping v0.1.3 multiday extension reversal short 88",
       close_source: "scalping_optimization_design",
       close_reason: "scalping v0.1.3 stop loss -30.12%",
@@ -979,6 +983,34 @@ describe("App", () => {
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("PRIMARY SIGNAL");
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("Multiday Reversal");
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("+178.72 USDT");
+
+    expect(
+      screen.getByRole("button", { name: "查看 Multiday Reversal 归因详情" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("row", { name: "查看 Multiday Reversal 归因详情" }),
+    );
+
+    const attributionDialog = screen.getByRole("dialog", {
+      name: "Multiday Reversal 归因详情",
+    });
+    expect(attributionDialog).toHaveTextContent("信号组合");
+    expect(attributionDialog).toHaveTextContent("multiday_reversal_short");
+    expect(attributionDialog).toHaveTextContent("交易样本明细");
+    expect(attributionDialog).toHaveTextContent("BREV-USDT-SWAP");
+    expect(attributionDialog).toHaveTextContent(
+      "scalping v0.1.3 multiday extension reversal short 90",
+    );
+    expect(attributionDialog).toHaveTextContent("scalping v0.1.3 take profit 132.68%");
+    expect(attributionDialog).toHaveTextContent("NES-USDT-SWAP");
+    expect(attributionDialog).toHaveTextContent("scalping v0.1.3 stop loss -30.12%");
+
+    fireEvent.click(
+      within(attributionDialog).getByRole("button", { name: "关闭归因详情" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Multiday Reversal 归因详情" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
     expect(screen.getByLabelText("历史持仓币种")).toBeInTheDocument();

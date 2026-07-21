@@ -3341,6 +3341,186 @@ input {
   border-bottom: 0;
 }
 
+.paper-strategy-doctor-row {
+  cursor: pointer;
+}
+
+.paper-strategy-doctor-row:hover td,
+.paper-strategy-doctor-row:focus-visible td {
+  background: color-mix(in srgb, var(--terminal-cyan) 10%, var(--surface));
+}
+
+.paper-strategy-doctor-row:focus-visible {
+  outline: 2px solid var(--terminal-cyan);
+  outline-offset: -2px;
+}
+
+.paper-strategy-doctor-detail-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 900;
+  padding: 0;
+}
+
+.paper-strategy-doctor-detail-button small {
+  border: 1px solid color-mix(in srgb, var(--terminal-cyan) 44%, transparent);
+  border-radius: 6px;
+  color: var(--terminal-cyan);
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.strategy-doctor-detail-modal {
+  width: min(920px, calc(100vw - 48px));
+}
+
+.strategy-doctor-detail-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.strategy-doctor-combination,
+.strategy-doctor-samples {
+  display: grid;
+  gap: 10px;
+}
+
+.strategy-doctor-combination > h3,
+.strategy-doctor-samples > h3 {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.strategy-doctor-combination > p {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.strategy-doctor-samples > h3 span {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.strategy-doctor-signal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.strategy-doctor-signal-chips span {
+  border: 1px solid color-mix(in srgb, var(--terminal-cyan) 36%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--terminal-cyan) 8%, transparent);
+  color: var(--terminal-cyan);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.strategy-doctor-signal-chips.compact {
+  margin-top: 12px;
+}
+
+.strategy-doctor-signal-chips.compact span {
+  font-size: 10px;
+  padding: 3px 7px;
+}
+
+.strategy-doctor-sample-list {
+  display: grid;
+  gap: 12px;
+}
+
+.strategy-doctor-sample {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 86%, black);
+  padding: 14px;
+}
+
+.strategy-doctor-sample > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.strategy-doctor-sample > header div {
+  display: grid;
+  gap: 4px;
+}
+
+.strategy-doctor-sample > header strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.strategy-doctor-sample > header span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.strategy-doctor-sample-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.strategy-doctor-sample-metrics div {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 8px;
+}
+
+.strategy-doctor-sample-metrics dt,
+.strategy-doctor-sample-reasons span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.strategy-doctor-sample-metrics dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.strategy-doctor-sample-reasons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.strategy-doctor-sample-reasons > div {
+  min-width: 0;
+  border-left: 2px solid color-mix(in srgb, var(--terminal-cyan) 54%, transparent);
+  background: rgba(7, 11, 18, 0.32);
+  padding: 8px 10px;
+}
+
+.strategy-doctor-sample-reasons p {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.strategy-doctor-tag-section {
+  margin-top: 12px;
+}
+
 .positive {
   color: var(--positive);
 }
@@ -4216,6 +4396,12 @@ select {
 
   .reason-detail-grid .reason-detail-wide {
     grid-column: auto;
+  }
+
+  .strategy-doctor-detail-summary,
+  .strategy-doctor-sample-metrics,
+  .strategy-doctor-sample-reasons {
+    grid-template-columns: 1fr;
   }
 
   .macro-summary-strip {
