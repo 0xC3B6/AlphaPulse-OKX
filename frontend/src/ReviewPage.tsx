@@ -31,7 +31,7 @@ import { PaginationControls } from "./PaginationControls";
 
 type HistoryFilter = "all" | "long" | "short" | "profit" | "loss";
 type ReviewSection = "overview" | "strategy" | "history" | "trades";
-type StrategyCurveRange = "7d" | "30d" | "90d" | "all";
+type StrategyCurveRange = "1d" | "7d" | "30d" | "90d" | "all";
 type SignalConfidence = "high" | "med" | "low";
 type SignalRecommendationKey = "continueExecution" | "optimizeEntry" | "pauseOrReduce";
 
@@ -79,6 +79,14 @@ interface StrategyAxisScale {
   stepMs: number;
   tickFormat: "date" | "dateTime" | "month" | "time";
 }
+
+const STRATEGY_CURVE_RANGE_OPTIONS: Array<[StrategyCurveRange, string]> = [
+  ["1d", "1D"],
+  ["7d", "7D"],
+  ["30d", "30D"],
+  ["90d", "90D"],
+  ["all", "ALL"],
+];
 
 interface StrategySignalAttribution {
   confidence: SignalConfidence;
@@ -381,12 +389,6 @@ function AccountEquityCurve({
     [paper],
   );
   const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
-  const rangeOptions: Array<[StrategyCurveRange, string]> = [
-    ["7d", "7D"],
-    ["30d", "30D"],
-    ["90d", "90D"],
-    ["all", "ALL"],
-  ];
 
   return (
     <section
@@ -399,7 +401,7 @@ function AccountEquityCurve({
           <p>{copy.review.equityCurveDescription}</p>
         </div>
         <div className="paper-strategy-range-tabs" role="group" aria-label={copy.review.equityCurve}>
-          {rangeOptions.map(([value, label]) => (
+          {STRATEGY_CURVE_RANGE_OPTIONS.map(([value, label]) => (
             <button
               aria-pressed={range === value}
               className={range === value ? "active" : ""}
@@ -425,6 +427,7 @@ function AccountEquityCurve({
         copy={copy}
         curve={chartCurve}
         initialBalance={paper.initial_balance}
+        range={range}
         testId="review-equity-recharts"
         version={paper.strategy_version}
       />
@@ -530,12 +533,6 @@ function StrategyCurvePanel({
 }) {
   const [range, setRange] = useState<StrategyCurveRange>("all");
   const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
-  const rangeOptions: Array<[StrategyCurveRange, string]> = [
-    ["7d", "7D"],
-    ["30d", "30D"],
-    ["90d", "90D"],
-    ["all", "ALL"],
-  ];
 
   return (
     <section className="paper-strategy-curve" data-testid="paper-strategy-curve">
@@ -544,7 +541,7 @@ function StrategyCurvePanel({
           <h3>{version} {copy.paper.strategyCurve}</h3>
         </div>
         <div className="paper-strategy-range-tabs" role="group" aria-label={copy.paper.strategyCurve}>
-          {rangeOptions.map(([value, label]) => (
+          {STRATEGY_CURVE_RANGE_OPTIONS.map(([value, label]) => (
             <button
               aria-pressed={range === value}
               className={range === value ? "active" : ""}
@@ -589,6 +586,7 @@ function StrategyCurvePanel({
             copy={copy}
             curve={chartCurve}
             initialBalance={initialBalance}
+            range={range}
             version={version}
           />
         </>
@@ -882,6 +880,7 @@ function StrategyCurveChart({
   copy,
   curve,
   initialBalance,
+  range,
   testId = "paper-strategy-recharts",
   version,
 }: {
@@ -889,12 +888,13 @@ function StrategyCurveChart({
   copy: Copy;
   curve: StrategyCurve;
   initialBalance: number;
+  range: StrategyCurveRange;
   testId?: string;
   version: string;
 }) {
   const rawStartMs = curve.points[0].timestampMs;
   const rawEndMs = curve.points[curve.points.length - 1].timestampMs;
-  const axisScale = chooseStrategyAxisScale(rawStartMs, rawEndMs);
+  const axisScale = strategyAxisScaleForRange(range, rawStartMs, rawEndMs);
   const axisDomain = [rawStartMs - axisScale.stepMs / 2, rawEndMs + axisScale.stepMs / 2];
   const axisTicks = buildStrategyAxisTicks(rawStartMs, rawEndMs, axisScale);
   const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs, initialBalance);
@@ -979,6 +979,7 @@ function StrategyCurveChart({
     <div
       aria-label={ariaLabel ?? `${version} ${copy.paper.strategyCurve}`}
       className="paper-strategy-chart-wrap"
+      data-axis-step-ms={axisScale.stepMs}
       data-point-count={curve.points.length}
       data-rendered-point-count={data.length}
       data-y-axis-max={equityAxisDomain[1]}
@@ -1172,6 +1173,25 @@ function chooseStrategyAxisScale(startMs: number, endMs: number): StrategyAxisSc
     return { label: "1W", stepMs: 7 * DAY_MS, tickFormat: "date" };
   }
   return { label: "1M", stepMs: 30 * DAY_MS, tickFormat: "month" };
+}
+
+function strategyAxisScaleForRange(
+  range: StrategyCurveRange,
+  startMs: number,
+  endMs: number,
+): StrategyAxisScale {
+  switch (range) {
+    case "1d":
+      return { label: "10分钟", stepMs: 10 * MINUTE_MS, tickFormat: "time" };
+    case "7d":
+      return { label: "1小时", stepMs: HOUR_MS, tickFormat: "dateTime" };
+    case "30d":
+      return { label: "4小时", stepMs: 4 * HOUR_MS, tickFormat: "dateTime" };
+    case "90d":
+      return { label: "12小时", stepMs: 12 * HOUR_MS, tickFormat: "dateTime" };
+    case "all":
+      return chooseStrategyAxisScale(startMs, endMs);
+  }
 }
 
 function buildStrategyAxisTicks(
@@ -1804,7 +1824,13 @@ function filterStrategyCurve(curve: StrategyCurve, range: StrategyCurveRange): S
     return curve;
   }
   const rangeMs =
-    range === "7d" ? 7 * DAY_MS : range === "30d" ? 30 * DAY_MS : 90 * DAY_MS;
+    range === "1d"
+      ? DAY_MS
+      : range === "7d"
+        ? 7 * DAY_MS
+        : range === "30d"
+          ? 30 * DAY_MS
+          : 90 * DAY_MS;
   const endMs = curve.points[curve.points.length - 1].timestampMs;
   const points = curve.points.filter((point) => point.timestampMs >= endMs - rangeMs);
   return points.length === 0
