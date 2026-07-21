@@ -252,14 +252,29 @@ impl RadarState {
         result
     }
 
-    pub async fn upsert_symbol(&self, symbol: SymbolSnapshot) {
+    pub async fn upsert_symbol(&self, mut symbol: SymbolSnapshot) {
         let accepted = {
             let mut inner = self.inner.write().await;
-            if inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms) {
-                inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
-                true
-            } else {
+            if !valid_price(symbol.price) {
                 false
+            } else {
+                let latest = inner.latest_prices.get(&symbol.inst_id).copied();
+                match latest {
+                    Some(latest) if symbol.updated_at_ms < latest.updated_at_ms => false,
+                    Some(latest) if symbol.updated_at_ms == latest.updated_at_ms => {
+                        // A scan seeds latest_prices from the REST ticker before it builds the
+                        // richer radar snapshot from that same ticker. Publish the analysis
+                        // snapshot without treating the duplicate timestamp as a new price event.
+                        symbol.price = latest.price;
+                        inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
+                        true
+                    }
+                    _ => {
+                        inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
+                        inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
+                        true
+                    }
+                }
             }
         };
         if !accepted {

@@ -59,6 +59,63 @@ async fn websocket_disconnect_is_close_only_until_rest_reconciliation() {
 }
 
 #[tokio::test]
+async fn rest_price_seed_allows_same_timestamp_radar_snapshot() {
+    let state = ready_state().await;
+    state
+        .try_update_latest_prices_from_rest(vec![("BTC-USDT-SWAP".to_string(), 100.0, 2_000)])
+        .await
+        .unwrap();
+
+    let mut radar = symbol(
+        "BTC-USDT-SWAP",
+        100.0,
+        score(75, Direction::Long),
+        score(25, Direction::Neutral),
+    );
+    radar.updated_at_ms = 2_000;
+    state.upsert_symbol(radar).await;
+
+    let snapshot = state.snapshot().await;
+    assert_eq!(snapshot.symbols.len(), 1);
+    assert_eq!(snapshot.symbols[0].inst_id, "BTC-USDT-SWAP");
+    assert_eq!(snapshot.symbols[0].updated_at_ms, 2_000);
+    assert_eq!(snapshot.symbols[0].price, 100.0);
+}
+
+#[tokio::test]
+async fn older_radar_snapshot_cannot_overwrite_latest_market_data() {
+    let state = ready_state().await;
+    state
+        .try_update_latest_prices_from_rest(vec![("BTC-USDT-SWAP".to_string(), 100.0, 2_000)])
+        .await
+        .unwrap();
+
+    let mut current = symbol(
+        "BTC-USDT-SWAP",
+        100.0,
+        score(75, Direction::Long),
+        score(25, Direction::Neutral),
+    );
+    current.updated_at_ms = 2_000;
+    state.upsert_symbol(current).await;
+
+    let mut stale = symbol(
+        "BTC-USDT-SWAP",
+        90.0,
+        score(5, Direction::Neutral),
+        score(95, Direction::Short),
+    );
+    stale.updated_at_ms = 1_999;
+    state.upsert_symbol(stale).await;
+
+    let snapshot = state.snapshot().await;
+    assert_eq!(snapshot.symbols.len(), 1);
+    assert_eq!(snapshot.symbols[0].updated_at_ms, 2_000);
+    assert_eq!(snapshot.symbols[0].price, 100.0);
+    assert_eq!(snapshot.symbols[0].trend_score.value, 75);
+}
+
+#[tokio::test]
 async fn account_kill_switch_uses_the_account_queue_and_blocks_only_entries() {
     let state = ready_state().await;
     state
