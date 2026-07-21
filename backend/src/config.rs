@@ -9,6 +9,9 @@ pub struct AppConfig {
     pub redis_url: Option<String>,
     pub require_database: bool,
     pub redis_ttl_secs: u64,
+    pub tenant_id: String,
+    pub account_id: String,
+    pub market_data_max_lag_ms: i64,
     pub scan_interval_secs: u64,
     pub dynamic_pool_size: usize,
     pub trend_alert_threshold: u8,
@@ -31,6 +34,9 @@ impl Default for AppConfig {
             redis_url: None,
             require_database: false,
             redis_ttl_secs: 30,
+            tenant_id: "default".to_string(),
+            account_id: "paper".to_string(),
+            market_data_max_lag_ms: 5_000,
             scan_interval_secs: 30,
             dynamic_pool_size: 40,
             trend_alert_threshold: 80,
@@ -105,6 +111,23 @@ impl AppConfig {
                 "ALPHAPULSE_REDIS_TTL_SECS" => {
                     if let Ok(ttl) = value.trim().parse::<u64>() {
                         config.redis_ttl_secs = ttl.max(1);
+                    }
+                }
+                "ALPHAPULSE_TENANT_ID" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.tenant_id = trimmed.to_string();
+                    }
+                }
+                "ALPHAPULSE_ACCOUNT_ID" => {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        config.account_id = trimmed.to_string();
+                    }
+                }
+                "ALPHAPULSE_MARKET_DATA_MAX_LAG_MS" => {
+                    if let Ok(max_lag_ms) = value.trim().parse::<i64>() {
+                        config.market_data_max_lag_ms = max_lag_ms.max(0);
                     }
                 }
                 _ => {}

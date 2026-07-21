@@ -22,11 +22,11 @@ use crate::{
         compact_equity_history, PaperAccountSnapshot, PaperEquityPoint, PaperOrderRequest,
         PaperSide, PaperState, PaperTrade, PaperTradeAction, MAX_EQUITY_HISTORY_POINTS,
     },
+    risk_safety::AccountScope,
     state::DashboardSnapshot,
     strategy_identity::StrategyIdentity,
 };
 
-const DASHBOARD_CACHE_KEY: &str = "alphapulse:dashboard:snapshot";
 static REJECTED_INTENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 const STRATEGY_TABLES: &[&str] = &[
     "strategy_versions",
@@ -45,6 +45,7 @@ pub struct PersistenceLayer {
     postgres: PgPool,
     redis: Option<redis::Client>,
     redis_ttl_secs: u64,
+    scope: AccountScope,
 }
 
 #[derive(Debug, Clone)]
@@ -284,10 +285,13 @@ impl PersistenceLayer {
             .map(redis::Client::open)
             .transpose()
             .context("invalid Redis URL")?;
+        let scope = AccountScope::new(&config.tenant_id, &config.account_id)
+            .context("invalid tenant/account scope")?;
         Ok(Self {
             postgres,
             redis,
             redis_ttl_secs: config.redis_ttl_secs,
+            scope,
         })
     }
 
@@ -305,11 +309,14 @@ impl PersistenceLayer {
         let row = sqlx::query_as::<_, (Json<serde_json::Value>,)>(
             "SELECT payload_json FROM app_state_snapshots \
              WHERE version_code = $1 AND strategy_build_id = $2 AND config_hash = $3 \
+               AND tenant_id = $4 AND account_id = $5 \
              ORDER BY id DESC LIMIT 1",
         )
         .bind(&identity.version_code)
         .bind(&identity.strategy_build_id)
         .bind(&identity.config_hash)
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
         .fetch_optional(&self.postgres)
         .await?;
         row.map(|(payload,)| {
@@ -323,6 +330,7 @@ impl PersistenceLayer {
         identity: &StrategyIdentity,
         run_id: &str,
     ) -> anyhow::Result<Vec<PaperEquityPoint>> {
+        let database_run_id = self.database_run_id(run_id);
         let rows = sqlx::query_as::<_, (i64, f64, f64, f64, i64)>(
             "WITH ordered AS (\
                  SELECT timestamp_ms, equity::DOUBLE PRECISION AS equity, \
@@ -341,7 +349,7 @@ impl PersistenceLayer {
         )
         .bind(&identity.version_code)
         .bind(&identity.strategy_build_id)
-        .bind(run_id)
+        .bind(database_run_id)
         .bind(MAX_EQUITY_HISTORY_POINTS as i64)
         .fetch_all(&self.postgres)
         .await?;
@@ -375,18 +383,23 @@ impl PersistenceLayer {
             .as_ref()
             .map(|intent| intent.run_id.as_str())
             .unwrap_or_else(|| transition.state.run_id());
+        let database_run_id = self.database_run_id(run_id);
         let mut transaction = self.postgres.begin().await?;
+        let account_version =
+            lock_account_row(&mut transaction, &self.scope, transition.committed_at_ms).await?;
         if let Some(intent) = &transition.intent {
-            insert_intent(&mut transaction, intent).await?;
+            insert_intent(&mut transaction, &self.scope, &database_run_id, intent).await?;
         }
         persist_state_rows(
             &mut transaction,
             &identity,
-            run_id,
+            &database_run_id,
             &transition.state,
             &transition.snapshot,
             &transition.event_type,
             transition.committed_at_ms,
+            &self.scope,
+            account_version,
         )
         .await?;
         transaction.commit().await?;
@@ -394,25 +407,38 @@ impl PersistenceLayer {
     }
 
     pub async fn persist_rejection(&self, intent: &PersistedOrderIntent) -> anyhow::Result<()> {
+        let database_run_id = self.database_run_id(&intent.run_id);
         let mut transaction = self.postgres.begin().await?;
+        let account_version =
+            lock_account_row(&mut transaction, &self.scope, intent.created_at_ms).await?;
         insert_identity_and_run(
             &mut transaction,
             &intent.identity,
-            &intent.run_id,
+            &database_run_id,
             None,
             intent.created_at_ms,
         )
         .await?;
-        insert_intent(&mut transaction, intent).await?;
+        insert_intent(&mut transaction, &self.scope, &database_run_id, intent).await?;
+        advance_account_version(
+            &mut transaction,
+            &self.scope,
+            account_version,
+            intent.created_at_ms,
+        )
+        .await?;
         sqlx::query(
             "INSERT INTO event_log \
-             (event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
-             VALUES ('order_rejected', $1, $2, $3, 'order_intent', $4, $5, $6)",
+             (tenant_id, account_id, account_version, event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
+             VALUES ($1, $2, $3, 'order_rejected', $4, $5, $6, 'order_intent', $7, $8, $9)",
         )
-        .bind(&intent.run_id)
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .bind(account_version + 1)
+        .bind(&database_run_id)
         .bind(&intent.identity.version_code)
         .bind(&intent.identity.strategy_build_id)
-        .bind(&intent.client_intent_id)
+        .bind(database_client_intent_id(&self.scope, &intent.client_intent_id))
         .bind(Json(serde_json::to_value(intent)?))
         .bind(intent.created_at_ms)
         .execute(&mut *transaction)
@@ -428,15 +454,19 @@ impl PersistenceLayer {
         ts_ms: i64,
     ) -> anyhow::Result<()> {
         let identity = state.strategy_identity();
+        let database_run_id = self.database_run_id(state.run_id());
         let mut transaction = self.postgres.begin().await?;
+        let account_version = lock_account_row(&mut transaction, &self.scope, ts_ms).await?;
         persist_state_rows(
             &mut transaction,
             identity,
-            state.run_id(),
+            &database_run_id,
             state,
             snapshot,
             "checkpoint",
             ts_ms,
+            &self.scope,
+            account_version,
         )
         .await?;
         transaction.commit().await?;
@@ -449,8 +479,9 @@ impl PersistenceLayer {
         };
         let mut connection = client.get_multiplexed_async_connection().await?;
         let payload = serde_json::to_string(dashboard)?;
+        let key = self.scope.redis_key("dashboard:snapshot");
         connection
-            .set_ex::<_, _, ()>(DASHBOARD_CACHE_KEY, payload, self.redis_ttl_secs)
+            .set_ex::<_, _, ()>(key, payload, self.redis_ttl_secs)
             .await?;
         Ok(())
     }
@@ -474,8 +505,21 @@ impl PersistenceLayer {
             return Ok(());
         };
         let mut connection = client.get_multiplexed_async_connection().await?;
-        connection.del::<_, ()>(DASHBOARD_CACHE_KEY).await?;
+        connection
+            .del::<_, ()>(self.scope.redis_key("dashboard:snapshot"))
+            .await?;
         Ok(())
+    }
+
+    pub fn account_scope(&self) -> &AccountScope {
+        &self.scope
+    }
+
+    pub fn database_run_id(&self, run_id: &str) -> String {
+        format!(
+            "{}:{}:{run_id}",
+            self.scope.tenant_id, self.scope.account_id
+        )
     }
 
     pub async fn export_strategy_backup(
@@ -565,14 +609,18 @@ impl PersistenceLayer {
                 .collect::<Vec<_>>(),
         )
         .await?;
+        let account_version = lock_account_row(&mut transaction, &self.scope, ts_ms).await?;
+        let database_run_id = self.database_run_id(state.run_id());
         persist_state_rows(
             &mut transaction,
             identity,
-            state.run_id(),
+            &database_run_id,
             &state,
             &snapshot,
             "reset_restored_v3",
             ts_ms,
+            &self.scope,
+            account_version,
         )
         .await?;
         transaction.commit().await?;
@@ -591,6 +639,7 @@ impl PersistenceLayer {
         version_code: &str,
         run_id: Option<&str>,
     ) -> anyhow::Result<BTreeMap<String, i64>> {
+        let database_run_id = run_id.map(|value| self.database_run_id(value));
         let mut tables: Vec<&str> = STRATEGY_TABLES.to_vec();
         if self.table_exists("risk_guard_events").await? {
             tables.push("risk_guard_events");
@@ -598,7 +647,7 @@ impl PersistenceLayer {
         let mut counts = BTreeMap::new();
         for table in tables {
             let count = if table == "strategy_versions" {
-                if let Some(run_id) = run_id {
+                if let Some(run_id) = database_run_id.as_deref() {
                     sqlx::query_scalar::<_, i64>(
                         "SELECT COUNT(*) FROM strategy_versions versions \
                          WHERE versions.version_code = $1 AND EXISTS (SELECT 1 FROM strategy_runs runs \
@@ -616,7 +665,7 @@ impl PersistenceLayer {
                     .fetch_one(&self.postgres)
                     .await?
                 }
-            } else if let Some(run_id) = run_id {
+            } else if let Some(run_id) = database_run_id.as_deref() {
                 let statement =
                     format!("SELECT COUNT(*) FROM {table} WHERE version_code = $1 AND run_id = $2");
                 sqlx::query_scalar::<_, i64>(&statement)
@@ -678,6 +727,7 @@ async fn purge_strategy_data_in_transaction(
             "positions",
             "closed_trades",
             "equity_snapshots",
+            "ledger_entries",
             "order_intents",
         ] {
             let statement = format!("DELETE FROM {table} WHERE version_code = $1");
@@ -808,6 +858,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 async fn insert_intent(
     transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    database_run_id: &str,
     intent: &PersistedOrderIntent,
 ) -> anyhow::Result<()> {
     sqlx::query(
@@ -818,8 +870,8 @@ async fn insert_intent(
          ON CONFLICT (client_intent_id) DO UPDATE SET \
          status = EXCLUDED.status, rejection_reason = EXCLUDED.rejection_reason",
     )
-    .bind(&intent.client_intent_id)
-    .bind(&intent.run_id)
+    .bind(database_client_intent_id(scope, &intent.client_intent_id))
+    .bind(database_run_id)
     .bind(&intent.identity.version_code)
     .bind(&intent.identity.strategy_build_id)
     .bind(&intent.identity.config_hash)
@@ -838,6 +890,13 @@ async fn insert_intent(
     Ok(())
 }
 
+fn database_client_intent_id(scope: &AccountScope, client_intent_id: &str) -> String {
+    format!(
+        "{}:{}:{client_intent_id}",
+        scope.tenant_id, scope.account_id
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn persist_state_rows(
     transaction: &mut Transaction<'_, Postgres>,
@@ -847,6 +906,8 @@ async fn persist_state_rows(
     snapshot: &PaperAccountSnapshot,
     event_type: &str,
     ts_ms: i64,
+    scope: &AccountScope,
+    account_version: i64,
 ) -> anyhow::Result<()> {
     insert_identity_and_run(transaction, identity, run_id, Some(snapshot), ts_ms).await?;
 
@@ -892,11 +953,12 @@ async fn persist_state_rows(
         sqlx::query(
             "INSERT INTO fills \
              (trade_id, order_intent_id, run_id, version_code, strategy_build_id, symbol, side, action, \
-              price, quantity, fee, slippage, filled_at_ms) \
+              price, quantity, fee, slippage, trigger_price, actual_slippage_rate, filled_at_ms) \
              VALUES ($1, (SELECT id FROM order_intents WHERE client_intent_id = \
-                 $2 || ':trade:' || $1::text || ':' || $7), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
+                 $2 || ':trade:' || $1::text || ':' || $7), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) \
              ON CONFLICT (run_id, trade_id) DO UPDATE SET price = EXCLUDED.price, \
-             quantity = EXCLUDED.quantity, fee = EXCLUDED.fee, slippage = EXCLUDED.slippage",
+             quantity = EXCLUDED.quantity, fee = EXCLUDED.fee, slippage = EXCLUDED.slippage, \
+             trigger_price = EXCLUDED.trigger_price, actual_slippage_rate = EXCLUDED.actual_slippage_rate",
         )
         .bind(trade.id as i64)
         .bind(run_id)
@@ -909,9 +971,36 @@ async fn persist_state_rows(
         .bind(decimal_or_zero(trade.qty))
         .bind(decimal_or_zero(trade.fee))
         .bind(decimal_or_zero(trade.slippage_rate))
+        .bind(trade.trigger_price.map(decimal_or_zero))
+        .bind(trade.actual_slippage_rate.map(decimal_or_zero))
         .bind(trade.ts_ms)
         .execute(&mut **transaction)
         .await?;
+
+        if trade.fee != 0.0 {
+            insert_ledger_entry(
+                transaction,
+                scope,
+                identity,
+                run_id,
+                trade,
+                "fee",
+                -trade.fee,
+            )
+            .await?;
+        }
+        if trade.action == PaperTradeAction::Close {
+            insert_ledger_entry(
+                transaction,
+                scope,
+                identity,
+                run_id,
+                trade,
+                "realized_pnl",
+                trade.realized_pnl + trade.fee,
+            )
+            .await?;
+        }
     }
 
     for closed in &snapshot.position_history {
@@ -919,10 +1008,11 @@ async fn persist_state_rows(
             "INSERT INTO closed_trades \
              (closed_position_id, run_id, version_code, strategy_build_id, symbol, side, entry_price, exit_price, \
               margin, leverage, quantity, gross_pnl, fee, net_pnl, primary_signal, tags_json, exit_reason, \
-              stop_loss, take_profit, expire_at_ms, hold_seconds, opened_at_ms, closed_at_ms) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) \
+              stop_loss, take_profit, expire_at_ms, trigger_price, actual_slippage_rate, hold_seconds, opened_at_ms, closed_at_ms) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25) \
              ON CONFLICT (run_id, closed_position_id) DO UPDATE SET exit_price = EXCLUDED.exit_price, \
-             net_pnl = EXCLUDED.net_pnl, exit_reason = EXCLUDED.exit_reason",
+             net_pnl = EXCLUDED.net_pnl, exit_reason = EXCLUDED.exit_reason, \
+             trigger_price = EXCLUDED.trigger_price, actual_slippage_rate = EXCLUDED.actual_slippage_rate",
         )
         .bind(closed.id as i64)
         .bind(run_id)
@@ -944,6 +1034,8 @@ async fn persist_state_rows(
         .bind(closed.stop_loss.map(decimal_or_zero))
         .bind(closed.take_profit.map(decimal_or_zero))
         .bind(closed.expire_at_ms)
+        .bind(closed.trigger_price.map(decimal_or_zero))
+        .bind(closed.actual_slippage_rate.map(decimal_or_zero))
         .bind(closed.duration_ms / 1_000)
         .bind(closed.opened_at_ms)
         .bind(closed.closed_at_ms)
@@ -971,12 +1063,17 @@ async fn persist_state_rows(
     .execute(&mut **transaction)
     .await?;
 
+    let next_account_version =
+        advance_account_version(transaction, scope, account_version, ts_ms).await?;
     let state_json = serde_json::to_value(state)?;
     sqlx::query(
         "INSERT INTO event_log \
-         (event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
-         VALUES ($1, $2, $3, $4, 'paper_account', $2, $5, $6)",
+         (tenant_id, account_id, account_version, event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'paper_account', $5, $8, $9)",
     )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(next_account_version)
     .bind(event_type)
     .bind(run_id)
     .bind(&identity.version_code)
@@ -987,15 +1084,100 @@ async fn persist_state_rows(
     .await?;
     sqlx::query(
         "INSERT INTO app_state_snapshots \
-         (snapshot_key, run_id, version_code, strategy_build_id, config_hash, payload_json, created_at_ms) \
-         VALUES ('paper_state', $1, $2, $3, $4, $5, $6)",
+         (tenant_id, account_id, snapshot_key, run_id, version_code, strategy_build_id, config_hash, payload_json, created_at_ms) \
+         VALUES ($1, $2, 'paper_state', $3, $4, $5, $6, $7, $8)",
     )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
     .bind(run_id)
     .bind(&identity.version_code)
     .bind(&identity.strategy_build_id)
     .bind(&identity.config_hash)
     .bind(Json(state_json))
     .bind(ts_ms)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn lock_account_row(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    ts_ms: i64,
+) -> anyhow::Result<i64> {
+    sqlx::query(
+        "INSERT INTO trading_accounts (tenant_id, account_id, account_version, created_at_ms, updated_at_ms) \
+         VALUES ($1, $2, 0, $3, $3) ON CONFLICT (tenant_id, account_id) DO NOTHING",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(ts_ms)
+    .execute(&mut **transaction)
+    .await?;
+    let version = sqlx::query_scalar::<_, i64>(
+        "SELECT account_version FROM trading_accounts \
+         WHERE tenant_id = $1 AND account_id = $2 FOR UPDATE",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    anyhow::ensure!(version >= 0, "account_version must not be negative");
+    Ok(version)
+}
+
+async fn advance_account_version(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    expected_version: i64,
+    ts_ms: i64,
+) -> anyhow::Result<i64> {
+    let next_version = expected_version
+        .checked_add(1)
+        .ok_or_else(|| anyhow!("account_version overflow"))?;
+    let result = sqlx::query(
+        "UPDATE trading_accounts SET account_version = $1, updated_at_ms = $2 \
+         WHERE tenant_id = $3 AND account_id = $4 AND account_version = $5",
+    )
+    .bind(next_version)
+    .bind(ts_ms)
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(expected_version)
+    .execute(&mut **transaction)
+    .await?;
+    anyhow::ensure!(
+        result.rows_affected() == 1,
+        "stale account_version: expected {expected_version}"
+    );
+    Ok(next_version)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_ledger_entry(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    identity: &StrategyIdentity,
+    run_id: &str,
+    trade: &PaperTrade,
+    entry_type: &str,
+    amount: f64,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO ledger_entries \
+         (tenant_id, account_id, run_id, version_code, strategy_build_id, trade_id, entry_type, amount, created_at_ms) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+         ON CONFLICT (tenant_id, account_id, run_id, trade_id, entry_type) DO NOTHING",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(run_id)
+    .bind(&identity.version_code)
+    .bind(&identity.strategy_build_id)
+    .bind(trade.id as i64)
+    .bind(entry_type)
+    .bind(decimal_or_zero(amount))
+    .bind(trade.ts_ms)
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -1094,6 +1276,14 @@ fn action_name(action: PaperTradeAction) -> &'static str {
 
 pub fn postgres_schema_statements() -> Vec<&'static str> {
     vec![
+        "CREATE TABLE IF NOT EXISTS trading_accounts (
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            account_version BIGINT NOT NULL DEFAULT 0,
+            created_at_ms BIGINT NOT NULL,
+            updated_at_ms BIGINT NOT NULL,
+            PRIMARY KEY (tenant_id, account_id)
+        )",
         "CREATE TABLE IF NOT EXISTS strategy_versions (
             version_code TEXT PRIMARY KEY,
             strategy_build_id TEXT NOT NULL,
@@ -1159,9 +1349,13 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             quantity NUMERIC NOT NULL,
             fee NUMERIC NOT NULL,
             slippage NUMERIC NOT NULL,
+            trigger_price NUMERIC,
+            actual_slippage_rate NUMERIC,
             filled_at_ms BIGINT NOT NULL,
             UNIQUE (run_id, trade_id)
         )",
+        "ALTER TABLE fills ADD COLUMN IF NOT EXISTS trigger_price NUMERIC",
+        "ALTER TABLE fills ADD COLUMN IF NOT EXISTS actual_slippage_rate NUMERIC",
         "CREATE TABLE IF NOT EXISTS positions (
             position_key TEXT PRIMARY KEY,
             run_id TEXT NOT NULL,
@@ -1207,11 +1401,15 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             stop_loss NUMERIC,
             take_profit NUMERIC,
             expire_at_ms BIGINT,
+            trigger_price NUMERIC,
+            actual_slippage_rate NUMERIC,
             hold_seconds BIGINT NOT NULL,
             opened_at_ms BIGINT NOT NULL,
             closed_at_ms BIGINT NOT NULL,
             UNIQUE (run_id, closed_position_id)
         )",
+        "ALTER TABLE closed_trades ADD COLUMN IF NOT EXISTS trigger_price NUMERIC",
+        "ALTER TABLE closed_trades ADD COLUMN IF NOT EXISTS actual_slippage_rate NUMERIC",
         "CREATE TABLE IF NOT EXISTS equity_snapshots (
             id BIGSERIAL PRIMARY KEY,
             run_id TEXT NOT NULL,
@@ -1225,8 +1423,24 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             open_positions_count BIGINT NOT NULL,
             UNIQUE (run_id, timestamp_ms)
         )",
+        "CREATE TABLE IF NOT EXISTS ledger_entries (
+            id BIGSERIAL PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            trade_id BIGINT NOT NULL,
+            entry_type TEXT NOT NULL,
+            amount NUMERIC NOT NULL,
+            created_at_ms BIGINT NOT NULL,
+            UNIQUE (tenant_id, account_id, run_id, trade_id, entry_type)
+        )",
         "CREATE TABLE IF NOT EXISTS event_log (
             id BIGSERIAL PRIMARY KEY,
+            tenant_id TEXT NOT NULL DEFAULT 'default',
+            account_id TEXT NOT NULL DEFAULT 'paper',
+            account_version BIGINT,
             event_type TEXT NOT NULL,
             run_id TEXT,
             version_code TEXT,
@@ -1236,8 +1450,15 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             payload_json JSONB NOT NULL,
             created_at_ms BIGINT NOT NULL
         )",
+        "ALTER TABLE event_log ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE event_log ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'paper'",
+        "ALTER TABLE event_log ADD COLUMN IF NOT EXISTS account_version BIGINT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS event_log_account_version_idx ON event_log
+            (tenant_id, account_id, account_version) WHERE account_version IS NOT NULL",
         "CREATE TABLE IF NOT EXISTS app_state_snapshots (
             id BIGSERIAL PRIMARY KEY,
+            tenant_id TEXT NOT NULL DEFAULT 'default',
+            account_id TEXT NOT NULL DEFAULT 'paper',
             snapshot_key TEXT NOT NULL,
             run_id TEXT,
             version_code TEXT,
@@ -1246,7 +1467,9 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             payload_json JSONB NOT NULL,
             created_at_ms BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
         )",
-        "CREATE INDEX IF NOT EXISTS app_state_identity_idx ON app_state_snapshots
-            (version_code, strategy_build_id, config_hash, id DESC)",
+        "ALTER TABLE app_state_snapshots ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE app_state_snapshots ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'paper'",
+        "CREATE INDEX IF NOT EXISTS app_state_tenant_identity_idx ON app_state_snapshots
+            (tenant_id, account_id, version_code, strategy_build_id, config_hash, id DESC)",
     ]
 }

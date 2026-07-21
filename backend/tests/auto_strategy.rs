@@ -458,12 +458,14 @@ fn closes_position_at_stop_loss() {
             reason,
             exit_kind,
             execution_price,
+            trigger_price,
             ..
         } => {
             assert_eq!(inst_id, "LAB-USDT-SWAP");
             assert!(reason.contains("stop loss"));
             assert_eq!(exit_kind, AutoExitKind::StopLoss);
-            assert_eq!(execution_price, Some(98.5));
+            assert_eq!(execution_price, None);
+            assert_eq!(trigger_price, Some(98.5));
         }
         AutoStrategyDecision::Open { .. } => panic!("expected close decision"),
     }
@@ -501,7 +503,7 @@ fn closes_position_at_take_profit() {
 }
 
 #[test]
-fn stop_loss_exit_uses_configured_trigger_price_after_price_gap() {
+fn stop_loss_exit_keeps_trigger_reference_but_uses_market_execution_after_gap() {
     let paper = paper_account(
         9_000.0,
         vec![position("TRIA-USDT-SWAP", PaperSide::Short, -2.65)],
@@ -511,11 +513,13 @@ fn stop_loss_exit_uses_configured_trigger_price_after_price_gap() {
     match decision {
         AutoStrategyDecision::Close {
             execution_price,
+            trigger_price,
             exit_kind,
             ..
         } => {
             assert_eq!(exit_kind, AutoExitKind::StopLoss);
-            assert_close(execution_price.unwrap(), 101.5, 1e-9);
+            assert_eq!(execution_price, None);
+            assert_close(trigger_price.unwrap(), 101.5, 1e-9);
         }
         AutoStrategyDecision::Open { .. } => panic!("expected close decision"),
     }

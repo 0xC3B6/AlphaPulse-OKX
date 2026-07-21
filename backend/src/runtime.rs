@@ -47,7 +47,13 @@ pub async fn run_scanner(config: AppConfig, state: RadarState) -> anyhow::Result
             }
             Some(event) = ticker_rx.recv() => {
                 let _ = state
-                    .update_symbol_price(&event.inst_id, event.last, event.ts_ms)
+                    .update_symbol_price_from_websocket(
+                        &event.inst_id,
+                        event.last,
+                        event.ts_ms,
+                        Utc::now().timestamp_millis(),
+                        config.market_data_max_lag_ms,
+                    )
                     .await;
             }
         }
@@ -124,7 +130,7 @@ async fn scan_once(
             .collect(),
     );
     state
-        .try_update_latest_prices(
+        .try_update_latest_prices_from_rest(
             ticker_map
                 .values()
                 .map(|ticker| (ticker.inst_id.clone(), ticker.last, ticker.ts_ms))

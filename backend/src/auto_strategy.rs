@@ -87,6 +87,7 @@ pub enum AutoStrategyDecision {
         reason: String,
         tags: Vec<TradeTag>,
         execution_price: Option<f64>,
+        trigger_price: Option<f64>,
         exit_kind: AutoExitKind,
     },
 }
@@ -184,7 +185,10 @@ pub fn evaluate_auto_exit(
                 config.stop_loss_margin_pct * 100.0
             )),
             tags: Vec::new(),
-            execution_price: position
+            // A stop is a market exit. When price gaps through the trigger, the
+            // current market price must be used instead of the ideal stop level.
+            execution_price: None,
+            trigger_price: position
                 .stop_loss
                 .or_else(|| exit_trigger_price(position, config.stop_loss_margin_pct)),
             exit_kind: AutoExitKind::StopLoss,
@@ -200,6 +204,9 @@ pub fn evaluate_auto_exit(
             )),
             tags: Vec::new(),
             execution_price: position
+                .take_profit
+                .or_else(|| exit_trigger_price(position, config.take_profit_margin_pct)),
+            trigger_price: position
                 .take_profit
                 .or_else(|| exit_trigger_price(position, config.take_profit_margin_pct)),
             exit_kind: AutoExitKind::TakeProfit,

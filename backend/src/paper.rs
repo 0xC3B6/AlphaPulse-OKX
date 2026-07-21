@@ -284,6 +284,10 @@ pub struct PaperClosedPositionSnapshot {
     pub stop_loss: Option<f64>,
     pub take_profit: Option<f64>,
     pub expire_at_ms: Option<i64>,
+    #[serde(default)]
+    pub trigger_price: Option<f64>,
+    #[serde(default)]
+    pub actual_slippage_rate: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,6 +324,10 @@ pub struct PaperTrade {
     pub take_profit: Option<f64>,
     #[serde(default)]
     pub expire_at_ms: Option<i64>,
+    #[serde(default)]
+    pub trigger_price: Option<f64>,
+    #[serde(default)]
+    pub actual_slippage_rate: Option<f64>,
     pub realized_pnl: f64,
     pub ts_ms: i64,
 }
@@ -686,6 +694,8 @@ impl PaperState {
             stop_loss: request.stop_loss,
             take_profit: request.take_profit,
             expire_at_ms: request.expire_at_ms,
+            trigger_price: None,
+            actual_slippage_rate: None,
             realized_pnl: -fee,
             ts_ms,
         };
@@ -722,6 +732,20 @@ impl PaperState {
         reason: &str,
         tags: Vec<TradeTag>,
     ) -> Result<PaperTrade, PaperError> {
+        self.close_with_execution_context(inst_id, price, ts_ms, source, reason, tags, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn close_with_execution_context(
+        &mut self,
+        inst_id: &str,
+        price: f64,
+        ts_ms: i64,
+        source: &str,
+        reason: &str,
+        tags: Vec<TradeTag>,
+        trigger_price: Option<f64>,
+    ) -> Result<PaperTrade, PaperError> {
         if price <= 0.0 || !price.is_finite() {
             return Err(PaperError::PriceUnavailable(inst_id.to_string()));
         }
@@ -730,6 +754,12 @@ impl PaperState {
             .remove(inst_id)
             .ok_or_else(|| PaperError::PositionNotFound(inst_id.to_string()))?;
         let execution_price = self.execution_price(position.side, PaperTradeAction::Close, price);
+        let actual_slippage_rate = trigger_price
+            .filter(|trigger| *trigger > 0.0 && trigger.is_finite())
+            .map(|trigger| match position.side {
+                PaperSide::Long => ((trigger - execution_price) / trigger).max(0.0),
+                PaperSide::Short => ((execution_price - trigger) / trigger).max(0.0),
+            });
         let close_notional = position.qty * execution_price;
         let fee = close_notional * self.fee_rate;
         let gross_pnl = position
@@ -759,6 +789,8 @@ impl PaperState {
             stop_loss: position.stop_loss,
             take_profit: position.take_profit,
             expire_at_ms: position.expire_at_ms,
+            trigger_price,
+            actual_slippage_rate,
             realized_pnl,
             ts_ms,
         };
@@ -799,6 +831,8 @@ impl PaperState {
                 stop_loss: position.stop_loss,
                 take_profit: position.take_profit,
                 expire_at_ms: position.expire_at_ms,
+                trigger_price,
+                actual_slippage_rate,
             });
         self.push_trade(trade.clone());
         Ok(trade)

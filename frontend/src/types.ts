@@ -104,6 +104,19 @@ export interface DashboardSnapshot {
   last_scan_at_ms: number | null;
   websocket_connected: boolean;
   paper: PaperAccountSnapshot;
+  persistence?: PersistenceHealthSnapshot;
+  risk?: AccountRiskSnapshot;
+}
+
+export interface AccountRiskSnapshot {
+  scope: { tenant_id: string; account_id: string };
+  mode: "normal" | "close_only" | "reconciling";
+  reasons: string[];
+  websocket_connected: boolean;
+  redis_available: boolean;
+  reconciliation_required: boolean;
+  last_market_event_at_ms: number | null;
+  last_sequences: Record<string, number>;
 }
 
 export type BackendEvent =
@@ -247,6 +260,8 @@ export interface PaperClosedPositionSnapshot {
   stop_loss?: number | null;
   take_profit?: number | null;
   expire_at_ms?: number | null;
+  trigger_price?: number | null;
+  actual_slippage_rate?: number | null;
 }
 
 export interface PaperTrade {
@@ -269,6 +284,8 @@ export interface PaperTrade {
   stop_loss?: number | null;
   take_profit?: number | null;
   expire_at_ms?: number | null;
+  trigger_price?: number | null;
+  actual_slippage_rate?: number | null;
   realized_pnl: number;
   ts_ms: number;
 }

@@ -2,12 +2,104 @@ use alphapulse_okx_backend::{
     auto_strategy::AutoStrategyConfig,
     domain::{Direction, Score, SymbolSnapshot},
     paper::{PaperOrderRequest, PaperSide},
-    state::RadarState,
+    risk_safety::{AccountEvent, AccountEventEnvelope, RiskMode},
+    state::{PaperTransitionError, RadarState},
 };
 
 #[tokio::test]
+async fn stale_market_event_is_rejected_before_price_and_strategy_processing() {
+    let state = ready_state().await;
+    state
+        .update_symbol_price("BTC-USDT-SWAP", 100.0, 2_000)
+        .await;
+    state
+        .update_symbol_price("BTC-USDT-SWAP", 90.0, 1_000)
+        .await;
+    let opened = state
+        .open_paper_order(PaperOrderRequest::manual(
+            "BTC-USDT-SWAP",
+            PaperSide::Long,
+            100.0,
+            1.0,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        opened.positions[0].entry_price,
+        100.0 * (1.0 + opened.slippage_rate)
+    );
+}
+
+#[tokio::test]
+async fn websocket_disconnect_is_close_only_until_rest_reconciliation() {
+    let state = ready_state().await;
+    state
+        .update_symbol_price("BTC-USDT-SWAP", 100.0, 1_000)
+        .await;
+    state.set_websocket_connected(false).await;
+    let error = state
+        .open_paper_order(PaperOrderRequest::manual(
+            "BTC-USDT-SWAP",
+            PaperSide::Long,
+            100.0,
+            1.0,
+        ))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, PaperTransitionError::RiskCloseOnly(_)));
+    assert_eq!(state.snapshot().await.risk.mode, RiskMode::CloseOnly);
+
+    state
+        .try_update_latest_prices_from_rest(vec![("BTC-USDT-SWAP".to_string(), 100.0, 2_000)])
+        .await
+        .unwrap();
+    assert_eq!(state.snapshot().await.risk.mode, RiskMode::CloseOnly);
+    state.set_websocket_connected(true).await;
+    assert_eq!(state.snapshot().await.risk.mode, RiskMode::Normal);
+}
+
+#[tokio::test]
+async fn account_kill_switch_uses_the_account_queue_and_blocks_only_entries() {
+    let state = ready_state().await;
+    state
+        .update_symbol_price("BTC-USDT-SWAP", 100.0, 1_000)
+        .await;
+    state
+        .open_paper_order(PaperOrderRequest::manual(
+            "BTC-USDT-SWAP",
+            PaperSide::Long,
+            100.0,
+            1.0,
+        ))
+        .await
+        .unwrap();
+
+    state
+        .handle_account_event(AccountEventEnvelope {
+            event_id: "kill-switch-on".to_string(),
+            stream: "risk:account".to_string(),
+            sequence: 1,
+            event: AccountEvent::AccountKillSwitch { active: true },
+        })
+        .await;
+    let error = state
+        .open_paper_order(PaperOrderRequest::manual(
+            "ETH-USDT-SWAP",
+            PaperSide::Long,
+            100.0,
+            1.0,
+        ))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, PaperTransitionError::RiskCloseOnly(_)));
+
+    let closed = state.close_paper_position("BTC-USDT-SWAP").await.unwrap();
+    assert!(closed.positions.is_empty());
+}
+
+#[tokio::test]
 async fn paper_uses_latest_price_even_when_symbol_is_not_in_radar_snapshot() {
-    let state = RadarState::default();
+    let state = ready_state().await;
     assert!(state
         .update_symbol_price("BIO-USDT-SWAP", 0.030156, 1_000)
         .await
@@ -34,7 +126,7 @@ async fn paper_uses_latest_price_even_when_symbol_is_not_in_radar_snapshot() {
 
 #[tokio::test]
 async fn ticker_sync_ids_include_open_positions_outside_radar_pool() {
-    let state = RadarState::default();
+    let state = ready_state().await;
     state
         .update_symbol_price("BIO-USDT-SWAP", 0.030156, 1_000)
         .await;
@@ -79,7 +171,7 @@ async fn stale_ticker_timestamp_does_not_backdate_auto_close() {
 
 #[tokio::test]
 async fn batched_price_update_evaluates_auto_exit_before_new_entry() {
-    let state = RadarState::default();
+    let state = ready_state().await;
     for inst_id in ["A", "B", "C", "D", "E"] {
         let inst_id = format!("{inst_id}-USDT-SWAP");
         state.update_symbol_price(&inst_id, 1.0, 1).await;
@@ -116,7 +208,7 @@ async fn batched_price_update_evaluates_auto_exit_before_new_entry() {
 }
 
 #[tokio::test]
-async fn crossed_stop_uses_stored_trigger_price_then_one_slippage_application() {
+async fn crossed_stop_uses_market_price_and_records_gap_slippage() {
     let state = seeded_state_with_long("CRV-USDT-SWAP", 1.0, 300.0, 20.0).await;
     state
         .update_latest_prices(vec![("CRV-USDT-SWAP".to_string(), 0.90, 2)])
@@ -124,7 +216,13 @@ async fn crossed_stop_uses_stored_trigger_price_then_one_slippage_application() 
     let paper = state.paper_snapshot().await;
     let history = &paper.position_history[0];
     assert_eq!(history.stop_loss, Some(0.985));
-    assert_close(history.exit_price, 0.985 * (1.0 - paper.slippage_rate));
+    let expected_exit = 0.90 * (1.0 - paper.slippage_rate);
+    assert_close(history.exit_price, expected_exit);
+    assert_eq!(history.trigger_price, Some(0.985));
+    assert_close(
+        history.actual_slippage_rate.unwrap(),
+        (0.985 - expected_exit) / 0.985,
+    );
 }
 
 #[tokio::test]
@@ -154,8 +252,12 @@ async fn long_and_short_protective_boundaries_close_at_stored_levels() {
         .contains("stop loss"));
     assert_close(
         short_paper.position_history[0].exit_price,
-        1.015 * (1.0 + short_paper.slippage_rate),
+        1.10 * (1.0 + short_paper.slippage_rate),
     );
+    assert_eq!(short_paper.position_history[0].trigger_price, Some(1.015));
+    assert!(short_paper.position_history[0]
+        .actual_slippage_rate
+        .is_some_and(|value| value > 0.08));
 }
 
 #[tokio::test]
@@ -171,7 +273,7 @@ async fn no_crossed_protective_level_remains_as_a_minus_forty_percent_position()
 
 #[tokio::test]
 async fn direct_auto_run_preserves_v3_trade_metadata_and_tags() {
-    let state = RadarState::default();
+    let state = ready_state().await;
     let symbol = symbol(
         "ETH-USDT-SWAP",
         1_600.0,
@@ -221,12 +323,18 @@ async fn seeded_state(
     leverage: f64,
     side: PaperSide,
 ) -> RadarState {
-    let state = RadarState::default();
+    let state = ready_state().await;
     state.update_symbol_price(inst_id, price, 1).await;
     state
         .open_paper_order(automatic_order(inst_id, side, price, margin, leverage))
         .await
         .unwrap();
+    state
+}
+
+async fn ready_state() -> RadarState {
+    let state = RadarState::default();
+    state.set_websocket_connected(true).await;
     state
 }
 
