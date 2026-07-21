@@ -14,6 +14,9 @@ fn default_config_matches_v1_decisions() {
     assert_eq!(config.host, "127.0.0.1");
     assert_eq!(config.port, 8787);
     assert_eq!(config.scan_interval_secs, 30);
+    assert_eq!(config.market_data_max_lag_ms, 5_000);
+    assert_eq!(config.tenant_id, "default");
+    assert_eq!(config.account_id, "paper");
     assert_eq!(config.dynamic_pool_size, 40);
     assert_eq!(config.trend_alert_threshold, 80);
     assert_eq!(config.range_alert_threshold, 80);

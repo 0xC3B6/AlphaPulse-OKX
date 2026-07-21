@@ -205,7 +205,10 @@ async fn ws_loop(mut socket: WebSocket, state: RadarState) {
     let snapshot = state.snapshot().await;
     let _ = socket
         .send(Message::Text(
-            serde_json::to_string(&BackendEvent::Snapshot { data: snapshot }).unwrap(),
+            serde_json::to_string(&BackendEvent::Snapshot {
+                data: Box::new(snapshot),
+            })
+            .unwrap(),
         ))
         .await;
 
@@ -282,6 +285,10 @@ impl From<PaperTransitionError> for ApiError {
             PaperTransitionError::PersistencePaused(message)
             | PaperTransitionError::Persistence(message) => Self {
                 status: StatusCode::SERVICE_UNAVAILABLE,
+                message,
+            },
+            PaperTransitionError::RiskCloseOnly(message) => Self {
+                status: StatusCode::CONFLICT,
                 message,
             },
         }

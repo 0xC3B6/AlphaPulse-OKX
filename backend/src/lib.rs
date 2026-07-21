@@ -9,6 +9,7 @@ pub mod okx;
 pub mod paper;
 pub mod persistence;
 pub mod quality;
+pub mod risk_safety;
 pub mod runtime;
 pub mod scoring;
 pub mod server;

@@ -12,6 +12,8 @@ fn production_config_requires_database_and_reads_redis() {
         ("ALPHAPULSE_DATABASE_URL", "postgres://u:p@127.0.0.1/db"),
         ("ALPHAPULSE_REDIS_URL", "redis://127.0.0.1:6379/"),
         ("ALPHAPULSE_REQUIRE_DATABASE", "true"),
+        ("ALPHAPULSE_TENANT_ID", "tenant-a"),
+        ("ALPHAPULSE_ACCOUNT_ID", "paper-a"),
     ]);
     assert_eq!(
         config.database_url.as_deref(),
@@ -19,6 +21,8 @@ fn production_config_requires_database_and_reads_redis() {
     );
     assert_eq!(config.redis_url.as_deref(), Some("redis://127.0.0.1:6379/"));
     assert!(config.require_database);
+    assert_eq!(config.tenant_id, "tenant-a");
+    assert_eq!(config.account_id, "paper-a");
 }
 
 #[test]
@@ -28,11 +32,18 @@ fn schema_persists_strategy_identity_and_protective_levels() {
         "strategy_build_id",
         "config_hash",
         "order_intents",
+        "trading_accounts",
+        "account_version",
         "fills",
         "positions",
         "stop_loss",
         "take_profit",
         "closed_trades",
+        "trigger_price",
+        "actual_slippage_rate",
+        "ledger_entries",
+        "tenant_id",
+        "account_id",
         "equity_snapshots",
         "event_log",
         "app_state_snapshots",

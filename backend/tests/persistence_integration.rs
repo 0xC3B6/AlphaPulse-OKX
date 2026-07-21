@@ -7,9 +7,143 @@ use alphapulse_okx_backend::{
     persistence::{PersistedOrderIntent, PersistedTransition, PersistenceLayer},
     server,
     state::RadarState,
-    strategy_identity::StrategyIdentity,
+    strategy_identity::{StrategyIdentity, INITIAL_RUN_ID},
 };
 use redis::AsyncCommands;
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn two_tenants_can_persist_the_same_strategy_run_without_key_collisions() {
+    let database_url = std::env::var("ALPHAPULSE_TEST_DATABASE_URL").unwrap();
+    let redis_url = std::env::var("ALPHAPULSE_TEST_REDIS_URL").unwrap();
+    let left_config = AppConfig::from_env_pairs([
+        ("ALPHAPULSE_DATABASE_URL", database_url.as_str()),
+        ("ALPHAPULSE_REDIS_URL", redis_url.as_str()),
+        ("ALPHAPULSE_TENANT_ID", "tenant-left"),
+        ("ALPHAPULSE_ACCOUNT_ID", "paper"),
+    ]);
+    let right_config = AppConfig::from_env_pairs([
+        ("ALPHAPULSE_DATABASE_URL", database_url.as_str()),
+        ("ALPHAPULSE_REDIS_URL", redis_url.as_str()),
+        ("ALPHAPULSE_TENANT_ID", "tenant-right"),
+        ("ALPHAPULSE_ACCOUNT_ID", "paper"),
+    ]);
+    let left = PersistenceLayer::connect_required(&left_config)
+        .await
+        .unwrap();
+    let right = PersistenceLayer::connect_required(&right_config)
+        .await
+        .unwrap();
+    left.initialize().await.unwrap();
+    left.purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+    let paper = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
+    let snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
+
+    left.persist_checkpoint(&paper, &snapshot, 1).await.unwrap();
+    right
+        .persist_checkpoint(&paper, &snapshot, 1)
+        .await
+        .unwrap();
+
+    let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+    let run_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM strategy_runs WHERE run_id = ANY($1)")
+            .bind(vec![
+                left.database_run_id(INITIAL_RUN_ID),
+                right.database_run_id(INITIAL_RUN_ID),
+            ])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(run_count, 2);
+    let snapshot_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM app_state_snapshots WHERE tenant_id = ANY($1) AND account_id = 'paper'",
+    )
+    .bind(vec!["tenant-left", "tenant-right"])
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(snapshot_count, 2);
+}
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn transition_locks_account_advances_version_and_writes_ledger() {
+    let config = test_config(true);
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let scope = persistence.account_scope();
+    let version_before = sqlx::query_scalar::<_, i64>(
+        "SELECT account_version FROM trading_accounts WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    let mut candidate = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
+    let order = automatic(
+        "LEDGER-USDT-SWAP",
+        PaperSide::Long,
+        98.5,
+        102.0,
+        "trend_long",
+    );
+    let trade = candidate.open(order.clone(), 100.0, 10_000.0, 10).unwrap();
+    let snapshot = candidate.snapshot(&BTreeMap::from([("LEDGER-USDT-SWAP".to_string(), 100.0)]));
+    persistence
+        .persist_transition(&PersistedTransition {
+            event_type: "paper_open".to_string(),
+            intent: Some(PersistedOrderIntent::accepted_open(
+                &candidate, &order, &trade, 90,
+            )),
+            state: candidate,
+            snapshot,
+            committed_at_ms: 10,
+        })
+        .await
+        .unwrap();
+
+    let version_after: i64 = sqlx::query_scalar(
+        "SELECT account_version FROM trading_accounts WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(version_after, version_before + 1);
+    let ledger_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ledger_entries WHERE tenant_id = $1 AND account_id = $2 AND run_id = $3",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(persistence.database_run_id(INITIAL_RUN_ID))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ledger_count, 1);
+    let logged_version: i64 = sqlx::query_scalar(
+        "SELECT account_version FROM event_log WHERE tenant_id = $1 AND account_id = $2 ORDER BY id DESC LIMIT 1",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(logged_version, version_after);
+}
 
 #[tokio::test]
 #[ignore = "requires docker compose PostgreSQL and Redis"]
@@ -187,7 +321,7 @@ async fn clearing_redis_can_be_rebuilt_from_committed_dashboard() {
     let client = redis::Client::open(redis_url).unwrap();
     let mut connection = client.get_multiplexed_async_connection().await.unwrap();
     let payload: String = connection
-        .get("alphapulse:dashboard:snapshot")
+        .get(persistence.account_scope().redis_key("dashboard:snapshot"))
         .await
         .unwrap();
     let cached: serde_json::Value = serde_json::from_str(&payload).unwrap();

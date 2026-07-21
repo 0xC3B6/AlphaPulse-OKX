@@ -20,6 +20,10 @@ use crate::{
         PersistedOrderIntent, PersistedTransition, PersistenceHealthSnapshot, PersistenceLayer,
         PersistenceStatus,
     },
+    risk_safety::{
+        AccountAction, AccountEvent, AccountEventEnvelope, AccountEventResult, AccountRiskSnapshot,
+        AccountRiskState,
+    },
     strategy_identity::StrategyIdentity,
 };
 
@@ -30,14 +34,15 @@ pub struct DashboardSnapshot {
     pub websocket_connected: bool,
     pub paper: PaperAccountSnapshot,
     pub persistence: PersistenceHealthSnapshot,
+    pub risk: AccountRiskSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BackendEvent {
-    Snapshot { data: DashboardSnapshot },
-    SymbolUpdated { data: SymbolSnapshot },
-    PaperUpdated { data: PaperAccountSnapshot },
+    Snapshot { data: Box<DashboardSnapshot> },
+    SymbolUpdated { data: Box<SymbolSnapshot> },
+    PaperUpdated { data: Box<PaperAccountSnapshot> },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -48,6 +53,8 @@ pub enum PaperTransitionError {
     PersistencePaused(String),
     #[error("paper persistence failed: {0}")]
     Persistence(String),
+    #[error("account is close-only: {0}")]
+    RiskCloseOnly(String),
 }
 
 impl PaperTransitionError {
@@ -61,10 +68,12 @@ pub struct RadarState {
     inner: Arc<RwLock<RadarStateInner>>,
     events: broadcast::Sender<BackendEvent>,
     persistence: Option<PersistenceLayer>,
-    paper_transition: Arc<Mutex<()>>,
+    // Tokio's mutex is FIFO. Holding it through mutation, PostgreSQL commit and
+    // in-memory publication makes this the single per-account event queue.
+    account_event_queue: Arc<Mutex<()>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct RadarStateInner {
     symbols: BTreeMap<String, SymbolSnapshot>,
     latest_prices: BTreeMap<String, LatestPrice>,
@@ -73,6 +82,8 @@ struct RadarStateInner {
     paper: PaperState,
     equity_history: Vec<PaperEquityPoint>,
     persistence: PersistenceHealthSnapshot,
+    risk: AccountRiskState,
+    risk_event_sequence: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +123,7 @@ impl RadarStateInner {
             websocket_connected: self.websocket_connected,
             paper: self.paper_snapshot(),
             persistence: self.persistence.clone(),
+            risk: self.risk.snapshot(),
         }
     }
 
@@ -140,14 +152,14 @@ impl RadarStateInner {
         snapshot
     }
 
-    fn set_latest_price(&mut self, inst_id: &str, price: f64, updated_at_ms: i64) {
+    fn set_latest_price(&mut self, inst_id: &str, price: f64, updated_at_ms: i64) -> bool {
         if !valid_price(price) {
-            return;
+            return false;
         }
         let should_update = self
             .latest_prices
             .get(inst_id)
-            .map(|latest| updated_at_ms >= latest.updated_at_ms || latest.price != price)
+            .map(|latest| updated_at_ms > latest.updated_at_ms)
             .unwrap_or(true);
         if should_update {
             self.latest_prices.insert(
@@ -158,6 +170,12 @@ impl RadarStateInner {
                 },
             );
         }
+        should_update
+    }
+
+    fn next_risk_event_sequence(&mut self) -> u64 {
+        self.risk_event_sequence = self.risk_event_sequence.saturating_add(1);
+        self.risk_event_sequence
     }
 }
 
@@ -186,15 +204,26 @@ impl RadarState {
         equity_history: Vec<PaperEquityPoint>,
     ) -> Self {
         let (events, _) = broadcast::channel(256);
+        let has_positions = !paper.open_position_inst_ids().is_empty();
+        let scope = persistence
+            .as_ref()
+            .map(|layer| layer.account_scope().clone())
+            .unwrap_or_default();
         Self {
             inner: Arc::new(RwLock::new(RadarStateInner {
                 paper,
                 equity_history,
-                ..RadarStateInner::default()
+                symbols: BTreeMap::new(),
+                latest_prices: BTreeMap::new(),
+                last_scan_at_ms: None,
+                websocket_connected: false,
+                persistence: PersistenceHealthSnapshot::default(),
+                risk: AccountRiskState::startup(scope, has_positions),
+                risk_event_sequence: 0,
             })),
             events,
             persistence,
-            paper_transition: Arc::new(Mutex::new(())),
+            account_event_queue: Arc::new(Mutex::new(())),
         }
     }
 
@@ -210,15 +239,35 @@ impl RadarState {
         self.inner.read().await.persistence.clone()
     }
 
-    pub async fn upsert_symbol(&self, symbol: SymbolSnapshot) {
-        {
+    pub async fn handle_account_event(&self, envelope: AccountEventEnvelope) -> AccountEventResult {
+        let _transition = self.account_event_queue.lock().await;
+        let (result, dashboard) = {
             let mut inner = self.inner.write().await;
-            inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
-            inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
+            let result = inner.risk.handle(envelope);
+            (result, inner.dashboard())
+        };
+        let _ = self.events.send(BackendEvent::Snapshot {
+            data: Box::new(dashboard),
+        });
+        result
+    }
+
+    pub async fn upsert_symbol(&self, symbol: SymbolSnapshot) {
+        let accepted = {
+            let mut inner = self.inner.write().await;
+            if inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms) {
+                inner.symbols.insert(symbol.inst_id.clone(), symbol.clone());
+                true
+            } else {
+                false
+            }
+        };
+        if !accepted {
+            return;
         }
-        let _ = self
-            .events
-            .send(BackendEvent::SymbolUpdated { data: symbol });
+        let _ = self.events.send(BackendEvent::SymbolUpdated {
+            data: Box::new(symbol),
+        });
     }
 
     pub async fn update_latest_prices(&self, prices: Vec<(String, f64, i64)>) {
@@ -231,7 +280,14 @@ impl RadarState {
         &self,
         prices: Vec<(String, f64, i64)>,
     ) -> Result<(), PaperTransitionError> {
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
+        self.try_update_latest_prices_locked(prices).await
+    }
+
+    async fn try_update_latest_prices_locked(
+        &self,
+        prices: Vec<(String, f64, i64)>,
+    ) -> Result<(), PaperTransitionError> {
         let (updated_symbols, updated_ids, decision_ts_ms) = {
             let mut inner = self.inner.write().await;
             let mut updated_ids = BTreeSet::new();
@@ -242,9 +298,11 @@ impl RadarState {
                 if !valid_price(price) {
                     continue;
                 }
+                if !inner.set_latest_price(&inst_id, price, updated_at_ms) {
+                    continue;
+                }
                 decision_ts_ms = decision_ts_ms.max(updated_at_ms);
                 updated_ids.insert(inst_id.clone());
-                inner.set_latest_price(&inst_id, price, updated_at_ms);
                 if let Some(symbol) = inner.symbols.get_mut(&inst_id) {
                     symbol.price = price;
                     symbol.updated_at_ms = updated_at_ms;
@@ -255,9 +313,9 @@ impl RadarState {
         };
 
         for symbol in updated_symbols {
-            let _ = self
-                .events
-                .send(BackendEvent::SymbolUpdated { data: symbol });
+            let _ = self.events.send(BackendEvent::SymbolUpdated {
+                data: Box::new(symbol),
+            });
         }
 
         let mut closed_ids = BTreeSet::new();
@@ -282,7 +340,7 @@ impl RadarState {
             }
         }
 
-        if !self.persistence_is_paused().await {
+        if self.entry_is_allowed().await {
             for inst_id in &updated_ids {
                 if closed_ids.contains(inst_id) {
                     continue;
@@ -313,9 +371,81 @@ impl RadarState {
 
         let paper = self.paper_snapshot().await;
         if !paper.positions.is_empty() {
-            let _ = self.events.send(BackendEvent::PaperUpdated { data: paper });
+            let _ = self.events.send(BackendEvent::PaperUpdated {
+                data: Box::new(paper),
+            });
         }
         Ok(())
+    }
+
+    pub async fn try_update_latest_prices_from_rest(
+        &self,
+        prices: Vec<(String, f64, i64)>,
+    ) -> Result<(), PaperTransitionError> {
+        let _transition = self.account_event_queue.lock().await;
+        let observed_ids = prices
+            .iter()
+            .map(|(inst_id, _, _)| inst_id.as_str())
+            .collect::<BTreeSet<_>>();
+        let positions_match = {
+            let inner = self.inner.read().await;
+            inner
+                .paper
+                .open_position_inst_ids()
+                .iter()
+                .all(|inst_id| observed_ids.contains(inst_id.as_str()))
+        };
+        {
+            let mut inner = self.inner.write().await;
+            let sequence = inner.next_risk_event_sequence();
+            inner.risk.handle(AccountEventEnvelope {
+                event_id: format!("rest-reconcile-{sequence}"),
+                stream: "rest:account".to_string(),
+                sequence,
+                event: AccountEvent::RestReconciled { positions_match },
+            });
+        }
+        self.try_update_latest_prices_locked(prices).await
+    }
+
+    pub async fn update_symbol_price_from_websocket(
+        &self,
+        inst_id: &str,
+        price: f64,
+        event_ts_ms: i64,
+        received_at_ms: i64,
+        max_lag_ms: i64,
+    ) -> Option<SymbolSnapshot> {
+        let _transition = self.account_event_queue.lock().await;
+        let event_result = {
+            let mut inner = self.inner.write().await;
+            inner.risk.handle(AccountEventEnvelope {
+                event_id: format!("ws-ticker-{inst_id}-{event_ts_ms}"),
+                stream: format!("okx:ticker:{inst_id}"),
+                sequence: event_ts_ms.max(0) as u64,
+                event: AccountEvent::MarketData {
+                    event_ts_ms,
+                    received_at_ms,
+                    max_lag_ms,
+                },
+            })
+        };
+        if matches!(
+            event_result,
+            AccountEventResult::Duplicate | AccountEventResult::Stale { .. }
+        ) {
+            return self.inner.read().await.symbols.get(inst_id).cloned();
+        }
+        if let Err(error) = self
+            .try_update_latest_prices_locked(vec![(inst_id.to_string(), price, event_ts_ms)])
+            .await
+        {
+            tracing::warn!(
+                ?error,
+                "paper transition failed after WebSocket price update"
+            );
+        }
+        self.inner.read().await.symbols.get(inst_id).cloned()
     }
 
     pub async fn ticker_sync_inst_ids(&self, fixed_watchlist: &[String]) -> Vec<String> {
@@ -341,7 +471,7 @@ impl RadarState {
         &self,
         order: PaperOrderRequest,
     ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
         self.ensure_entry_allowed().await?;
         let committed_at_ms = Utc::now().timestamp_millis();
         let (mut candidate, prices, price) = {
@@ -392,7 +522,7 @@ impl RadarState {
         &self,
         inst_id: &str,
     ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
         let committed_at_ms = Utc::now().timestamp_millis();
         let (mut candidate, prices, price, prior) = {
             let inner = self.inner.read().await;
@@ -477,7 +607,7 @@ impl RadarState {
         config: AutoStrategyConfig,
         now_ms: i64,
     ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
         let (decision, prices) = {
             let mut inner = self.inner.write().await;
             inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
@@ -491,9 +621,7 @@ impl RadarState {
         let Some(decision) = decision else {
             return Ok(None);
         };
-        if matches!(decision, AutoStrategyDecision::Open { .. })
-            && self.persistence_is_paused().await
-        {
+        if matches!(decision, AutoStrategyDecision::Open { .. }) && !self.entry_is_allowed().await {
             return Ok(None);
         }
         let score = decision_score(symbol, &decision);
@@ -506,7 +634,7 @@ impl RadarState {
         let Some(persistence) = &self.persistence else {
             return Ok(());
         };
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
         if !persistence.postgres_ready().await {
             let error = "PostgreSQL readiness check failed";
             self.pause_persistence(error).await;
@@ -539,16 +667,14 @@ impl RadarState {
             inner.dashboard()
         };
         let _ = self.events.send(BackendEvent::Snapshot {
-            data: dashboard.clone(),
+            data: Box::new(dashboard.clone()),
         });
-        if let Err(error) = persistence.rebuild_cache(&dashboard).await {
-            tracing::warn!(?error, "failed to rebuild Redis after persistence recovery");
-        }
+        self.rebuild_cache_after_commit(&dashboard).await;
         Ok(())
     }
 
     pub async fn mark_scan(&self, ts_ms: i64) -> Result<(), PaperTransitionError> {
-        let _transition = self.paper_transition.lock().await;
+        let _transition = self.account_event_queue.lock().await;
         let (paper, prices) = {
             let inner = self.inner.read().await;
             (inner.paper.clone(), inner.price_map())
@@ -585,8 +711,22 @@ impl RadarState {
     }
 
     pub async fn set_websocket_connected(&self, connected: bool) {
-        let mut inner = self.inner.write().await;
-        inner.websocket_connected = connected;
+        let _transition = self.account_event_queue.lock().await;
+        let dashboard = {
+            let mut inner = self.inner.write().await;
+            inner.websocket_connected = connected;
+            let sequence = inner.next_risk_event_sequence();
+            inner.risk.handle(AccountEventEnvelope {
+                event_id: format!("websocket-{connected}-{sequence}"),
+                stream: "system:websocket".to_string(),
+                sequence,
+                event: AccountEvent::WebsocketConnection { connected },
+            });
+            inner.dashboard()
+        };
+        let _ = self.events.send(BackendEvent::Snapshot {
+            data: Box::new(dashboard),
+        });
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<BackendEvent> {
@@ -607,6 +747,7 @@ impl RadarState {
                 reason,
                 tags,
                 execution_price,
+                trigger_price,
                 ..
             } => {
                 let prior = candidate
@@ -643,13 +784,14 @@ impl RadarState {
                     );
                     return Err(self.persist_rejection(intent, error).await);
                 };
-                let trade = match candidate.close_with_meta_and_tags(
+                let trade = match candidate.close_with_execution_context(
                     &inst_id,
                     price,
                     now_ms,
                     SCALPING_OPTIMIZATION_SOURCE,
                     &reason,
                     tags.clone(),
+                    trigger_price,
                 ) {
                     Ok(trade) => trade,
                     Err(error) => {
@@ -688,11 +830,7 @@ impl RadarState {
                 reason,
                 tags,
             } => {
-                if self.persistence_is_paused().await {
-                    return Err(PaperTransitionError::PersistencePaused(
-                        "new entries are disabled until PostgreSQL recovers".to_string(),
-                    ));
-                }
+                self.ensure_entry_allowed().await?;
                 let price = prices
                     .get(&order.inst_id)
                     .copied()
@@ -781,7 +919,7 @@ impl RadarState {
         };
         let snapshot = dashboard.paper.clone();
         let _ = self.events.send(BackendEvent::PaperUpdated {
-            data: snapshot.clone(),
+            data: Box::new(snapshot.clone()),
         });
         self.rebuild_cache_after_commit(&dashboard).await;
         Ok(snapshot)
@@ -810,7 +948,15 @@ impl RadarState {
                     .unwrap_or_else(|| "PostgreSQL is unavailable".to_string()),
             ));
         }
+        if let Some(reason) = self.inner.read().await.risk.entry_block_reason() {
+            return Err(PaperTransitionError::RiskCloseOnly(reason));
+        }
         Ok(())
+    }
+
+    async fn entry_is_allowed(&self) -> bool {
+        !self.persistence_is_paused().await
+            && self.inner.read().await.risk.allows(AccountAction::Open)
     }
 
     async fn persistence_is_paused(&self) -> bool {
@@ -825,14 +971,28 @@ impl RadarState {
             inner.persistence.last_committed_at_ms = last_committed_at_ms;
             inner.dashboard()
         };
-        let _ = self.events.send(BackendEvent::Snapshot { data: dashboard });
+        let _ = self.events.send(BackendEvent::Snapshot {
+            data: Box::new(dashboard),
+        });
     }
 
     async fn rebuild_cache_after_commit(&self, dashboard: &DashboardSnapshot) {
         let Some(persistence) = &self.persistence else {
             return;
         };
-        if let Err(error) = persistence.rebuild_cache(dashboard).await {
+        let result = persistence.rebuild_cache(dashboard).await;
+        let available = result.is_ok();
+        {
+            let mut inner = self.inner.write().await;
+            let sequence = inner.next_risk_event_sequence();
+            inner.risk.handle(AccountEventEnvelope {
+                event_id: format!("redis-health-{available}-{sequence}"),
+                stream: "system:redis".to_string(),
+                sequence,
+                event: AccountEvent::RedisHealth { available },
+            });
+        }
+        if let Err(error) = result {
             tracing::warn!(?error, "Redis cache refresh failed after PostgreSQL commit");
         }
     }
