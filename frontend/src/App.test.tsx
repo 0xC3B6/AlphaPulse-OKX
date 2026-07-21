@@ -944,7 +944,12 @@ describe("App", () => {
     expect(screen.getByTestId("review-page")).toHaveTextContent("+89.36 USDT");
     expect(screen.getByTestId("review-page")).not.toHaveTextContent("暂不可用");
     expect(screen.getByRole("heading", { name: "账户权益曲线" })).toBeInTheDocument();
-    expect(screen.getByTestId("review-equity-recharts")).toHaveAttribute("data-point-count", "3");
+    const accountEquityChart = screen.getByTestId("review-equity-recharts");
+    expect(accountEquityChart).toHaveAttribute("data-point-count", "3");
+    expect(Number(accountEquityChart.getAttribute("data-y-axis-min"))).toBeGreaterThan(9_000);
+    expect(Number(accountEquityChart.getAttribute("data-y-axis-min"))).toBeLessThan(9_941.78);
+    expect(Number(accountEquityChart.getAttribute("data-y-axis-max"))).toBeGreaterThan(10_250.44);
+    expect(Number(accountEquityChart.getAttribute("data-y-axis-max"))).toBeLessThan(11_000);
     expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("最高权益");
     expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("10,250.44 USDT");
     expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("最低权益");

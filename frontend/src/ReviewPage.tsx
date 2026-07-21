@@ -94,6 +94,8 @@ interface StrategySignalAttribution {
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
+const EQUITY_AXIS_PADDING_RATIO = 0.12;
+const EQUITY_AXIS_MIN_PADDING_RATIO = 0.0025;
 const HISTORY_PAGE_SIZE = 10;
 const DEFAULT_HISTORY_SEARCH_FILTERS: HistorySearchFilters = {
   endDate: "",
@@ -678,6 +680,7 @@ function StrategyCurveChart({
   const axisDomain = [rawStartMs - axisScale.stepMs / 2, rawEndMs + axisScale.stepMs / 2];
   const axisTicks = buildStrategyAxisTicks(rawStartMs, rawEndMs, axisScale);
   const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs, initialBalance);
+  const equityAxisDomain = buildEquityAxisDomain(curve.points, initialBalance);
   const shouldAnimate = import.meta.env.MODE !== "test";
   const chart = (
     <AreaChart
@@ -710,7 +713,10 @@ function StrategyCurveChart({
         type="number"
       />
       <YAxis
+        allowDataOverflow
+        domain={equityAxisDomain}
         tick={{ fill: "#607b96", fontSize: 10, fontWeight: 700 }}
+        tickCount={5}
         tickFormatter={(value) => formatCompactUsdt(Number(value))}
         tickLine={false}
         width={76}
@@ -763,6 +769,8 @@ function StrategyCurveChart({
       aria-label={ariaLabel ?? `${version} ${copy.paper.strategyCurve}`}
       className="paper-strategy-chart-wrap"
       data-point-count={curve.points.length}
+      data-y-axis-max={equityAxisDomain[1]}
+      data-y-axis-min={equityAxisDomain[0]}
       data-testid={testId}
       role="img"
     >
@@ -1427,6 +1435,28 @@ function buildStrategyCurve(
     });
   }
   return summarizeEquityCurve(points, initialBalance);
+}
+
+function buildEquityAxisDomain(
+  points: Array<Pick<StrategyCurvePoint, "equity">>,
+  initialBalance: number,
+): [number, number] {
+  const equities = [initialBalance, ...points.map((point) => point.equity)].filter(Number.isFinite);
+  const lowestEquity = Math.min(...equities);
+  const highestEquity = Math.max(...equities);
+  const spread = highestEquity - lowestEquity;
+  const referenceEquity = Math.max(
+    Math.abs(initialBalance),
+    Math.abs(lowestEquity),
+    Math.abs(highestEquity),
+    1,
+  );
+  const padding = Math.max(
+    spread * EQUITY_AXIS_PADDING_RATIO,
+    referenceEquity * EQUITY_AXIS_MIN_PADDING_RATIO,
+  );
+
+  return [Math.max(0, lowestEquity - padding), highestEquity + padding];
 }
 
 function buildAccountEquityHistory(paper: PaperAccountSnapshot): PaperEquityPoint[] {
