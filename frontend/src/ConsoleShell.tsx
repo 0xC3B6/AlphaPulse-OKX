@@ -4,7 +4,11 @@ import {
   BarChart2,
   BookOpen,
   Bell,
+  Languages,
+  Moon,
   Radio,
+  Sun,
+  SunMoon,
   Target,
   TrendingUp,
   type LucideIcon,
@@ -71,6 +75,7 @@ export function ConsoleShell({
     themeOptions.find(([value]) => value === themeMode)?.[1] ?? "System";
   const selectedLanguageLabel =
     languageOptions.find(([value]) => value === language)?.[1] ?? "ZH";
+  const ThemeIcon = themeMode === "light" ? Sun : themeMode === "dark" ? Moon : SunMoon;
   const taskItems: Array<{
     icon: LucideIcon;
     label: string;
@@ -82,35 +87,35 @@ export function ConsoleShell({
       icon: Activity,
       label: "Radar",
       legacyLabel: copy.views.monitor,
-      sub: "日内监控主站",
+      sub: copy.terminal.monitorSub,
       value: "monitor",
     },
     {
       icon: TrendingUp,
-      label: "大周期 Macro",
+      label: copy.terminal.macroLabel,
       legacyLabel: copy.views.macro,
-      sub: "BTC宏观",
+      sub: copy.terminal.macroSub,
       value: "macro",
     },
     {
       icon: Target,
-      label: "策略",
+      label: copy.views.strategy,
       legacyLabel: copy.views.strategy,
-      sub: "运行状态",
+      sub: copy.terminal.strategySub,
       value: "strategy",
     },
     {
       icon: BookOpen,
-      label: "模拟盘",
+      label: copy.terminal.tradeLabel,
       legacyLabel: copy.views.trade,
-      sub: "持仓 & 账户",
+      sub: copy.terminal.tradeSub,
       value: "trade",
     },
     {
       icon: BarChart2,
-      label: "策略复盘",
+      label: copy.terminal.reviewLabel,
       legacyLabel: copy.views.review,
-      sub: "版本对比归因",
+      sub: copy.terminal.reviewSub,
       value: "review",
     },
   ];
@@ -118,10 +123,10 @@ export function ConsoleShell({
   const hotTicker = tickerSymbols[0] ?? null;
   const connectionLabel =
     backendState === "connected" && streamState === "connected"
-      ? "WS Connected"
+      ? `WS ${copy.states.connected}`
       : backendState === "connected"
-        ? "API Connected"
-        : "Disconnected";
+        ? `API ${copy.states.connected}`
+        : copy.states.disconnected;
   const lastScanLabel =
     lastScanAt === null
       ? "--:-- UTC"
@@ -196,13 +201,13 @@ export function ConsoleShell({
           </div>
           <div className="terminal-quick-stats" data-testid="terminal-quick-stats">
             <span>
-              持仓 <strong>{positionCount}</strong>
+              {copy.terminal.positions} <strong>{positionCount}</strong>
             </span>
             <span>
-              信号 <strong>{activeSignalCount}</strong>
+              {copy.terminal.signals} <strong>{activeSignalCount}</strong>
             </span>
             <span>
-              浮盈 <strong className={unrealizedPnl < 0 ? "negative" : "positive"}>
+              {copy.terminal.unrealized} <strong className={unrealizedPnl < 0 ? "negative" : "positive"}>
                 {formatSignedUsdt(unrealizedPnl)}
               </strong>
             </span>
@@ -217,7 +222,7 @@ export function ConsoleShell({
                 ⚠ {hotTicker.inst_id.replace(/-USDT-SWAP$/u, "")} {formatPct(hotTicker.amplitude_24h_pct ?? 0)}
               </span>
             ) : (
-              <span className="terminal-hot-pill">Waiting for market data</span>
+              <span className="terminal-hot-pill">{copy.terminal.waitingForMarketData}</span>
             )}
             <span className="sr-only">
               {tickerSymbols.map((symbol) => symbol.inst_id).join(" ")} {symbolCount} {notificationPermission}
@@ -232,7 +237,8 @@ export function ConsoleShell({
                 title={copy.aria.themeMode}
                 type="button"
               >
-                <span>{selectedThemeLabel}</span>
+                <ThemeIcon aria-hidden="true" size={15} />
+                <span className="sr-only">{selectedThemeLabel}</span>
               </button>
               <div className="console-menu-popover" role="menu">
                 {themeOptions.map(([value, label]) => (
@@ -240,7 +246,10 @@ export function ConsoleShell({
                     aria-checked={themeMode === value}
                     className={themeMode === value ? "active" : ""}
                     key={value}
-                    onClick={() => onThemeModeChange(value)}
+                    onClick={(event) => {
+                      onThemeModeChange(value);
+                      event.currentTarget.blur();
+                    }}
                     role="menuitemradio"
                     type="button"
                   >
@@ -257,7 +266,8 @@ export function ConsoleShell({
                 title={copy.aria.languageMode}
                 type="button"
               >
-                {selectedLanguageLabel}
+                <Languages aria-hidden="true" size={15} />
+                <span className="sr-only">{selectedLanguageLabel}</span>
               </button>
               <div className="console-menu-popover" role="menu">
                 {languageOptions.map(([value, label]) => (
@@ -265,7 +275,10 @@ export function ConsoleShell({
                     aria-checked={language === value}
                     className={language === value ? "active" : ""}
                     key={value}
-                    onClick={() => onLanguageChange(value)}
+                    onClick={(event) => {
+                      onLanguageChange(value);
+                      event.currentTarget.blur();
+                    }}
                     role="menuitemradio"
                     type="button"
                   >

@@ -45,6 +45,7 @@ export function MonitorPage({
   return (
     <section className="monitor-terminal" data-testid="monitor-terminal">
       <FigmaStatBar
+        copy={copy}
         error={macroError}
         filteredSymbols={filteredSymbols}
         loading={macroLoading}
@@ -63,7 +64,7 @@ export function MonitorPage({
             ["range", copy.filters.range],
             ["hot", copy.filters.hot],
             ["fixed", copy.filters.fixed],
-            ["positions", "持仓"],
+            ["positions", copy.terminal.positions],
           ].map(([value, label]) => (
             <button
               className={filter === value ? "active" : ""}
@@ -77,7 +78,7 @@ export function MonitorPage({
         </div>
         <div className="monitor-live-count" data-testid="monitor-live-count">
           <span aria-hidden="true" />
-          LIVE · {filteredSymbols.length} symbols
+          {copy.terminal.live} · {filteredSymbols.length} {copy.terminal.symbols}
         </div>
       </section>
 
@@ -117,12 +118,14 @@ export function MonitorPage({
 }
 
 function FigmaStatBar({
+  copy,
   error,
   filteredSymbols,
   loading,
   paper,
   snapshot,
 }: {
+  copy: Copy;
   error: string | null;
   filteredSymbols: SymbolSnapshot[];
   loading: boolean;
@@ -144,32 +147,32 @@ function FigmaStatBar({
   return (
     <section className="figma-statbar" data-testid="figma-statbar">
       <StatCard
-        label="BTC 价格"
+        label={copy.terminal.btcPrice}
         value={snapshot === null ? btcSymbol ? formatUsd(btcSymbol.price) : "-" : formatUsd(snapshot.price)}
-        sub={btcSymbol ? `${formatPct(btcSymbol.change_1h_pct)} 1h` : "等待行情"}
+        sub={btcSymbol ? `${formatPct(btcSymbol.change_1h_pct)} 1h` : copy.terminal.waitingForQuote}
         tone="cyan"
       />
       <StatCard
-        label="市场状态"
+        label={copy.terminal.marketState}
         value={marketState}
-        sub={snapshot === null ? "宏观数据同步中" : snapshot.summary}
+        sub={snapshot === null ? copy.terminal.syncingMacro : snapshot.summary}
         tone={marketState === "BULL" ? "green" : marketState === "RISK" ? "amber" : undefined}
       />
       <StatCard
-        label="活跃信号"
+        label={copy.terminal.activeSignals}
         value={String(longCount + shortCount)}
         sub={`LONG ${longCount} / SHORT ${shortCount}`}
       />
       <StatCard
-        label="热门异动"
+        label={copy.terminal.hotMover}
         value={hot ? `${shortSymbol(hot.inst_id)} ${formatPct(hot.amplitude_24h_pct ?? 0)}` : "-"}
-        sub={runnerUp ? `${shortSymbol(runnerUp.inst_id)} ${formatPct(runnerUp.amplitude_24h_pct ?? 0)}` : "等待异动"}
+        sub={runnerUp ? `${shortSymbol(runnerUp.inst_id)} ${formatPct(runnerUp.amplitude_24h_pct ?? 0)}` : copy.terminal.waitingForMove}
         tone="amber"
       />
       <StatCard
-        label="Altseason"
-        value={altAllowed ? "允许" : "限制"}
-        sub={`持仓 ${paper.positions.length} · 浮盈 ${formatUsd(paper.unrealized_pnl)}`}
+        label={copy.terminal.altseason}
+        value={altAllowed ? copy.terminal.allowed : copy.terminal.restricted}
+        sub={`${copy.terminal.positions} ${paper.positions.length} · ${copy.terminal.unrealized} ${formatUsd(paper.unrealized_pnl)}`}
         tone={altAllowed ? "violet" : undefined}
       />
     </section>

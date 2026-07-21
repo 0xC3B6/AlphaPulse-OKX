@@ -103,6 +103,23 @@ describe("console palette", () => {
     expect(css).not.toContain(".radar-table-panel,\n.detail-panel");
   });
 
+  it("keeps theme and language controls visible in the terminal header", () => {
+    const headerActions = lastCssBlock(".figma-radar-header .console-actions");
+
+    expect(headerActions).toContain("display: flex");
+    expect(headerActions).not.toContain("display: none");
+  });
+
+  it("lets the light theme control the terminal palette", () => {
+    const light = cssBlock(':root[data-theme="light"]');
+    const terminalShell = cssBlockContaining(".terminal-shell", "background: var(--terminal-bg)");
+
+    expect(light).toContain("--terminal-bg: #f5f7fb");
+    expect(light).toContain("--terminal-panel: #ffffff");
+    expect(terminalShell).toContain("background: var(--terminal-bg)");
+    expect(terminalShell).not.toContain("--app-bg:");
+  });
+
   it("keeps detail market metrics inside their cards", () => {
     const metricStrip = cssBlock(".detail-metric-strip");
     const metricCard = cssBlock(".detail-metric-strip div");

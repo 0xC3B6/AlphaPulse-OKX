@@ -24,16 +24,16 @@
   --button-bg: #ffffff;
   --row-active: #eef5ff;
   --warning: #d97706;
-  --terminal-bg: #070b12;
-  --terminal-panel: #0b1220;
-  --terminal-card: #101827;
-  --terminal-card-strong: #152033;
+  --terminal-bg: #f5f7fb;
+  --terminal-panel: #ffffff;
+  --terminal-card: #ffffff;
+  --terminal-card-strong: #eef5ff;
   --terminal-cyan: #22d3ee;
   --terminal-emerald: #10b981;
   --terminal-rose: #f43f5e;
   --terminal-amber: #f59e0b;
   --terminal-violet: #8b5cf6;
-  --terminal-muted: #4a6278;
+  --terminal-muted: #647089;
   --theme-transition-duration: 180ms;
   --theme-transition-easing: ease;
   color: var(--text-primary);
@@ -3638,15 +3638,15 @@ input {
 
 .console-actions > button,
 .console-menu-trigger {
-  border-color: rgba(74, 98, 120, 0.45);
+  border-color: var(--border-strong);
   border-radius: 8px;
-  background: rgba(7, 11, 18, 0.8);
+  background: var(--surface);
   font-weight: 800;
 }
 
 .console-menu-popover {
-  border-color: rgba(74, 98, 120, 0.45);
-  background: #0b1220;
+  border-color: var(--border-strong);
+  background: var(--terminal-panel);
 }
 
 .monitor-terminal {
@@ -3658,14 +3658,14 @@ input {
 
 .macro-summary-strip {
   border-bottom-color: rgba(74, 98, 120, 0.28);
-  background: #070b12;
+  background: var(--terminal-bg);
 }
 
 .macro-summary-heading,
 .macro-summary-tile {
-  border-color: rgba(74, 98, 120, 0.35);
+  border-color: var(--border);
   border-radius: 8px;
-  background: rgba(16, 24, 39, 0.82);
+  background: var(--surface);
 }
 
 .macro-summary-strip span,
@@ -3684,7 +3684,7 @@ input {
   align-items: center;
   justify-content: space-between;
   border-bottom-color: rgba(74, 98, 120, 0.28);
-  background: #070b12;
+  background: var(--terminal-bg);
   padding: 12px 18px;
 }
 
@@ -3735,7 +3735,7 @@ input {
 
 .radar-workspace {
   grid-template-columns: minmax(0, 1fr) 400px;
-  background: #070b12;
+  background: var(--terminal-bg);
 }
 
 .table-panel,
@@ -3751,8 +3751,8 @@ input {
 .macro-list li,
 .review-history-list li,
 .paper-strategy-curve-metrics div {
-  border-color: rgba(74, 98, 120, 0.35);
-  background: rgba(16, 24, 39, 0.82);
+  border-color: var(--border);
+  background: var(--surface);
 }
 
 .radar-table-panel {
@@ -3761,14 +3761,14 @@ input {
   border-left: 0;
   background:
     linear-gradient(180deg, rgba(34, 211, 238, 0.04), transparent 240px),
-    rgba(7, 11, 18, 0.92);
+    var(--terminal-bg);
 }
 
 .radar-workspace > .detail-panel {
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
-  background: rgba(11, 18, 32, 0.96);
+  background: var(--terminal-panel);
 }
 
 .radar-table {
@@ -3776,8 +3776,8 @@ input {
 }
 
 .radar-table th {
-  border-bottom-color: rgba(74, 98, 120, 0.42);
-  background: #0b1220;
+  border-bottom-color: var(--border-strong);
+  background: var(--terminal-panel);
   color: var(--terminal-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
@@ -3802,18 +3802,18 @@ input {
   border-right: 0;
   border-bottom: 0;
   border-left: 0;
-  background: #0b1220;
+  background: var(--terminal-panel);
 }
 
 .pagination-controls {
-  border-color: rgba(74, 98, 120, 0.35);
-  background: rgba(16, 24, 39, 0.82);
+  border-color: var(--border);
+  background: var(--surface);
   color: var(--terminal-muted);
 }
 
 .pagination-controls button {
-  border-color: rgba(74, 98, 120, 0.5);
-  background: rgba(7, 11, 18, 0.72);
+  border-color: var(--border-strong);
+  background: var(--button-bg);
 }
 
 .pagination-controls button:not(:disabled) {
@@ -3857,7 +3857,7 @@ input {
 
 .page-surface {
   gap: 18px;
-  background: #070b12;
+  background: var(--terminal-bg);
   padding: 18px;
 }
 
@@ -3875,7 +3875,7 @@ input {
   contain: layout paint;
   overflow: auto;
   margin-top: 0;
-  background: #070b12;
+  background: var(--terminal-bg);
   padding: 18px;
 }
 
@@ -4053,9 +4053,9 @@ input {
 
 .strategy-feature-list li,
 .strategy-position-list li {
-  border: 1px solid rgba(74, 98, 120, 0.22);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(7, 11, 18, 0.54);
+  background: var(--surface);
   padding: 10px;
 }
 
@@ -4070,9 +4070,9 @@ input {
 
 input,
 select {
-  border-color: rgba(74, 98, 120, 0.55);
+  border-color: var(--border-strong);
   border-radius: 8px;
-  background: rgba(7, 11, 18, 0.72);
+  background: var(--surface);
 }
 
 .buy-button {
@@ -4089,7 +4089,7 @@ select {
 }
 
 .review-strategy-table th {
-  background: #0b1220;
+  background: var(--terminal-panel);
   color: var(--terminal-muted);
 }
 
@@ -4373,23 +4373,12 @@ select {
 }
 
 .terminal-shell {
-  --app-bg: #070b12;
-  --surface: #0c1520;
-  --surface-elevated: #0f1a28;
-  --text-primary: #c8d8e8;
-  --text-muted: #94aec4;
-  --text-soft: #c8d8e8;
-  --border: rgba(148, 174, 196, 0.08);
-  --border-strong: rgba(148, 174, 196, 0.18);
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --positive: #10b981;
-  --negative: #f43f5e;
   width: 100vw;
   height: 100vh;
   min-height: 0;
   overflow: hidden;
-  background: #070b12;
-  color: #c8d8e8;
+  background: var(--terminal-bg);
+  color: var(--text-primary);
   font-family: "JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -4404,8 +4393,8 @@ select {
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  border-right: 1px solid rgba(148, 174, 196, 0.08);
-  background: #080e18;
+  border-right: 1px solid var(--border);
+  background: var(--terminal-panel);
   padding: 18px 7px 10px;
 }
 
@@ -4425,7 +4414,7 @@ select {
 }
 
 .figma-sidebar .task-rail-brand-text strong {
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 800;
   line-height: 1.1;
@@ -4433,7 +4422,7 @@ select {
 }
 
 .figma-sidebar .task-rail-brand-text span {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -4454,14 +4443,14 @@ select {
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #4a6278;
+  color: var(--terminal-muted);
   padding: 8px 10px;
   text-align: left;
 }
 
 .figma-sidebar .task-rail-button:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #94aec4;
+  background: var(--border-subtle);
+  color: var(--text-muted);
 }
 
 .figma-sidebar .task-rail-button.active {
@@ -4495,7 +4484,7 @@ select {
 
 .task-rail-button-copy small {
   overflow: hidden;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
@@ -4510,10 +4499,10 @@ select {
   align-items: center;
   margin: auto -7px 0;
   border: 0;
-  border-top: 1px solid rgba(148, 174, 196, 0.08);
+  border-top: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
-  color: #4a6278;
+  color: var(--terminal-muted);
   padding: 12px 10px 0;
 }
 
@@ -4532,13 +4521,13 @@ select {
 
 .figma-sidebar .task-rail-footer small {
   margin-left: auto;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
 }
 
 .figma-sidebar .task-rail-footer p {
   margin: 0;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
 }
 
@@ -4554,8 +4543,8 @@ select {
   place-items: center;
   border: 0;
   border-radius: 4px;
-  background: rgba(148, 174, 196, 0.08);
-  color: #4a6278;
+  background: var(--border-subtle);
+  color: var(--terminal-muted);
   padding: 0;
 }
 
@@ -4565,7 +4554,7 @@ select {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  background: #070b12;
+  background: var(--terminal-bg);
 }
 
 .figma-radar-header {
@@ -4574,8 +4563,8 @@ select {
   gap: 12px;
   align-items: center;
   min-height: 52px;
-  border-bottom: 1px solid rgba(148, 174, 196, 0.08);
-  background: #070b12;
+  border-bottom: 1px solid var(--border);
+  background: var(--terminal-bg);
   padding: 9px 18px 9px 17px;
 }
 
@@ -4586,7 +4575,7 @@ select {
 
 .figma-radar-header .console-page-title h1 {
   margin: 0;
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 800;
   line-height: 1.2;
@@ -4594,7 +4583,7 @@ select {
 
 .figma-radar-header .console-page-title p {
   margin: 0;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 700;
 }
@@ -4604,7 +4593,7 @@ select {
   grid-row: auto;
   justify-content: flex-end;
   gap: 16px;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
 }
 
@@ -4657,6 +4646,19 @@ select {
 }
 
 .figma-radar-header .console-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.figma-radar-header .console-menu-trigger {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  color: var(--text-muted);
+  padding: 0;
+}
+
+.figma-radar-header .console-actions > button {
   display: none;
 }
 
@@ -4666,7 +4668,7 @@ select {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: #070b12;
+  background: var(--terminal-bg);
   padding: 17px 17px 16px;
 }
 
@@ -4682,15 +4684,15 @@ select {
   min-height: 74px;
   align-content: center;
   gap: 3px;
-  border: 1px solid rgba(148, 174, 196, 0.08);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #0c1520;
+  background: var(--surface);
   padding: 10px 12px;
 }
 
 .figma-stat-card span {
   overflow: hidden;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -4701,7 +4703,7 @@ select {
 
 .figma-stat-card strong {
   overflow: hidden;
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 900;
   line-height: 1.12;
@@ -4711,7 +4713,7 @@ select {
 
 .figma-stat-card small {
   overflow: hidden;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.25;
@@ -4752,15 +4754,15 @@ select {
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 12px;
   font-weight: 800;
   padding: 4px 12px;
 }
 
 .figma-radar-tabs button:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #94aec4;
+  background: var(--border-subtle);
+  color: var(--text-muted);
 }
 
 .figma-radar-tabs button.active {
@@ -4772,7 +4774,7 @@ select {
 .figma-radar-tabs .monitor-live-count {
   border: 0;
   background: transparent;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   padding: 0;
 }
@@ -4788,7 +4790,7 @@ select {
   flex: 1;
   gap: 12px;
   overflow: hidden;
-  background: #070b12;
+  background: var(--terminal-bg);
 }
 
 .monitor-page .radar-list-column {
@@ -4803,9 +4805,9 @@ select {
   flex: 1;
   contain: layout paint;
   overflow: auto;
-  border: 1px solid rgba(148, 174, 196, 0.08);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #070b12;
+  background: var(--surface);
 }
 
 .monitor-page .radar-table {
@@ -4813,7 +4815,7 @@ select {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 12px;
   line-height: 1.2;
   table-layout: fixed;
@@ -4862,9 +4864,9 @@ select {
 }
 
 .monitor-page .radar-table th {
-  border-bottom: 1px solid rgba(148, 174, 196, 0.08);
-  background: #080e18;
-  color: #4a6278;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated, var(--surface));
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -4875,8 +4877,8 @@ select {
 }
 
 .monitor-page .radar-table td {
-  border-bottom: 1px solid rgba(148, 174, 196, 0.045);
-  color: #c8d8e8;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
   padding: 8px 11px;
@@ -4886,11 +4888,11 @@ select {
 }
 
 .monitor-page .radar-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--surface) 88%, var(--app-bg) 12%);
 }
 
 .monitor-page .radar-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--border-subtle);
 }
 
 .monitor-page .radar-table tr.selected {
@@ -4912,13 +4914,13 @@ select {
   display: flex;
   align-items: baseline;
   gap: 3px;
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 900;
 }
 
 .monitor-page .symbol-cell-main strong small {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 9px;
   font-weight: 800;
 }
@@ -4947,7 +4949,7 @@ select {
 }
 
 .terminal-tf-badge {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 900;
 }
@@ -4972,7 +4974,7 @@ select {
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(148, 174, 196, 0.08);
+  background: var(--border-subtle);
 }
 
 .terminal-score-track i {
@@ -4987,7 +4989,7 @@ select {
 }
 
 .terminal-score-bar b {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 800;
 }
@@ -5020,16 +5022,16 @@ select {
   min-height: 0;
   contain: layout paint;
   overflow: auto;
-  border: 1px solid rgba(148, 174, 196, 0.08);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #0c1520;
+  background: var(--surface);
 }
 
 .figma-symbol-detail {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  background: #0c1520;
+  background: var(--surface);
 }
 
 .figma-symbol-detail .detail-header {
@@ -5037,12 +5039,12 @@ select {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
-  border-bottom: 1px solid rgba(148, 174, 196, 0.08);
+  border-bottom: 1px solid var(--border);
   padding: 12px;
 }
 
 .figma-symbol-detail .detail-header h2 {
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 900;
   line-height: 1.2;
@@ -5050,7 +5052,7 @@ select {
 
 .figma-symbol-detail .detail-header p {
   margin-top: 4px;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 700;
 }
@@ -5073,14 +5075,14 @@ select {
   width: 28px;
   border: 0;
   background: transparent;
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 18px;
   line-height: 1;
 }
 
 .figma-symbol-detail .detail-section {
   border: 0;
-  border-bottom: 1px solid rgba(148, 174, 196, 0.08);
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
   padding: 12px;
@@ -5088,7 +5090,7 @@ select {
 
 .figma-symbol-detail .detail-section h3,
 .figma-symbol-detail .chart-header h3 {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -5104,25 +5106,25 @@ select {
 .figma-symbol-detail .detail-metric-strip div {
   border: 0;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--border-subtle);
   padding: 9px;
 }
 
 .figma-symbol-detail .detail-metric-strip dt {
-  color: #4a6278;
+  color: var(--terminal-muted);
   font-size: 10px;
   font-weight: 800;
 }
 
 .figma-symbol-detail .detail-metric-strip dd {
-  color: #c8d8e8;
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 900;
 }
 
 .figma-symbol-detail .chart-panel {
   border: 0;
-  border-bottom: 1px solid rgba(148, 174, 196, 0.08);
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
   padding: 12px;
@@ -5132,7 +5134,7 @@ select {
   height: 132px;
   border: 0;
   border-radius: 4px;
-  background: #070b12;
+  background: var(--terminal-bg);
 }
 
 .figma-symbol-detail .chart-controls {
@@ -5147,9 +5149,9 @@ select {
 .figma-symbol-detail .detail-list div,
 .figma-symbol-detail .fvg-zone-list li,
 .figma-symbol-detail .detail-section-structure li {
-  border-color: rgba(148, 174, 196, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: #94aec4;
+  border-color: var(--border);
+  background: var(--border-subtle);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
