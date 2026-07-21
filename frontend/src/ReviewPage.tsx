@@ -762,6 +762,7 @@ function StrategyCurveChart({
       aria-label={ariaLabel ?? `${version} ${copy.paper.strategyCurve}`}
       className="paper-strategy-chart-wrap"
       data-point-count={curve.points.length}
+      data-rendered-point-count={data.length}
       data-y-axis-max={equityAxisDomain[1]}
       data-y-axis-min={equityAxisDomain[0]}
       data-testid={testId}
@@ -885,7 +886,35 @@ function bucketStrategyCurvePoints(
       openPositionsCount: point.openPositionsCount,
     });
   });
-  return Array.from(buckets.values()).sort((left, right) => left.timestampMs - right.timestampMs);
+  const bucketedPoints = Array.from(buckets.values()).sort(
+    (left, right) => left.timestampMs - right.timestampMs,
+  );
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  if (
+    bucketedPoints.length === 1 &&
+    firstPoint !== undefined &&
+    lastPoint !== undefined &&
+    firstPoint.timestampMs < lastPoint.timestampMs
+  ) {
+    return [
+      strategyCurvePointForChart(firstPoint, 1),
+      strategyCurvePointForChart(lastPoint, Math.max(1, points.length - 1)),
+    ];
+  }
+  return bucketedPoints;
+}
+
+function strategyCurvePointForChart(
+  point: StrategyCurvePoint,
+  snapshotCount: number,
+): StrategyCurveChartPoint {
+  return {
+    ...point,
+    snapshotCount,
+    negativeEquity: null,
+    positiveEquity: null,
+  };
 }
 
 function toStrategyChartPoint(

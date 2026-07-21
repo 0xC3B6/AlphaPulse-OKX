@@ -1118,6 +1118,47 @@ describe("App", () => {
     expect(screen.getByTestId("review-equity-recharts")).toHaveAttribute("data-point-count", "2");
   });
 
+  it("keeps a visible equity line when every snapshot falls in one ten-minute bucket", () => {
+    const bucketStart = 1_800_000_000_000;
+    const sameBucketPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      equity: 10530,
+      realized_pnl: 398,
+      unrealized_pnl: 132,
+      equity_history: [
+        {
+          timestamp_ms: bucketStart + 5 * 60_000,
+          equity: 10510,
+          realized_pnl: 398,
+          unrealized_pnl: 112,
+          open_positions_count: 5,
+        },
+        {
+          timestamp_ms: bucketStart + 6 * 60_000,
+          equity: 10520,
+          realized_pnl: 398,
+          unrealized_pnl: 122,
+          open_positions_count: 5,
+        },
+        {
+          timestamp_ms: bucketStart + 8 * 60_000,
+          equity: 10530,
+          realized_pnl: 398,
+          unrealized_pnl: 132,
+          open_positions_count: 5,
+        },
+      ],
+    };
+
+    render(<ReviewPage copy={translations.zh} paper={sameBucketPaper} />);
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+
+    expect(screen.getByTestId("paper-strategy-recharts")).toHaveAttribute(
+      "data-rendered-point-count",
+      "2",
+    );
+  });
+
   it("paginates Review position history and resets the page after search", async () => {
     const history = Array.from({ length: 12 }, (_, index) => buildHistoryPosition(index + 1));
     mockSnapshot({ ...snapshot, paper: { ...activePaper, position_history: history } });

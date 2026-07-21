@@ -241,6 +241,71 @@ async fn restart_restores_balance_positions_protection_history_and_ids() {
 
 #[tokio::test]
 #[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn default_account_loads_legacy_equity_history_after_scoping_upgrade() {
+    let config = test_config(false);
+    let database_url = config.database_url.clone().unwrap();
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+
+    let identity = StrategyIdentity::restored_v3();
+    let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+    sqlx::query(
+        "INSERT INTO equity_snapshots \
+         (run_id, version_code, strategy_build_id, timestamp_ms, equity, realized_pnl, \
+          unrealized_pnl, drawdown, open_positions_count) \
+         VALUES ($1, $2, $3, 100, 9990, 0, -10, 10, 1), \
+                ($1, $2, $3, 200, 9991, 0, -9, 9, 1)",
+    )
+    .bind(INITIAL_RUN_ID)
+    .bind(&identity.version_code)
+    .bind(&identity.strategy_build_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let paper = PaperState::fresh_restored_v3(identity.clone());
+    let scoped_snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
+    persistence
+        .persist_checkpoint(&paper, &scoped_snapshot, 200)
+        .await
+        .unwrap();
+
+    let history = persistence
+        .load_equity_history(&identity, paper.run_id())
+        .await
+        .unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|point| point.timestamp_ms)
+            .collect::<Vec<_>>(),
+        vec![100, 200]
+    );
+    assert_persisted_decimal_eq(history[0].equity, 9_990.0);
+    assert_persisted_decimal_eq(history[1].equity, scoped_snapshot.equity);
+
+    let isolated_config = AppConfig::from_env_pairs([
+        ("ALPHAPULSE_DATABASE_URL", database_url.as_str()),
+        ("ALPHAPULSE_REQUIRE_DATABASE", "true"),
+        ("ALPHAPULSE_TENANT_ID", "isolated-tenant"),
+        ("ALPHAPULSE_ACCOUNT_ID", "paper"),
+    ]);
+    let isolated = PersistenceLayer::connect_required(&isolated_config)
+        .await
+        .unwrap();
+    let isolated_history = isolated
+        .load_equity_history(&identity, paper.run_id())
+        .await
+        .unwrap();
+    assert!(isolated_history.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
 async fn failed_fill_rolls_back_intent_position_and_checkpoint() {
     let config = test_config(true);
     let persistence = PersistenceLayer::connect_required(&config).await.unwrap();

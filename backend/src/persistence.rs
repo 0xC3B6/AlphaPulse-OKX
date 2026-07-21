@@ -22,7 +22,7 @@ use crate::{
         compact_equity_history, PaperAccountSnapshot, PaperEquityPoint, PaperOrderRequest,
         PaperSide, PaperState, PaperTrade, PaperTradeAction, MAX_EQUITY_HISTORY_POINTS,
     },
-    risk_safety::AccountScope,
+    risk_safety::{AccountScope, DEFAULT_ACCOUNT_ID, DEFAULT_TENANT_ID},
     state::DashboardSnapshot,
     strategy_identity::StrategyIdentity,
 };
@@ -331,24 +331,39 @@ impl PersistenceLayer {
         run_id: &str,
     ) -> anyhow::Result<Vec<PaperEquityPoint>> {
         let database_run_id = self.database_run_id(run_id);
+        let mut compatible_run_ids = vec![database_run_id.clone()];
+        // Snapshots written before account scoping used the raw run id and belong
+        // exclusively to the original default paper account.
+        if self.scope.tenant_id == DEFAULT_TENANT_ID
+            && self.scope.account_id == DEFAULT_ACCOUNT_ID
+            && database_run_id != run_id
+        {
+            compatible_run_ids.push(run_id.to_string());
+        }
         let rows = sqlx::query_as::<_, (i64, f64, f64, f64, i64)>(
-            "WITH ordered AS (\
-                 SELECT timestamp_ms, equity::DOUBLE PRECISION AS equity, \
+            "WITH compatible AS (\
+                 SELECT DISTINCT ON (timestamp_ms) \
+                        timestamp_ms, equity::DOUBLE PRECISION AS equity, \
                         realized_pnl::DOUBLE PRECISION AS realized_pnl, \
-                        unrealized_pnl::DOUBLE PRECISION AS unrealized_pnl, open_positions_count, \
+                        unrealized_pnl::DOUBLE PRECISION AS unrealized_pnl, open_positions_count \
+                 FROM equity_snapshots \
+                 WHERE version_code = $1 AND strategy_build_id = $2 AND run_id = ANY($3) \
+                 ORDER BY timestamp_ms, (run_id = $4) DESC, id DESC\
+             ), ordered AS (\
+                 SELECT timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count, \
                         ROW_NUMBER() OVER (ORDER BY timestamp_ms) AS sample_index, \
                         COUNT(*) OVER () AS total_rows \
-                 FROM equity_snapshots \
-                 WHERE version_code = $1 AND strategy_build_id = $2 AND run_id = $3\
+                 FROM compatible\
              ) \
              SELECT timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count \
              FROM ordered \
-             WHERE total_rows <= $4 OR sample_index = 1 OR sample_index = total_rows \
-                OR MOD(sample_index - 1, GREATEST(1, (total_rows + $4 - 1) / $4)) = 0 \
+             WHERE total_rows <= $5 OR sample_index = 1 OR sample_index = total_rows \
+                OR MOD(sample_index - 1, GREATEST(1, (total_rows + $5 - 1) / $5)) = 0 \
              ORDER BY timestamp_ms",
         )
         .bind(&identity.version_code)
         .bind(&identity.strategy_build_id)
+        .bind(compatible_run_ids)
         .bind(database_run_id)
         .bind(MAX_EQUITY_HISTORY_POINTS as i64)
         .fetch_all(&self.postgres)
