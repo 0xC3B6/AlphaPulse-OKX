@@ -967,7 +967,11 @@ describe("App", () => {
     expect(screen.getByTestId("paper-strategy-axis-summary")).toHaveTextContent("时间轴");
     expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益增长");
     expect(screen.getByTestId("paper-strategy-recharts")).toHaveTextContent("权益回撤");
-    expect(screen.queryByTestId("paper-strategy-doctor")).not.toBeInTheDocument();
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("信号归因");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("策略医生");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("PRIMARY SIGNAL");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("Multiday Reversal");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("+178.72 USDT");
 
     fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
     expect(screen.getByLabelText("历史持仓币种")).toBeInTheDocument();
@@ -1036,6 +1040,7 @@ describe("App", () => {
     expect(curve).toHaveTextContent("+4.00 USDT");
     expect(curve).not.toHaveTextContent("该版本暂无已平仓记录");
     expect(screen.getByTestId("paper-strategy-recharts")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("暂无可归因信号");
   });
 
   it("anchors a one-snapshot account equity curve at the initial balance", async () => {

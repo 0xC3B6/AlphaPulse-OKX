@@ -32,6 +32,8 @@ import { PaginationControls } from "./PaginationControls";
 type HistoryFilter = "all" | "long" | "short" | "profit" | "loss";
 type ReviewSection = "overview" | "strategy" | "history" | "trades";
 type StrategyCurveRange = "7d" | "30d" | "90d" | "all";
+type SignalConfidence = "high" | "med" | "low";
+type SignalRecommendationKey = "continueExecution" | "optimizeEntry" | "pauseOrReduce";
 
 interface HistorySearchFilters {
   endDate: string;
@@ -78,6 +80,17 @@ interface StrategyAxisScale {
   tickFormat: "date" | "dateTime" | "month" | "time";
 }
 
+interface StrategySignalAttribution {
+  confidence: SignalConfidence;
+  maxLoss: number | null;
+  netPnl: number;
+  profitFactor: number | null;
+  recommendationKey: SignalRecommendationKey;
+  sampleCount: number;
+  signal: string;
+  winRate: number | null;
+}
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -121,6 +134,13 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
           activeStrategyVersion === paper.strategy_version ? (paper.equity_history ?? []) : [],
           paper.initial_balance,
         );
+  const activeSignalAttribution = useMemo(
+    () =>
+      activeStrategyVersion === null
+        ? []
+        : buildSignalAttribution(positionHistory, activeStrategyVersion),
+    [activeStrategyVersion, positionHistory],
+  );
   const historyVersionOptions = useMemo(
     () => strategyVersionOptions(positionHistory, strategyStats, paper.trades),
     [paper.trades, positionHistory, strategyStats],
@@ -197,6 +217,13 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
               copy={copy}
               curve={activeStrategyCurve}
               initialBalance={paper.initial_balance}
+              version={activeStrategyVersion}
+            />
+          )}
+          {activeStrategyVersion === null ? null : (
+            <StrategyDoctorSection
+              copy={copy}
+              rows={activeSignalAttribution}
               version={activeStrategyVersion}
             />
           )}
@@ -562,6 +589,69 @@ function StrategyCurvePanel({
             version={version}
           />
         </>
+      )}
+    </section>
+  );
+}
+
+function StrategyDoctorSection({
+  copy,
+  rows,
+  version,
+}: {
+  copy: Copy;
+  rows: StrategySignalAttribution[];
+  version: string;
+}) {
+  return (
+    <section className="paper-strategy-doctor" data-testid="paper-strategy-doctor">
+      <header className="paper-strategy-doctor-header">
+        <h3>
+          {copy.paper.signalAttribution} · {copy.paper.strategyDoctor}
+          <span>{version}</span>
+        </h3>
+      </header>
+      {rows.length === 0 ? (
+        <p className="muted panel-empty">{copy.paper.noSignalAttribution}</p>
+      ) : (
+        <div className="paper-strategy-doctor-table-wrap">
+          <table className="paper-strategy-doctor-table">
+            <thead>
+              <tr>
+                <th>{copy.paper.primarySignal}</th>
+                <th>{copy.paper.sampleCount}</th>
+                <th>{copy.paper.netPnl}</th>
+                <th>{copy.paper.winRate}</th>
+                <th>{copy.paper.profitFactor}</th>
+                <th>{copy.paper.maxLoss}</th>
+                <th>{copy.paper.confidence}</th>
+                <th>{copy.paper.recommendation}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.signal}>
+                  <td>{row.signal}</td>
+                  <td>{row.sampleCount}</td>
+                  <td className={pnlClass(row.netPnl)}>{formatSignedUsdt(row.netPnl)}</td>
+                  <td className={pnlClass((row.winRate ?? 0) - 0.5)}>
+                    {formatNullablePct(row.winRate)}
+                  </td>
+                  <td>{formatNullableRatio(row.profitFactor)}</td>
+                  <td className={pnlClass(row.maxLoss ?? 0)}>
+                    {formatNullableSignedUsdt(row.maxLoss)}
+                  </td>
+                  <td>
+                    <span className={`confidence-pill ${row.confidence}`}>
+                      {row.confidence}
+                    </span>
+                  </td>
+                  <td>{copy.paper[row.recommendationKey]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -1450,6 +1540,114 @@ function filterStrategyCurve(curve: StrategyCurve, range: StrategyCurveRange): S
   return points.length === 0
     ? curve
     : summarizeEquityCurve(points, curve.currentEquity - curve.equityChange);
+}
+
+function buildSignalAttribution(
+  positions: PaperClosedPositionSnapshot[],
+  version: string,
+): StrategySignalAttribution[] {
+  const groups = new Map<string, PaperClosedPositionSnapshot[]>();
+  positions
+    .filter((position) => strategyVersion(position) === version)
+    .forEach((position) => {
+      const signal = primarySignalLabel(position);
+      groups.set(signal, [...(groups.get(signal) ?? []), position]);
+    });
+
+  return Array.from(groups.entries())
+    .map(([signal, group]) => {
+      const winners = group.filter((position) => position.realized_pnl > 0);
+      const losers = group.filter((position) => position.realized_pnl < 0);
+      const grossProfit = sum(winners.map((position) => position.realized_pnl));
+      const grossLossAbs = Math.abs(sum(losers.map((position) => position.realized_pnl)));
+      const netPnl = sum(group.map((position) => position.realized_pnl));
+      const winRate = group.length === 0 ? null : winners.length / group.length;
+      const profitFactor =
+        grossProfit > 0 && grossLossAbs > 0 ? grossProfit / grossLossAbs : null;
+      const maxLoss = minNumber(losers.map((position) => position.realized_pnl));
+      const confidence = signalConfidence(group.length, netPnl, winRate, profitFactor);
+      return {
+        confidence,
+        maxLoss,
+        netPnl,
+        profitFactor,
+        recommendationKey: signalRecommendation(confidence),
+        sampleCount: group.length,
+        signal,
+        winRate,
+      };
+    })
+    .sort((left, right) => right.netPnl - left.netPnl || right.sampleCount - left.sampleCount);
+}
+
+function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
+  const tagLabel = [
+    ...(position.open_tags ?? []),
+    ...(position.tags ?? []),
+    ...(position.close_tags ?? []),
+  ]
+    .map((tag) => tag.label.trim())
+    .find((label) => label.length > 0);
+  if (tagLabel !== undefined) {
+    return tagLabel;
+  }
+
+  const reason = `${position.reason} ${position.close_reason}`.toLowerCase();
+  if (reason.includes("fvg") && reason.includes("trend")) {
+    return "FVG + Trend";
+  }
+  if (reason.includes("hot") && reason.includes("trend")) {
+    return "Hot Mover + Trend";
+  }
+  if (reason.includes("sweep")) {
+    return "Sweep Failure";
+  }
+  if (reason.includes("multiday") || reason.includes("reversal")) {
+    return "Multiday Reversal";
+  }
+  if (reason.includes("overextension") || reason.includes("extension")) {
+    return position.side === "short" ? "Overextension Short" : "Overextension Long";
+  }
+  if (reason.includes("pattern") && reason.includes("range")) {
+    return "Pattern + Range";
+  }
+  if (reason.includes("time") && reason.includes("range")) {
+    return "Time Risk + Range";
+  }
+  if (reason.includes("trend")) {
+    return position.side === "short" ? "Trend Short" : "Trend Long";
+  }
+  return "Scalping Signal";
+}
+
+function signalConfidence(
+  sampleCount: number,
+  netPnl: number,
+  winRate: number | null,
+  profitFactor: number | null,
+): SignalConfidence {
+  if (
+    sampleCount >= 3 &&
+    netPnl > 0 &&
+    (winRate ?? 0) >= 0.62 &&
+    (profitFactor ?? 0) >= 2
+  ) {
+    return "high";
+  }
+  if (netPnl > 0 && (winRate ?? 0) >= 0.5) {
+    return "med";
+  }
+  return "low";
+}
+
+function signalRecommendation(confidence: SignalConfidence): SignalRecommendationKey {
+  if (confidence === "high") {
+    return "continueExecution";
+  }
+  if (confidence === "med") {
+    return "optimizeEntry";
+  }
+  return "pauseOrReduce";
 }
 
 function strategyVersion(position: Pick<PaperClosedPositionSnapshot, "strategy_version" | "source">): string {

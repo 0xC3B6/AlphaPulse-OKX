@@ -2840,7 +2840,8 @@ input {
 }
 
 .strategy-version-pill,
-.strategy-status-pill {
+.strategy-status-pill,
+.confidence-pill {
   display: inline-flex;
   align-items: center;
   width: fit-content;
@@ -2856,7 +2857,8 @@ input {
   color: #a78bfa;
 }
 
-.strategy-status-pill {
+.strategy-status-pill,
+.confidence-pill {
   padding: 4px 7px;
 }
 
@@ -2865,9 +2867,20 @@ input {
   color: var(--text-muted);
 }
 
-.strategy-status-pill.active {
+.strategy-status-pill.active,
+.confidence-pill.high {
   background: rgba(16, 185, 129, 0.12);
   color: var(--positive);
+}
+
+.confidence-pill.med {
+  background: rgba(245, 158, 11, 0.13);
+  color: var(--warning);
+}
+
+.confidence-pill.low {
+  background: rgba(244, 63, 94, 0.13);
+  color: var(--negative);
 }
 
 .review-history-panel {
@@ -3080,7 +3093,8 @@ input {
   min-width: 0;
 }
 
-.paper-strategy-curve-header h3 {
+.paper-strategy-curve-header h3,
+.paper-strategy-doctor-header h3 {
   margin: 0;
   color: var(--text-primary);
   font-size: 15px;
@@ -3259,6 +3273,72 @@ input {
   margin: 2px 0 0;
   font-size: 12px;
   font-weight: 900;
+}
+
+.paper-strategy-doctor {
+  margin-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+}
+
+.paper-strategy-doctor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.paper-strategy-doctor-header h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.paper-strategy-doctor-header span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.paper-strategy-doctor-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.paper-strategy-doctor-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.paper-strategy-doctor-table th,
+.paper-strategy-doctor-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.paper-strategy-doctor-table th {
+  background: color-mix(in srgb, var(--surface) 74%, black);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.paper-strategy-doctor-table td {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.paper-strategy-doctor-table tbody tr:nth-child(even) td {
+  background: rgba(74, 98, 120, 0.06);
+}
+
+.paper-strategy-doctor-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .positive {
