@@ -681,11 +681,9 @@ function StrategyCurveChart({
   const axisTicks = buildStrategyAxisTicks(rawStartMs, rawEndMs, axisScale);
   const data = buildStrategyCurveChartData(curve.points, axisScale.stepMs, initialBalance);
   const equityAxisDomain = buildEquityAxisDomain(curve.points, initialBalance);
-  const shouldAnimate = import.meta.env.MODE !== "test";
   const chart = (
     <AreaChart
       data={data}
-      key={`${version}-${rawStartMs}-${rawEndMs}-${axisScale.stepMs}`}
       margin={{ bottom: 8, left: 0, right: 8, top: 16 }}
       {...(import.meta.env.MODE === "test" ? { height: 300, width: 920 } : {})}
     >
@@ -738,9 +736,7 @@ function StrategyCurveChart({
         dataKey="positiveEquity"
         dot={false}
         fill="url(#strategyPositiveFill)"
-        isAnimationActive={shouldAnimate}
-        animationDuration={1200}
-        animationEasing="ease-out"
+        isAnimationActive={false}
         name={copy.paper.equityGrowth}
         stroke="#12d99c"
         strokeWidth={2.6}
@@ -752,10 +748,7 @@ function StrategyCurveChart({
         dataKey="negativeEquity"
         dot={false}
         fill="url(#strategyNegativeFill)"
-        isAnimationActive={shouldAnimate}
-        animationBegin={180}
-        animationDuration={1200}
-        animationEasing="ease-out"
+        isAnimationActive={false}
         name={copy.paper.equityDrawdown}
         stroke="#ff4d6d"
         strokeWidth={2.6}

@@ -2,6 +2,8 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { translations } from "./i18n";
+import { ReviewPage } from "./ReviewPage";
 import type {
   BtcMacroSnapshot,
   ChartSnapshot,
@@ -654,7 +656,7 @@ describe("App", () => {
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("Tags");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("▼DN");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("dynamic");
-    expect(screen.getByTestId("monitor-live-count")).toHaveTextContent("symbols");
+    expect(screen.getByTestId("monitor-live-count")).toHaveTextContent("实时 · 2 个合约");
     expect(screen.getByText("动态 / 新币")).toBeInTheDocument();
     expect(
       within(screen.getByTestId("radar-terminal-table")).getByText("DOGE-USDT-SWAP"),
@@ -797,7 +799,7 @@ describe("App", () => {
     expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
     expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("持仓 2");
     expect(screen.getByTestId("figma-statbar").querySelectorAll(".figma-stat-card")).toHaveLength(5);
-    expect(screen.getByTestId("figma-radar-tabs")).toHaveTextContent("LIVE · 2 symbols");
+    expect(screen.getByTestId("figma-radar-tabs")).toHaveTextContent("实时 · 2 个合约");
     expect(screen.getByTestId("radar-terminal-table")).toHaveTextContent("SYMBOL");
     expect(screen.queryByTestId("symbol-detail-panel")).not.toBeInTheDocument();
 
@@ -1048,6 +1050,41 @@ describe("App", () => {
     expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent("暂无可归因信号");
   });
 
+  it("keeps the strategy equity chart mounted when a live snapshot advances", () => {
+    const { rerender } = render(<ReviewPage copy={translations.zh} paper={activePaper} />);
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+
+    const chartBefore = screen
+      .getByTestId("paper-strategy-recharts")
+      .querySelector(".recharts-wrapper");
+    expect(chartBefore).not.toBeNull();
+
+    const equityHistory = activePaper.equity_history ?? [];
+    const latestPoint = equityHistory[equityHistory.length - 1];
+    expect(latestPoint).toBeDefined();
+    const advancedPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      equity: 10275.44,
+      unrealized_pnl: 67.86,
+      equity_history: [
+        ...equityHistory,
+        {
+          ...latestPoint!,
+          timestamp_ms: latestPoint!.timestamp_ms + 60_000,
+          equity: 10275.44,
+          unrealized_pnl: 67.86,
+        },
+      ],
+    };
+
+    rerender(<ReviewPage copy={translations.zh} paper={advancedPaper} />);
+
+    const chartAfter = screen
+      .getByTestId("paper-strategy-recharts")
+      .querySelector(".recharts-wrapper");
+    expect(chartAfter).toBe(chartBefore);
+  });
+
   it("anchors a one-snapshot account equity curve at the initial balance", async () => {
     const oneSnapshotPaper: PaperAccountSnapshot = {
       ...activePaper,
@@ -1208,6 +1245,9 @@ describe("App", () => {
       "true",
     );
     expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Radar");
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("Positions");
+    expect(screen.getByTestId("figma-statbar")).toHaveTextContent("BTC price");
+    expect(screen.getByTestId("figma-statbar")).toHaveTextContent("Market state");
     expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /SIGNAL/i })).toBeInTheDocument();
   });
