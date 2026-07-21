@@ -11,6 +11,7 @@ import {
 } from "./uiFormat";
 
 export function MonitorPage({
+  btcSymbol,
   copy,
   filter,
   filteredSymbols,
@@ -25,6 +26,7 @@ export function MonitorPage({
   selected,
   themeMode,
 }: {
+  btcSymbol: SymbolSnapshot | null;
   copy: Copy;
   filter: Filter;
   filteredSymbols: SymbolSnapshot[];
@@ -45,6 +47,7 @@ export function MonitorPage({
   return (
     <section className="monitor-terminal" data-testid="monitor-terminal">
       <FigmaStatBar
+        btcSymbol={btcSymbol}
         copy={copy}
         error={macroError}
         filteredSymbols={filteredSymbols}
@@ -118,6 +121,7 @@ export function MonitorPage({
 }
 
 function FigmaStatBar({
+  btcSymbol,
   copy,
   error,
   filteredSymbols,
@@ -125,6 +129,7 @@ function FigmaStatBar({
   paper,
   snapshot,
 }: {
+  btcSymbol: SymbolSnapshot | null;
   copy: Copy;
   error: string | null;
   filteredSymbols: SymbolSnapshot[];
@@ -132,8 +137,6 @@ function FigmaStatBar({
   paper: PaperAccountSnapshot;
   snapshot: BtcMacroSnapshot | null;
 }) {
-  const btcSymbol =
-    filteredSymbols.find((symbol) => symbol.inst_id.startsWith("BTC-")) ?? filteredSymbols[0] ?? null;
   const hotSymbols = [...filteredSymbols].sort(compareSymbolsByAmplitude24h);
   const hot = hotSymbols[0] ?? null;
   const runnerUp = hotSymbols[1] ?? null;
@@ -148,7 +151,7 @@ function FigmaStatBar({
     <section className="figma-statbar" data-testid="figma-statbar">
       <StatCard
         label={copy.terminal.btcPrice}
-        value={snapshot === null ? btcSymbol ? formatUsd(btcSymbol.price) : "-" : formatUsd(snapshot.price)}
+        value={btcSymbol ? formatUsd(btcSymbol.price) : snapshot ? formatUsd(snapshot.price) : "-"}
         sub={btcSymbol ? `${formatPct(btcSymbol.change_1h_pct)} 1h` : copy.terminal.waitingForQuote}
         tone="cyan"
       />

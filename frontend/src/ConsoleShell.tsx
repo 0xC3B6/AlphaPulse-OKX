@@ -70,6 +70,7 @@ export function ConsoleShell({
   const languageOptions: Array<[Language, string]> = [
     ["zh", "ZH"],
     ["en", "EN"],
+    ["ja", "JA"],
   ];
   const selectedThemeLabel =
     themeOptions.find(([value]) => value === themeMode)?.[1] ?? "System";

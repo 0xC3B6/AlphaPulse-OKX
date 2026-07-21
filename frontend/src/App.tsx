@@ -105,7 +105,7 @@ export default function App() {
   }, [themeMode]);
 
   useEffect(() => {
-    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = language === "zh" ? "zh-CN" : language;
     if (language === defaultLanguage) {
       localStorage.removeItem(languageStorageKey);
       return;
@@ -369,6 +369,7 @@ export default function App() {
         <ReviewPage copy={copy} paper={snapshot.paper} />
       ) : (
         <MonitorPage
+          btcSymbol={snapshot.symbols.find((symbol) => symbol.inst_id === "BTC-USDT-SWAP") ?? null}
           copy={copy}
           filter={filter}
           filteredSymbols={filteredSymbols}
@@ -407,7 +408,7 @@ function readStoredTheme(): ThemeMode {
 
 function readStoredLanguage(): Language {
   const stored = localStorage.getItem(languageStorageKey);
-  if (stored === "en" || stored === "zh") {
+  if (stored === "en" || stored === "zh" || stored === "ja") {
     return stored;
   }
   return defaultLanguage;

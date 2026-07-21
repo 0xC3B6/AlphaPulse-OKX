@@ -1293,6 +1293,50 @@ describe("App", () => {
     expect(screen.getByRole("columnheader", { name: /SIGNAL/i })).toBeInTheDocument();
   });
 
+  it("stores and applies Japanese language choice", async () => {
+    mockSnapshot();
+
+    render(<App />);
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "JA" }));
+
+    expect(localStorage.getItem("alphapulse-language")).toBe("ja");
+    expect(document.documentElement).toHaveAttribute("lang", "ja");
+    expect(screen.getByRole("button", { name: "言語: JA" })).toHaveTextContent("JA");
+    expect(screen.getByRole("menuitemradio", { name: "JA" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("figma-radar-header")).toHaveTextContent("ポジション");
+    expect(screen.getByTestId("figma-statbar")).toHaveTextContent("BTC価格");
+    expect(screen.getByTestId("figma-statbar")).toHaveTextContent("市場状況");
+    expect(screen.getByRole("button", { name: "トレンド" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /シグナル/ })).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "LAB-USDT-SWAPのTradingViewチャートを開く",
+      })[0],
+    );
+    const tradingViewFrame = screen
+      .getByRole("dialog", { name: "LAB-USDT-SWAP TradingView" })
+      .querySelector("iframe");
+    expect(tradingViewFrame?.getAttribute("src")).toContain("locale=ja");
+  });
+
+  it("restores a saved Japanese language choice", async () => {
+    localStorage.setItem("alphapulse-language", "ja");
+    mockSnapshot();
+
+    render(<App />);
+
+    expect((await screen.findAllByText("LAB-USDT-SWAP")).length).toBeGreaterThan(0);
+    expect(document.documentElement).toHaveAttribute("lang", "ja");
+    expect(screen.getByRole("button", { name: "言語: JA" })).toHaveTextContent("JA");
+    expect(screen.getByTestId("figma-statbar")).toHaveTextContent("BTC価格");
+  });
+
   it("renders the macro cycle view", async () => {
     mockSnapshot();
 
@@ -1379,6 +1423,23 @@ describe("App", () => {
     expect(statbar).toHaveTextContent("市场状态");
     expect(statbar).toHaveTextContent("活跃信号");
     expect(statbar).toHaveTextContent("热门异动");
+  });
+
+  it("uses the live BTC swap quote instead of the macro daily close", async () => {
+    const liveBtc = {
+      ...snapshot.symbols[1],
+      inst_id: "BTC-USDT-SWAP",
+      price: 66285.4,
+      change_1h_pct: 0.0005,
+    };
+    mockSnapshot({ ...snapshot, symbols: [liveBtc, ...snapshot.symbols] });
+
+    render(<App />);
+
+    const statbar = await screen.findByTestId("figma-statbar");
+    expect(statbar).toHaveTextContent("$66,285.40");
+    expect(statbar).not.toHaveTextContent("$60,000.00");
+    expect(statbar).toHaveTextContent("0.05% 1h");
   });
 
   it("keeps the radar workspace usable when the macro summary request fails", async () => {

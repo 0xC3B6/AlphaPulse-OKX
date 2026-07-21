@@ -73,12 +73,13 @@ function resolveTradingViewSymbol(instId: string): string | null {
 }
 
 function buildTradingViewEmbedUrl(symbol: string, themeMode: ThemeMode, language: Language): string {
+  const locale = language === "zh" ? "zh_CN" : language === "ja" ? "ja" : "en";
   const params = new URLSearchParams({
     symbol,
     interval: "15",
     theme: themeMode === "light" ? "light" : "dark",
     style: "1",
-    locale: language === "zh" ? "zh_CN" : "en",
+    locale,
     enable_publishing: "0",
     allow_symbol_change: "0",
     hide_top_toolbar: "0",
