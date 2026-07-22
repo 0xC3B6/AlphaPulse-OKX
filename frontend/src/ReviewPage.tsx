@@ -13,6 +13,8 @@ import type { Copy } from "./i18n";
 import type {
   PaperAccountSnapshot,
   PaperClosedPositionSnapshot,
+  PaperEquityCandle,
+  PaperEquityCurves,
   PaperEquityPoint,
   PaperStrategyStats,
   PaperTrade,
@@ -45,6 +47,9 @@ interface HistorySearchFilters {
 
 interface StrategyCurvePoint {
   timestampMs: number;
+  openEquity: number;
+  highEquity: number;
+  lowEquity: number;
   equity: number;
   equityChange: number;
   realizedPnl: number;
@@ -64,6 +69,9 @@ interface StrategyCurve {
 interface StrategyCurveChartPoint {
   timestampMs: number;
   snapshotCount: number;
+  openEquity: number;
+  highEquity: number;
+  lowEquity: number;
   equity: number;
   equityChange: number;
   negativeEquity: number | null;
@@ -227,6 +235,9 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
             <StrategyCurvePanel
               copy={copy}
               curve={activeStrategyCurve}
+              equityCurves={
+                activeStrategyVersion === paper.strategy_version ? paper.equity_curves : undefined
+              }
               initialBalance={paper.initial_balance}
               version={activeStrategyVersion}
             />
@@ -388,7 +399,10 @@ function AccountEquityCurve({
     () => buildStrategyCurve(buildAccountEquityHistory(paper), paper.initial_balance),
     [paper],
   );
-  const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
+  const chartCurve = useMemo(
+    () => buildCurveForRange(curve, paper.equity_curves, range, paper.initial_balance),
+    [curve, paper.equity_curves, paper.initial_balance, range],
+  );
 
   return (
     <section
@@ -523,16 +537,21 @@ function StrategyStatsTable({
 function StrategyCurvePanel({
   copy,
   curve,
+  equityCurves,
   initialBalance,
   version,
 }: {
   copy: Copy;
   curve: StrategyCurve;
+  equityCurves?: PaperEquityCurves;
   initialBalance: number;
   version: string;
 }) {
   const [range, setRange] = useState<StrategyCurveRange>("all");
-  const chartCurve = useMemo(() => filterStrategyCurve(curve, range), [curve, range]);
+  const chartCurve = useMemo(
+    () => buildCurveForRange(curve, equityCurves, range, initialBalance),
+    [curve, equityCurves, initialBalance, range],
+  );
 
   return (
     <section className="paper-strategy-curve" data-testid="paper-strategy-curve">
@@ -1039,6 +1058,8 @@ function StrategyCurveTooltip({
       <span>{formatChartDateTime(point.timestampMs)}</span>
       <dl>
         <Metric label={copy.paper.currentEquity} value={formatUsdt(point.equity)} />
+        <Metric label={copy.paper.peakEquity} value={formatUsdt(point.highEquity)} />
+        <Metric label={copy.paper.troughEquity} value={formatUsdt(point.lowEquity)} />
         <Metric label={copy.paper.equityChange} value={formatSignedUsdt(point.equityChange)} />
         <Metric label={copy.paper.realized} value={formatSignedUsdt(point.realizedPnl)} />
         <Metric label={copy.paper.unrealized} value={formatSignedUsdt(point.unrealizedPnl)} />
@@ -1070,6 +1091,9 @@ function buildStrategyCurveChartData(
             (point.timestampMs - previousPoint.timestampMs) * baselineRatio,
         ),
         snapshotCount: 0,
+        openEquity: initialBalance,
+        highEquity: initialBalance,
+        lowEquity: initialBalance,
         equity: initialBalance,
         equityChange: 0,
         negativeEquity: initialBalance,
@@ -1096,6 +1120,9 @@ function bucketStrategyCurvePoints(
     buckets.set(bucketMs, {
       timestampMs: bucketMs,
       snapshotCount: (existing?.snapshotCount ?? 0) + 1,
+      openEquity: existing?.openEquity ?? point.openEquity,
+      highEquity: Math.max(existing?.highEquity ?? point.highEquity, point.highEquity),
+      lowEquity: Math.min(existing?.lowEquity ?? point.lowEquity, point.lowEquity),
       equity: point.equity,
       equityChange: point.equityChange,
       negativeEquity: null,
@@ -1667,12 +1694,55 @@ function buildStrategyCurve(
     .sort((left, right) => left.timestamp_ms - right.timestamp_ms)
     .map((point) => ({
       timestampMs: point.timestamp_ms,
+      openEquity: point.equity,
+      highEquity: point.equity,
+      lowEquity: point.equity,
       equity: point.equity,
       equityChange: point.equity - initialBalance,
       realizedPnl: point.realized_pnl,
       unrealizedPnl: point.unrealized_pnl,
       openPositionsCount: point.open_positions_count,
     }));
+  return anchorStrategyCurve(points, initialBalance);
+}
+
+function buildCurveForRange(
+  fallbackCurve: StrategyCurve,
+  equityCurves: PaperEquityCurves | undefined,
+  range: StrategyCurveRange,
+  initialBalance: number,
+): StrategyCurve {
+  const candles = equityCurves?.[range];
+  return candles !== undefined && candles.length > 0
+    ? buildStrategyCurveFromCandles(candles, initialBalance)
+    : filterStrategyCurve(fallbackCurve, range);
+}
+
+function buildStrategyCurveFromCandles(
+  candles: PaperEquityCandle[],
+  initialBalance: number,
+): StrategyCurve {
+  const points = candles
+    .slice()
+    .sort((left, right) => left.bucket_start_ms - right.bucket_start_ms)
+    .map<StrategyCurvePoint>((candle) => ({
+      timestampMs: candle.bucket_start_ms,
+      openEquity: candle.open_equity,
+      highEquity: candle.high_equity,
+      lowEquity: candle.low_equity,
+      equity: candle.close_equity,
+      equityChange: candle.close_equity - initialBalance,
+      realizedPnl: candle.realized_pnl,
+      unrealizedPnl: candle.unrealized_pnl,
+      openPositionsCount: candle.open_positions_count,
+    }));
+  return anchorStrategyCurve(points, initialBalance);
+}
+
+function anchorStrategyCurve(
+  points: StrategyCurvePoint[],
+  initialBalance: number,
+): StrategyCurve {
   const firstPoint = points[0];
   if (firstPoint !== undefined && !isInitialEquityPoint(firstPoint, initialBalance)) {
     const nextPoint = points[1];
@@ -1682,6 +1752,9 @@ function buildStrategyCurve(
         : Math.max(MINUTE_MS, Math.min(DAY_MS, nextPoint.timestampMs - firstPoint.timestampMs));
     points.unshift({
       timestampMs: firstPoint.timestampMs - inferredStepMs,
+      openEquity: initialBalance,
+      highEquity: initialBalance,
+      lowEquity: initialBalance,
       equity: initialBalance,
       equityChange: 0,
       realizedPnl: 0,
@@ -1698,10 +1771,13 @@ function buildStrategyCurve(
 }
 
 function buildEquityAxisDomain(
-  points: Array<Pick<StrategyCurvePoint, "equity">>,
+  points: Array<Pick<StrategyCurvePoint, "equity" | "highEquity" | "lowEquity">>,
   initialBalance: number,
 ): [number, number] {
-  const equities = [initialBalance, ...points.map((point) => point.equity)].filter(Number.isFinite);
+  const equities = [
+    initialBalance,
+    ...points.flatMap((point) => [point.lowEquity, point.equity, point.highEquity]),
+  ].filter(Number.isFinite);
   const lowestEquity = Math.min(...equities);
   const highestEquity = Math.max(...equities);
   const spread = highestEquity - lowestEquity;
@@ -1796,16 +1872,16 @@ function summarizeEquityCurve(
   points: StrategyCurvePoint[],
   initialBalance: number,
 ): StrategyCurve {
-  const startingEquity = points[0]?.equity ?? initialBalance;
+  const startingEquity = points[0]?.openEquity ?? initialBalance;
   let runningPeak = startingEquity;
   let maxDrawdown = 0;
   let peakEquity = startingEquity;
   let troughEquity = startingEquity;
   points.forEach((point) => {
-    runningPeak = Math.max(runningPeak, point.equity);
-    maxDrawdown = Math.min(maxDrawdown, point.equity - runningPeak);
-    peakEquity = Math.max(peakEquity, point.equity);
-    troughEquity = Math.min(troughEquity, point.equity);
+    runningPeak = Math.max(runningPeak, point.highEquity);
+    maxDrawdown = Math.min(maxDrawdown, point.lowEquity - runningPeak);
+    peakEquity = Math.max(peakEquity, point.highEquity);
+    troughEquity = Math.min(troughEquity, point.lowEquity);
   });
   const currentEquity = points[points.length - 1]?.equity ?? initialBalance;
 

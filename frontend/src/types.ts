@@ -165,6 +165,7 @@ export interface PaperAccountSnapshot {
   used_margin: number;
   available_balance: number;
   equity_history?: PaperEquityPoint[];
+  equity_curves?: PaperEquityCurves;
   positions: PaperPositionSnapshot[];
   position_history?: PaperClosedPositionSnapshot[];
   trades: PaperTrade[];
@@ -173,6 +174,22 @@ export interface PaperAccountSnapshot {
 export interface PaperEquityPoint {
   timestamp_ms: number;
   equity: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  open_positions_count: number;
+}
+
+export type PaperEquityCurveRange = "1d" | "7d" | "30d" | "90d" | "all";
+
+export type PaperEquityCurves = Partial<Record<PaperEquityCurveRange, PaperEquityCandle[]>>;
+
+export interface PaperEquityCandle {
+  bucket_start_ms: number;
+  bucket_size_ms: number;
+  open_equity: number;
+  high_equity: number;
+  low_equity: number;
+  close_equity: number;
   realized_pnl: number;
   unrealized_pnl: number;
   open_positions_count: number;

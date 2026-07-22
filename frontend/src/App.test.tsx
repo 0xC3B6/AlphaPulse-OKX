@@ -1165,6 +1165,110 @@ describe("App", () => {
     expect(screen.getByTestId("review-equity-recharts")).toHaveAttribute("data-point-count", "2");
   });
 
+  it("uses the selected OHLC equity bucket series and includes intrabucket highs and lows", () => {
+    const bucketPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      equity: 10120,
+      realized_pnl: 80,
+      unrealized_pnl: 40,
+      equity_history: [],
+      equity_curves: {
+        "1d": [
+          {
+            bucket_start_ms: 1_800_000_000_000,
+            bucket_size_ms: 600_000,
+            open_equity: 10000,
+            high_equity: 10020,
+            low_equity: 9990,
+            close_equity: 10000,
+            realized_pnl: 0,
+            unrealized_pnl: 0,
+            open_positions_count: 0,
+          },
+          {
+            bucket_start_ms: 1_800_000_600_000,
+            bucket_size_ms: 600_000,
+            open_equity: 10000,
+            high_equity: 10140,
+            low_equity: 10010,
+            close_equity: 10080,
+            realized_pnl: 60,
+            unrealized_pnl: 20,
+            open_positions_count: 2,
+          },
+        ],
+        "7d": [
+          {
+            bucket_start_ms: 1_799_996_400_000,
+            bucket_size_ms: 3_600_000,
+            open_equity: 10000,
+            high_equity: 10030,
+            low_equity: 9800,
+            close_equity: 10000,
+            realized_pnl: 0,
+            unrealized_pnl: 0,
+            open_positions_count: 0,
+          },
+          {
+            bucket_start_ms: 1_800_000_000_000,
+            bucket_size_ms: 3_600_000,
+            open_equity: 10000,
+            high_equity: 10300,
+            low_equity: 9990,
+            close_equity: 10100,
+            realized_pnl: 80,
+            unrealized_pnl: 20,
+            open_positions_count: 2,
+          },
+        ],
+        all: [
+          {
+            bucket_start_ms: 1_799_971_200_000,
+            bucket_size_ms: 86_400_000,
+            open_equity: 10000,
+            high_equity: 10040,
+            low_equity: 9950,
+            close_equity: 10000,
+            realized_pnl: 0,
+            unrealized_pnl: 0,
+            open_positions_count: 0,
+          },
+          {
+            bucket_start_ms: 1_800_057_600_000,
+            bucket_size_ms: 86_400_000,
+            open_equity: 10000,
+            high_equity: 10180,
+            low_equity: 9990,
+            close_equity: 10120,
+            realized_pnl: 80,
+            unrealized_pnl: 40,
+            open_positions_count: 2,
+          },
+        ],
+      },
+    };
+
+    render(<ReviewPage copy={translations.zh} paper={bucketPaper} />);
+
+    const curve = screen.getByTestId("review-equity-curve");
+    const chart = screen.getByTestId("review-equity-recharts");
+    expect(chart).toHaveAttribute("data-point-count", "2");
+    expect(curve).toHaveTextContent("10,180.00 USDT");
+    expect(curve).toHaveTextContent("9,950.00 USDT");
+
+    fireEvent.click(within(curve).getByRole("button", { name: "1D" }));
+    expect(chart).toHaveAttribute("data-axis-step-ms", "600000");
+    expect(curve).toHaveTextContent("10,140.00 USDT");
+    expect(curve).toHaveTextContent("9,990.00 USDT");
+    expect(curve).toHaveTextContent("10,080.00 USDT");
+
+    fireEvent.click(within(curve).getByRole("button", { name: "7D" }));
+    expect(chart).toHaveAttribute("data-axis-step-ms", "3600000");
+    expect(curve).toHaveTextContent("10,300.00 USDT");
+    expect(curve).toHaveTextContent("9,800.00 USDT");
+    expect(curve).toHaveTextContent("10,100.00 USDT");
+  });
+
   it("keeps a visible equity line when every snapshot falls in one ten-minute bucket", () => {
     const bucketStart = 1_800_000_000_000;
     const sameBucketPaper: PaperAccountSnapshot = {
