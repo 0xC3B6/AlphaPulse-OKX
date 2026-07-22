@@ -19,8 +19,9 @@ use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 use crate::{
     config::AppConfig,
     paper::{
-        compact_equity_history, PaperAccountSnapshot, PaperEquityPoint, PaperOrderRequest,
-        PaperSide, PaperState, PaperTrade, PaperTradeAction, MAX_EQUITY_HISTORY_POINTS,
+        trim_equity_curves_for_display, EquityBucketSpec, PaperAccountSnapshot, PaperEquityCandle,
+        PaperEquityCurves, PaperOrderRequest, PaperSide, PaperState, PaperTrade, PaperTradeAction,
+        EQUITY_BUCKET_SPECS,
     },
     risk_safety::{AccountScope, DEFAULT_ACCOUNT_ID, DEFAULT_TENANT_ID},
     state::DashboardSnapshot,
@@ -35,6 +36,9 @@ const STRATEGY_TABLES: &[&str] = &[
     "fills",
     "positions",
     "closed_trades",
+    "equity_candles",
+    "account_state_current",
+    "account_state_backups",
     "equity_snapshots",
     "event_log",
     "app_state_snapshots",
@@ -306,6 +310,27 @@ impl PersistenceLayer {
         &self,
         identity: &StrategyIdentity,
     ) -> anyhow::Result<Option<PaperState>> {
+        let current = sqlx::query_as::<_, (Json<serde_json::Value>,)>(
+            "SELECT payload_json FROM account_state_current \
+             WHERE version_code = $1 AND strategy_build_id = $2 AND config_hash = $3 \
+               AND tenant_id = $4 AND account_id = $5",
+        )
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(&identity.config_hash)
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .fetch_optional(&self.postgres)
+        .await?;
+        if let Some((payload,)) = current {
+            return serde_json::from_value(payload.0)
+                .context("failed to decode current paper state")
+                .map(Some);
+        }
+
+        // Temporary phase-one migration fallback. New writes never append to
+        // app_state_snapshots; this read path can be removed after production
+        // verification confirms account_state_current is populated.
         let row = sqlx::query_as::<_, (Json<serde_json::Value>,)>(
             "SELECT payload_json FROM app_state_snapshots \
              WHERE version_code = $1 AND strategy_build_id = $2 AND config_hash = $3 \
@@ -325,66 +350,133 @@ impl PersistenceLayer {
         .transpose()
     }
 
-    pub async fn load_equity_history(
+    pub async fn load_equity_curves(
         &self,
         identity: &StrategyIdentity,
         run_id: &str,
-    ) -> anyhow::Result<Vec<PaperEquityPoint>> {
+    ) -> anyhow::Result<PaperEquityCurves> {
+        let database_run_id = self.database_run_id(run_id);
+        // Idempotent phase-one migration: preserve every legacy bucket even if
+        // the new writer has already created a current bucket.
+        self.migrate_legacy_equity_curves(identity, run_id).await?;
+        self.select_equity_curves(&database_run_id).await
+    }
+
+    async fn select_equity_curves(&self, run_id: &str) -> anyhow::Result<PaperEquityCurves> {
+        let rows = sqlx::query_as::<_, (String, i64, i64, f64, f64, f64, f64, f64, f64, i64)>(
+            "SELECT range_key, bucket_start_ms, bucket_size_ms, \
+                    open_equity::DOUBLE PRECISION, high_equity::DOUBLE PRECISION, \
+                    low_equity::DOUBLE PRECISION, close_equity::DOUBLE PRECISION, \
+                    realized_pnl::DOUBLE PRECISION, unrealized_pnl::DOUBLE PRECISION, \
+                    open_positions_count \
+             FROM equity_candles \
+             WHERE tenant_id = $1 AND account_id = $2 AND run_id = $3 \
+             ORDER BY range_key, bucket_start_ms",
+        )
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .bind(run_id)
+        .fetch_all(&self.postgres)
+        .await?;
+        let mut curves = PaperEquityCurves::new();
+        for (
+            range,
+            bucket_start_ms,
+            bucket_size_ms,
+            open_equity,
+            high_equity,
+            low_equity,
+            close_equity,
+            realized_pnl,
+            unrealized_pnl,
+            open_positions_count,
+        ) in rows
+        {
+            curves.entry(range).or_default().push(PaperEquityCandle {
+                bucket_start_ms,
+                bucket_size_ms,
+                open_equity,
+                high_equity,
+                low_equity,
+                close_equity,
+                realized_pnl,
+                unrealized_pnl,
+                open_positions_count: usize::try_from(open_positions_count).unwrap_or_default(),
+            });
+        }
+        trim_equity_curves_for_display(&mut curves);
+        Ok(curves)
+    }
+
+    async fn migrate_legacy_equity_curves(
+        &self,
+        identity: &StrategyIdentity,
+        run_id: &str,
+    ) -> anyhow::Result<()> {
         let database_run_id = self.database_run_id(run_id);
         let mut compatible_run_ids = vec![database_run_id.clone()];
-        // Snapshots written before account scoping used the raw run id and belong
-        // exclusively to the original default paper account.
         if self.scope.tenant_id == DEFAULT_TENANT_ID
             && self.scope.account_id == DEFAULT_ACCOUNT_ID
             && database_run_id != run_id
         {
             compatible_run_ids.push(run_id.to_string());
         }
-        let rows = sqlx::query_as::<_, (i64, f64, f64, f64, i64)>(
-            "WITH compatible AS (\
-                 SELECT DISTINCT ON (timestamp_ms) \
-                        timestamp_ms, equity::DOUBLE PRECISION AS equity, \
-                        realized_pnl::DOUBLE PRECISION AS realized_pnl, \
-                        unrealized_pnl::DOUBLE PRECISION AS unrealized_pnl, open_positions_count \
-                 FROM equity_snapshots \
-                 WHERE version_code = $1 AND strategy_build_id = $2 AND run_id = ANY($3) \
-                 ORDER BY timestamp_ms, (run_id = $4) DESC, id DESC\
-             ), ordered AS (\
-                 SELECT timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count, \
-                        ROW_NUMBER() OVER (ORDER BY timestamp_ms) AS sample_index, \
-                        COUNT(*) OVER () AS total_rows \
-                 FROM compatible\
-             ) \
-             SELECT timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count \
-             FROM ordered \
-             WHERE total_rows <= $5 OR sample_index = 1 OR sample_index = total_rows \
-                OR MOD(sample_index - 1, GREATEST(1, (total_rows + $5 - 1) / $5)) = 0 \
-             ORDER BY timestamp_ms",
-        )
-        .bind(&identity.version_code)
-        .bind(&identity.strategy_build_id)
-        .bind(compatible_run_ids)
-        .bind(database_run_id)
-        .bind(MAX_EQUITY_HISTORY_POINTS as i64)
-        .fetch_all(&self.postgres)
-        .await?;
-        let mut history = rows
-            .into_iter()
-            .map(
-                |(timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count)| {
-                    PaperEquityPoint {
-                        timestamp_ms,
-                        equity,
-                        realized_pnl,
-                        unrealized_pnl,
-                        open_positions_count: usize::try_from(open_positions_count)
-                            .unwrap_or_default(),
-                    }
-                },
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        for spec in EQUITY_BUCKET_SPECS {
+            let cutoff_ms = spec.retention_ms.map(|retention| now_ms - retention);
+            sqlx::query(
+                "WITH compatible AS (\
+                     SELECT DISTINCT ON (timestamp_ms) \
+                            timestamp_ms, equity, realized_pnl, unrealized_pnl, open_positions_count \
+                     FROM equity_snapshots \
+                     WHERE version_code = $1 AND strategy_build_id = $2 AND run_id = ANY($3) \
+                       AND ($9::BIGINT IS NULL OR timestamp_ms >= $9) \
+                     ORDER BY timestamp_ms, (run_id = $4) DESC, id DESC\
+                 ), bucketed AS (\
+                     SELECT (timestamp_ms / $5) * $5 AS bucket_start_ms, \
+                            (ARRAY_AGG(equity ORDER BY timestamp_ms))[1] AS open_equity, \
+                            MAX(equity) AS high_equity, MIN(equity) AS low_equity, \
+                            (ARRAY_AGG(equity ORDER BY timestamp_ms DESC))[1] AS close_equity, \
+                            (ARRAY_AGG(realized_pnl ORDER BY timestamp_ms DESC))[1] AS realized_pnl, \
+                            (ARRAY_AGG(unrealized_pnl ORDER BY timestamp_ms DESC))[1] AS unrealized_pnl, \
+                            (ARRAY_AGG(open_positions_count ORDER BY timestamp_ms DESC))[1] AS open_positions_count, \
+                            MAX(timestamp_ms) AS updated_at_ms \
+                     FROM compatible GROUP BY (timestamp_ms / $5) * $5\
+                 ) \
+                 INSERT INTO equity_candles \
+                   (tenant_id, account_id, run_id, version_code, strategy_build_id, range_key, \
+                    bucket_start_ms, bucket_size_ms, open_equity, high_equity, low_equity, close_equity, \
+                    realized_pnl, unrealized_pnl, open_positions_count, updated_at_ms) \
+                 SELECT $6, $7, $4, $1, $2, $8, bucket_start_ms, $5, open_equity, high_equity, \
+                        low_equity, close_equity, realized_pnl, unrealized_pnl, open_positions_count, updated_at_ms \
+                 FROM bucketed \
+                 ON CONFLICT (tenant_id, account_id, run_id, range_key, bucket_start_ms) DO UPDATE SET \
+                   open_equity = EXCLUDED.open_equity, \
+                   high_equity = GREATEST(equity_candles.high_equity, EXCLUDED.high_equity), \
+                   low_equity = LEAST(equity_candles.low_equity, EXCLUDED.low_equity), \
+                   close_equity = CASE WHEN EXCLUDED.updated_at_ms >= equity_candles.updated_at_ms \
+                     THEN EXCLUDED.close_equity ELSE equity_candles.close_equity END, \
+                   realized_pnl = CASE WHEN EXCLUDED.updated_at_ms >= equity_candles.updated_at_ms \
+                     THEN EXCLUDED.realized_pnl ELSE equity_candles.realized_pnl END, \
+                   unrealized_pnl = CASE WHEN EXCLUDED.updated_at_ms >= equity_candles.updated_at_ms \
+                     THEN EXCLUDED.unrealized_pnl ELSE equity_candles.unrealized_pnl END, \
+                   open_positions_count = CASE WHEN EXCLUDED.updated_at_ms >= equity_candles.updated_at_ms \
+                     THEN EXCLUDED.open_positions_count ELSE equity_candles.open_positions_count END, \
+                   updated_at_ms = GREATEST(equity_candles.updated_at_ms, EXCLUDED.updated_at_ms)",
             )
-            .collect();
-        compact_equity_history(&mut history);
-        Ok(history)
+            .bind(&identity.version_code)
+            .bind(&identity.strategy_build_id)
+            .bind(&compatible_run_ids)
+            .bind(&database_run_id)
+            .bind(spec.bucket_size_ms)
+            .bind(&self.scope.tenant_id)
+            .bind(&self.scope.account_id)
+            .bind(spec.range)
+            .bind(cutoff_ms)
+            .execute(&self.postgres)
+            .await?;
+        }
+        Ok(())
     }
 
     pub async fn persist_transition(&self, transition: &PersistedTransition) -> anyhow::Result<()> {
@@ -482,6 +574,65 @@ impl PersistenceLayer {
             ts_ms,
             &self.scope,
             account_version,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn persist_recovery_point(
+        &self,
+        state: &PaperState,
+        event_type: &str,
+        ts_ms: i64,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            event_type != "scan_checkpoint",
+            "scan checkpoints are not recovery points"
+        );
+        let identity = state.strategy_identity();
+        let database_run_id = self.database_run_id(state.run_id());
+        let mut transaction = self.postgres.begin().await?;
+        let account_version = lock_account_row(&mut transaction, &self.scope, ts_ms).await?;
+        insert_identity_and_run(&mut transaction, identity, &database_run_id, None, ts_ms).await?;
+        let next_account_version =
+            advance_account_version(&mut transaction, &self.scope, account_version, ts_ms).await?;
+        let state_json = serde_json::to_value(state)?;
+        upsert_account_state_current(
+            &mut transaction,
+            &self.scope,
+            identity,
+            &database_run_id,
+            next_account_version,
+            state_json.clone(),
+            ts_ms,
+        )
+        .await?;
+        sqlx::query(
+            "INSERT INTO event_log \
+             (tenant_id, account_id, account_version, event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'paper_account', $5, $8, $9)",
+        )
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .bind(next_account_version)
+        .bind(event_type)
+        .bind(&database_run_id)
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(Json(json!({"identity": identity, "recovery_point": event_type})))
+        .bind(ts_ms)
+        .execute(&mut *transaction)
+        .await?;
+        insert_account_state_backup(
+            &mut transaction,
+            &self.scope,
+            identity,
+            &database_run_id,
+            next_account_version,
+            event_type,
+            state_json,
+            ts_ms,
         )
         .await?;
         transaction.commit().await?;
@@ -741,9 +892,12 @@ async fn purge_strategy_data_in_transaction(
             "fills",
             "positions",
             "closed_trades",
+            "equity_candles",
             "equity_snapshots",
             "ledger_entries",
             "order_intents",
+            "account_state_backups",
+            "account_state_current",
         ] {
             let statement = format!("DELETE FROM {table} WHERE version_code = $1");
             sqlx::query(&statement)
@@ -1058,49 +1212,74 @@ async fn persist_state_rows(
         .await?;
     }
 
-    sqlx::query(
-        "INSERT INTO equity_snapshots \
-         (run_id, version_code, strategy_build_id, timestamp_ms, equity, realized_pnl, unrealized_pnl, drawdown, open_positions_count) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         ON CONFLICT (run_id, timestamp_ms) DO UPDATE SET equity = EXCLUDED.equity, \
-         realized_pnl = EXCLUDED.realized_pnl, unrealized_pnl = EXCLUDED.unrealized_pnl, \
-         drawdown = EXCLUDED.drawdown, open_positions_count = EXCLUDED.open_positions_count",
-    )
-    .bind(run_id)
-    .bind(&identity.version_code)
-    .bind(&identity.strategy_build_id)
-    .bind(ts_ms)
-    .bind(decimal_or_zero(snapshot.equity))
-    .bind(decimal_or_zero(snapshot.realized_pnl))
-    .bind(decimal_or_zero(snapshot.unrealized_pnl))
-    .bind(decimal_or_zero((snapshot.initial_balance - snapshot.equity).max(0.0)))
-    .bind(snapshot.positions.len() as i64)
-    .execute(&mut **transaction)
-    .await?;
+    upsert_equity_candles(transaction, scope, identity, run_id, snapshot, ts_ms).await?;
 
     let next_account_version =
         advance_account_version(transaction, scope, account_version, ts_ms).await?;
     let state_json = serde_json::to_value(state)?;
-    sqlx::query(
-        "INSERT INTO event_log \
-         (tenant_id, account_id, account_version, event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'paper_account', $5, $8, $9)",
+    upsert_account_state_current(
+        transaction,
+        scope,
+        identity,
+        run_id,
+        next_account_version,
+        state_json.clone(),
+        ts_ms,
     )
-    .bind(&scope.tenant_id)
-    .bind(&scope.account_id)
-    .bind(next_account_version)
-    .bind(event_type)
-    .bind(run_id)
-    .bind(&identity.version_code)
-    .bind(&identity.strategy_build_id)
-    .bind(Json(json!({"paper": snapshot, "identity": identity})))
-    .bind(ts_ms)
-    .execute(&mut **transaction)
     .await?;
+
+    if event_type != "scan_checkpoint" {
+        sqlx::query(
+            "INSERT INTO event_log \
+             (tenant_id, account_id, account_version, event_type, run_id, version_code, strategy_build_id, aggregate_type, aggregate_id, payload_json, created_at_ms) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'paper_account', $5, $8, $9)",
+        )
+        .bind(&scope.tenant_id)
+        .bind(&scope.account_id)
+        .bind(next_account_version)
+        .bind(event_type)
+        .bind(run_id)
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(Json(json!({"paper": snapshot, "identity": identity})))
+        .bind(ts_ms)
+        .execute(&mut **transaction)
+        .await?;
+        insert_account_state_backup(
+            transaction,
+            scope,
+            identity,
+            run_id,
+            next_account_version,
+            event_type,
+            state_json,
+            ts_ms,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn upsert_account_state_current(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    identity: &StrategyIdentity,
+    run_id: &str,
+    account_version: i64,
+    state_json: serde_json::Value,
+    ts_ms: i64,
+) -> anyhow::Result<()> {
     sqlx::query(
-        "INSERT INTO app_state_snapshots \
-         (tenant_id, account_id, snapshot_key, run_id, version_code, strategy_build_id, config_hash, payload_json, created_at_ms) \
-         VALUES ($1, $2, 'paper_state', $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO account_state_current \
+         (tenant_id, account_id, run_id, version_code, strategy_build_id, config_hash, \
+          account_version, payload_json, updated_at_ms) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+         ON CONFLICT (tenant_id, account_id) DO UPDATE SET \
+           run_id = EXCLUDED.run_id, version_code = EXCLUDED.version_code, \
+           strategy_build_id = EXCLUDED.strategy_build_id, config_hash = EXCLUDED.config_hash, \
+           account_version = EXCLUDED.account_version, payload_json = EXCLUDED.payload_json, \
+           updated_at_ms = EXCLUDED.updated_at_ms",
     )
     .bind(&scope.tenant_id)
     .bind(&scope.account_id)
@@ -1108,8 +1287,121 @@ async fn persist_state_rows(
     .bind(&identity.version_code)
     .bind(&identity.strategy_build_id)
     .bind(&identity.config_hash)
+    .bind(account_version)
     .bind(Json(state_json))
     .bind(ts_ms)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_equity_candles(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    identity: &StrategyIdentity,
+    run_id: &str,
+    snapshot: &PaperAccountSnapshot,
+    ts_ms: i64,
+) -> anyhow::Result<()> {
+    for spec in EQUITY_BUCKET_SPECS {
+        let bucket_start_ms = ts_ms.div_euclid(spec.bucket_size_ms) * spec.bucket_size_ms;
+        sqlx::query(
+            "INSERT INTO equity_candles \
+             (tenant_id, account_id, run_id, version_code, strategy_build_id, range_key, \
+              bucket_start_ms, bucket_size_ms, open_equity, high_equity, low_equity, close_equity, \
+              realized_pnl, unrealized_pnl, open_positions_count, updated_at_ms) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $9, $9, $10, $11, $12, $13) \
+             ON CONFLICT (tenant_id, account_id, run_id, range_key, bucket_start_ms) DO UPDATE SET \
+               high_equity = GREATEST(equity_candles.high_equity, EXCLUDED.close_equity), \
+               low_equity = LEAST(equity_candles.low_equity, EXCLUDED.close_equity), \
+               close_equity = EXCLUDED.close_equity, realized_pnl = EXCLUDED.realized_pnl, \
+               unrealized_pnl = EXCLUDED.unrealized_pnl, \
+               open_positions_count = EXCLUDED.open_positions_count, updated_at_ms = EXCLUDED.updated_at_ms",
+        )
+        .bind(&scope.tenant_id)
+        .bind(&scope.account_id)
+        .bind(run_id)
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(spec.range)
+        .bind(bucket_start_ms)
+        .bind(spec.bucket_size_ms)
+        .bind(decimal_or_zero(snapshot.equity))
+        .bind(decimal_or_zero(snapshot.realized_pnl))
+        .bind(decimal_or_zero(snapshot.unrealized_pnl))
+        .bind(snapshot.positions.len() as i64)
+        .bind(ts_ms)
+        .execute(&mut **transaction)
+        .await?;
+        prune_equity_candles(transaction, scope, run_id, spec, ts_ms).await?;
+    }
+    Ok(())
+}
+
+async fn prune_equity_candles(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    run_id: &str,
+    spec: EquityBucketSpec,
+    ts_ms: i64,
+) -> anyhow::Result<()> {
+    let Some(retention_ms) = spec.retention_ms else {
+        return Ok(());
+    };
+    sqlx::query(
+        "DELETE FROM equity_candles \
+         WHERE tenant_id = $1 AND account_id = $2 AND run_id = $3 AND range_key = $4 \
+           AND bucket_start_ms + bucket_size_ms <= $5",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(run_id)
+    .bind(spec.range)
+    .bind(ts_ms - retention_ms)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_account_state_backup(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    identity: &StrategyIdentity,
+    run_id: &str,
+    account_version: i64,
+    event_type: &str,
+    state_json: serde_json::Value,
+    ts_ms: i64,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO account_state_backups \
+         (tenant_id, account_id, run_id, version_code, strategy_build_id, config_hash, \
+          account_version, event_type, payload_json, created_at_ms) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
+         ON CONFLICT (tenant_id, account_id, account_version) DO NOTHING",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(run_id)
+    .bind(&identity.version_code)
+    .bind(&identity.strategy_build_id)
+    .bind(&identity.config_hash)
+    .bind(account_version)
+    .bind(event_type)
+    .bind(Json(state_json))
+    .bind(ts_ms)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query(
+        "DELETE FROM account_state_backups WHERE id IN (\
+           SELECT id FROM account_state_backups \
+           WHERE tenant_id = $1 AND account_id = $2 \
+           ORDER BY created_at_ms DESC, id DESC OFFSET 100\
+         )",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -1438,6 +1730,27 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             open_positions_count BIGINT NOT NULL,
             UNIQUE (run_id, timestamp_ms)
         )",
+        "CREATE TABLE IF NOT EXISTS equity_candles (
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            range_key TEXT NOT NULL,
+            bucket_start_ms BIGINT NOT NULL,
+            bucket_size_ms BIGINT NOT NULL,
+            open_equity NUMERIC NOT NULL,
+            high_equity NUMERIC NOT NULL,
+            low_equity NUMERIC NOT NULL,
+            close_equity NUMERIC NOT NULL,
+            realized_pnl NUMERIC NOT NULL,
+            unrealized_pnl NUMERIC NOT NULL,
+            open_positions_count BIGINT NOT NULL,
+            updated_at_ms BIGINT NOT NULL,
+            PRIMARY KEY (tenant_id, account_id, run_id, range_key, bucket_start_ms)
+        )",
+        "CREATE INDEX IF NOT EXISTS equity_candles_lookup_idx ON equity_candles
+            (tenant_id, account_id, version_code, strategy_build_id, run_id, range_key, bucket_start_ms)",
         "CREATE TABLE IF NOT EXISTS ledger_entries (
             id BIGSERIAL PRIMARY KEY,
             tenant_id TEXT NOT NULL,
@@ -1486,5 +1799,33 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
         "ALTER TABLE app_state_snapshots ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'paper'",
         "CREATE INDEX IF NOT EXISTS app_state_tenant_identity_idx ON app_state_snapshots
             (tenant_id, account_id, version_code, strategy_build_id, config_hash, id DESC)",
+        "CREATE TABLE IF NOT EXISTS account_state_current (
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            config_hash TEXT NOT NULL,
+            account_version BIGINT NOT NULL,
+            payload_json JSONB NOT NULL,
+            updated_at_ms BIGINT NOT NULL,
+            PRIMARY KEY (tenant_id, account_id)
+        )",
+        "CREATE TABLE IF NOT EXISTS account_state_backups (
+            id BIGSERIAL PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            config_hash TEXT NOT NULL,
+            account_version BIGINT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json JSONB NOT NULL,
+            created_at_ms BIGINT NOT NULL,
+            UNIQUE (tenant_id, account_id, account_version)
+        )",
+        "CREATE INDEX IF NOT EXISTS account_state_backups_lookup_idx ON account_state_backups
+            (tenant_id, account_id, created_at_ms DESC)",
     ]
 }

@@ -155,6 +155,8 @@ pub struct PaperAccountSnapshot {
     pub available_balance: f64,
     #[serde(default)]
     pub equity_history: Vec<PaperEquityPoint>,
+    #[serde(default)]
+    pub equity_curves: PaperEquityCurves,
     pub positions: Vec<PaperPositionSnapshot>,
     pub position_history: Vec<PaperClosedPositionSnapshot>,
     pub trades: Vec<PaperTrade>,
@@ -169,7 +171,61 @@ pub struct PaperEquityPoint {
     pub open_positions_count: usize,
 }
 
-pub const MAX_EQUITY_HISTORY_POINTS: usize = 2_048;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PaperEquityCandle {
+    pub bucket_start_ms: i64,
+    pub bucket_size_ms: i64,
+    pub open_equity: f64,
+    pub high_equity: f64,
+    pub low_equity: f64,
+    pub close_equity: f64,
+    pub realized_pnl: f64,
+    pub unrealized_pnl: f64,
+    pub open_positions_count: usize,
+}
+
+pub type PaperEquityCurves = BTreeMap<String, Vec<PaperEquityCandle>>;
+
+#[derive(Debug, Clone, Copy)]
+pub struct EquityBucketSpec {
+    pub range: &'static str,
+    pub bucket_size_ms: i64,
+    pub window_ms: Option<i64>,
+    pub retention_ms: Option<i64>,
+}
+
+pub const EQUITY_BUCKET_SPECS: [EquityBucketSpec; 5] = [
+    EquityBucketSpec {
+        range: "1d",
+        bucket_size_ms: 10 * 60 * 1_000,
+        window_ms: Some(24 * 60 * 60 * 1_000),
+        retention_ms: Some(30 * 24 * 60 * 60 * 1_000),
+    },
+    EquityBucketSpec {
+        range: "7d",
+        bucket_size_ms: 60 * 60 * 1_000,
+        window_ms: Some(7 * 24 * 60 * 60 * 1_000),
+        retention_ms: Some(365 * 24 * 60 * 60 * 1_000),
+    },
+    EquityBucketSpec {
+        range: "30d",
+        bucket_size_ms: 4 * 60 * 60 * 1_000,
+        window_ms: Some(30 * 24 * 60 * 60 * 1_000),
+        retention_ms: Some(365 * 24 * 60 * 60 * 1_000),
+    },
+    EquityBucketSpec {
+        range: "90d",
+        bucket_size_ms: 12 * 60 * 60 * 1_000,
+        window_ms: Some(90 * 24 * 60 * 60 * 1_000),
+        retention_ms: Some(365 * 24 * 60 * 60 * 1_000),
+    },
+    EquityBucketSpec {
+        range: "all",
+        bucket_size_ms: 24 * 60 * 60 * 1_000,
+        window_ms: None,
+        retention_ms: None,
+    },
+];
 
 impl PaperEquityPoint {
     pub fn from_snapshot(timestamp_ms: i64, snapshot: &PaperAccountSnapshot) -> Self {
@@ -183,26 +239,58 @@ impl PaperEquityPoint {
     }
 }
 
-pub fn append_equity_point(history: &mut Vec<PaperEquityPoint>, point: PaperEquityPoint) {
-    match history.binary_search_by_key(&point.timestamp_ms, |item| item.timestamp_ms) {
-        Ok(index) => history[index] = point,
-        Err(index) => history.insert(index, point),
+pub fn append_equity_candles(curves: &mut PaperEquityCurves, point: PaperEquityPoint) {
+    for spec in EQUITY_BUCKET_SPECS {
+        let bucket_start_ms =
+            point.timestamp_ms.div_euclid(spec.bucket_size_ms) * spec.bucket_size_ms;
+        let candles = curves.entry(spec.range.to_string()).or_default();
+        match candles.binary_search_by_key(&bucket_start_ms, |candle| candle.bucket_start_ms) {
+            Ok(index) => update_equity_candle(&mut candles[index], &point),
+            Err(index) => candles.insert(
+                index,
+                PaperEquityCandle {
+                    bucket_start_ms,
+                    bucket_size_ms: spec.bucket_size_ms,
+                    open_equity: point.equity,
+                    high_equity: point.equity,
+                    low_equity: point.equity,
+                    close_equity: point.equity,
+                    realized_pnl: point.realized_pnl,
+                    unrealized_pnl: point.unrealized_pnl,
+                    open_positions_count: point.open_positions_count,
+                },
+            ),
+        }
+        if let Some(window_ms) = spec.window_ms {
+            let cutoff_ms = point.timestamp_ms - window_ms;
+            candles.retain(|candle| candle.bucket_start_ms + candle.bucket_size_ms > cutoff_ms);
+        }
     }
-    compact_equity_history(history);
 }
 
-pub fn compact_equity_history(history: &mut Vec<PaperEquityPoint>) {
-    if history.len() <= MAX_EQUITY_HISTORY_POINTS {
-        return;
+pub fn trim_equity_curves_for_display(curves: &mut PaperEquityCurves) {
+    for spec in EQUITY_BUCKET_SPECS {
+        let Some(window_ms) = spec.window_ms else {
+            continue;
+        };
+        let Some(candles) = curves.get_mut(spec.range) else {
+            continue;
+        };
+        let Some(latest) = candles.last() else {
+            continue;
+        };
+        let cutoff_ms = latest.bucket_start_ms + latest.bucket_size_ms - window_ms;
+        candles.retain(|candle| candle.bucket_start_ms + candle.bucket_size_ms > cutoff_ms);
     }
-    let last_index = history.len() - 1;
-    let sampled = (0..MAX_EQUITY_HISTORY_POINTS)
-        .map(|index| {
-            let source_index = index * last_index / (MAX_EQUITY_HISTORY_POINTS - 1);
-            history[source_index].clone()
-        })
-        .collect();
-    *history = sampled;
+}
+
+fn update_equity_candle(candle: &mut PaperEquityCandle, point: &PaperEquityPoint) {
+    candle.high_equity = candle.high_equity.max(point.equity);
+    candle.low_equity = candle.low_equity.min(point.equity);
+    candle.close_equity = point.equity;
+    candle.realized_pnl = point.realized_pnl;
+    candle.unrealized_pnl = point.unrealized_pnl;
+    candle.open_positions_count = point.open_positions_count;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -549,6 +637,7 @@ impl PaperState {
             used_margin,
             available_balance,
             equity_history: Vec::new(),
+            equity_curves: PaperEquityCurves::new(),
             positions,
             position_history,
             trades: self.trades.iter().rev().cloned().collect(),

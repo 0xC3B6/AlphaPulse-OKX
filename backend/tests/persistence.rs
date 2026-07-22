@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use alphapulse_okx_backend::{
     config::AppConfig,
-    paper::{PaperOrderRequest, PaperSide, PaperState},
+    paper::{
+        append_equity_candles, PaperEquityPoint, PaperOrderRequest, PaperSide, PaperState,
+        EQUITY_BUCKET_SPECS,
+    },
     persistence::{postgres_schema_statements, PersistenceHealthSnapshot, PersistenceStatus},
 };
 
@@ -45,12 +48,82 @@ fn schema_persists_strategy_identity_and_protective_levels() {
         "tenant_id",
         "account_id",
         "equity_snapshots",
+        "equity_candles",
         "event_log",
         "app_state_snapshots",
+        "account_state_current",
+        "account_state_backups",
     ] {
         assert!(schema.contains(required), "missing {required}");
     }
     assert!(!schema.contains("CREATE TABLE IF NOT EXISTS risk_guard_events"));
+}
+
+#[test]
+fn more_than_2048_minute_snapshots_roll_up_without_a_recent_gap() {
+    let mut curves = Default::default();
+    let start_ms = 1_800_000_000_000_i64;
+    for minute in 0..3_000_i64 {
+        let equity = 10_000.0 + minute as f64;
+        append_equity_candles(
+            &mut curves,
+            PaperEquityPoint {
+                timestamp_ms: start_ms + minute * 60_000,
+                equity,
+                realized_pnl: minute as f64,
+                unrealized_pnl: 0.5,
+                open_positions_count: 5,
+            },
+        );
+    }
+
+    let one_day = curves.get("1d").expect("1D equity curve");
+    assert!(one_day.len() <= 145);
+    assert!(one_day
+        .windows(2)
+        .all(|window| window[1].bucket_start_ms - window[0].bucket_start_ms == 10 * 60_000));
+    let latest = one_day.last().unwrap();
+    assert_eq!(latest.open_equity, 12_990.0);
+    assert_eq!(latest.high_equity, 12_999.0);
+    assert_eq!(latest.low_equity, 12_990.0);
+    assert_eq!(latest.close_equity, 12_999.0);
+}
+
+#[test]
+fn equity_bucket_granularity_and_retention_match_the_product_contract() {
+    let day_ms = 24 * 60 * 60 * 1_000;
+    let specs = EQUITY_BUCKET_SPECS
+        .iter()
+        .map(|spec| {
+            (
+                spec.range,
+                spec.bucket_size_ms,
+                spec.window_ms,
+                spec.retention_ms,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        specs,
+        vec![
+            ("1d", 10 * 60_000, Some(day_ms), Some(30 * day_ms)),
+            ("7d", 60 * 60_000, Some(7 * day_ms), Some(365 * day_ms)),
+            (
+                "30d",
+                4 * 60 * 60_000,
+                Some(30 * day_ms),
+                Some(365 * day_ms),
+            ),
+            (
+                "90d",
+                12 * 60 * 60_000,
+                Some(90 * day_ms),
+                Some(365 * day_ms),
+            ),
+            ("all", day_ms, None, None),
+        ]
+    );
 }
 
 #[test]

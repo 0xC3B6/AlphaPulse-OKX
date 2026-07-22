@@ -91,6 +91,9 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
                 state.strategy_identity() == &identity,
                 "persisted paper checkpoint identity does not match restored v0.1.3"
             );
+            persistence
+                .persist_recovery_point(&state, "service_start", Utc::now().timestamp_millis())
+                .await?;
             state
         }
         None => {
@@ -105,13 +108,13 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
             state
         }
     };
-    let equity_history = persistence
-        .load_equity_history(&identity, paper.run_id())
+    let equity_curves = persistence
+        .load_equity_curves(&identity, paper.run_id())
         .await?;
-    Ok(RadarState::with_persistence_and_equity_history(
+    Ok(RadarState::with_persistence_and_equity_curves(
         persistence,
         paper,
-        equity_history,
+        equity_curves,
     ))
 }
 

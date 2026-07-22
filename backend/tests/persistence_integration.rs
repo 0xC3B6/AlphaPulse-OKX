@@ -58,14 +58,19 @@ async fn two_tenants_can_persist_the_same_strategy_run_without_key_collisions() 
             .await
             .unwrap();
     assert_eq!(run_count, 2);
-    let snapshot_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM app_state_snapshots WHERE tenant_id = ANY($1) AND account_id = 'paper'",
+    let current_state_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_current WHERE tenant_id = ANY($1) AND account_id = 'paper'",
     )
     .bind(vec!["tenant-left", "tenant-right"])
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(snapshot_count, 2);
+    assert_eq!(current_state_count, 2);
+    let legacy_snapshot_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM app_state_snapshots")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(legacy_snapshot_count, 0);
 }
 
 #[tokio::test]
@@ -143,6 +148,131 @@ async fn transition_locks_account_advances_version_and_writes_ledger() {
     .await
     .unwrap();
     assert_eq!(logged_version, version_after);
+    let backup: (i64, String) = sqlx::query_as(
+        "SELECT account_version, event_type FROM account_state_backups \
+         WHERE tenant_id = $1 AND account_id = $2 ORDER BY id DESC LIMIT 1",
+    )
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(backup, (version_after, "paper_open".to_string()));
+}
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn scan_updates_one_current_state_and_equity_buckets_without_audit_noise() {
+    let config = test_config(true);
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let paper = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
+    let snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
+
+    for committed_at_ms in [60_000, 120_000, 180_000] {
+        persistence
+            .persist_transition(&PersistedTransition {
+                event_type: "scan_checkpoint".to_string(),
+                intent: None,
+                state: paper.clone(),
+                snapshot: snapshot.clone(),
+                committed_at_ms,
+            })
+            .await
+            .unwrap();
+    }
+
+    let current_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_current WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(current_count, 1);
+    let candle_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM equity_candles WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(candle_count, 5);
+    let event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(event_count, 0);
+    let backup_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_backups WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(backup_count, 0);
+    let legacy_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM equity_snapshots")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(legacy_count, 0);
+}
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn critical_recovery_points_keep_only_the_latest_one_hundred_backups() {
+    let config = test_config(true);
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let paper = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
+    let snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
+
+    for committed_at_ms in 1..=105 {
+        persistence
+            .persist_checkpoint(&paper, &snapshot, committed_at_ms)
+            .await
+            .unwrap();
+    }
+
+    let backup_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_backups WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(backup_count, 100);
+    let current_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_current WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(current_count, 1);
 }
 
 #[tokio::test]
@@ -204,17 +334,46 @@ async fn restart_restores_balance_positions_protection_history_and_ids() {
         .persist_checkpoint(&original, &original_snapshot, 100)
         .await
         .unwrap();
-    persistence.clear_cache().await.unwrap();
-
-    let equity_history = persistence
-        .load_equity_history(&identity, original.run_id())
+    persistence
+        .persist_recovery_point(&original, "service_start", 101)
         .await
         .unwrap();
-    assert_eq!(equity_history.len(), 1);
-    assert_eq!(equity_history[0].timestamp_ms, 100);
-    assert_persisted_decimal_eq(equity_history[0].equity, original_snapshot.equity);
+    persistence.clear_cache().await.unwrap();
+
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let recovery_event: String = sqlx::query_scalar(
+        "SELECT event_type FROM account_state_backups WHERE tenant_id = $1 AND account_id = $2 \
+         ORDER BY id DESC LIMIT 1",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(recovery_event, "service_start");
+    let candle_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM equity_candles WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(candle_count, 5);
+
+    let equity_curves = persistence
+        .load_equity_curves(&identity, original.run_id())
+        .await
+        .unwrap();
+    assert_eq!(equity_curves["1d"].len(), 1);
     assert_persisted_decimal_eq(
-        equity_history[0].unrealized_pnl,
+        equity_curves["1d"][0].close_equity,
+        original_snapshot.equity,
+    );
+    assert_persisted_decimal_eq(
+        equity_curves["1d"][0].unrealized_pnl,
         original_snapshot.unrealized_pnl,
     );
 
@@ -241,7 +400,7 @@ async fn restart_restores_balance_positions_protection_history_and_ids() {
 
 #[tokio::test]
 #[ignore = "requires docker compose PostgreSQL and Redis"]
-async fn default_account_loads_legacy_equity_history_after_scoping_upgrade() {
+async fn default_account_migrates_legacy_equity_snapshots_after_scoping_upgrade() {
     let config = test_config(false);
     let database_url = config.database_url.clone().unwrap();
     let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
@@ -253,16 +412,26 @@ async fn default_account_loads_legacy_equity_history_after_scoping_upgrade() {
 
     let identity = StrategyIdentity::restored_v3();
     let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+    let bucket_start_ms = chrono::Utc::now()
+        .timestamp_millis()
+        .div_euclid(10 * 60_000)
+        * 10
+        * 60_000;
+    let legacy_open_ms = bucket_start_ms + 100;
+    let legacy_close_ms = bucket_start_ms + 200;
+    let current_state_ms = bucket_start_ms + 300;
     sqlx::query(
         "INSERT INTO equity_snapshots \
          (run_id, version_code, strategy_build_id, timestamp_ms, equity, realized_pnl, \
           unrealized_pnl, drawdown, open_positions_count) \
-         VALUES ($1, $2, $3, 100, 9990, 0, -10, 10, 1), \
-                ($1, $2, $3, 200, 9991, 0, -9, 9, 1)",
+         VALUES ($1, $2, $3, $4, 9990, 0, -10, 10, 1), \
+                ($1, $2, $3, $5, 9991, 0, -9, 9, 1)",
     )
     .bind(INITIAL_RUN_ID)
     .bind(&identity.version_code)
     .bind(&identity.strategy_build_id)
+    .bind(legacy_open_ms)
+    .bind(legacy_close_ms)
     .execute(&pool)
     .await
     .unwrap();
@@ -270,23 +439,17 @@ async fn default_account_loads_legacy_equity_history_after_scoping_upgrade() {
     let paper = PaperState::fresh_restored_v3(identity.clone());
     let scoped_snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
     persistence
-        .persist_checkpoint(&paper, &scoped_snapshot, 200)
+        .persist_checkpoint(&paper, &scoped_snapshot, current_state_ms)
         .await
         .unwrap();
 
-    let history = persistence
-        .load_equity_history(&identity, paper.run_id())
+    let curves = persistence
+        .load_equity_curves(&identity, paper.run_id())
         .await
         .unwrap();
-    assert_eq!(
-        history
-            .iter()
-            .map(|point| point.timestamp_ms)
-            .collect::<Vec<_>>(),
-        vec![100, 200]
-    );
-    assert_persisted_decimal_eq(history[0].equity, 9_990.0);
-    assert_persisted_decimal_eq(history[1].equity, scoped_snapshot.equity);
+    assert_eq!(curves["1d"].len(), 1);
+    assert_persisted_decimal_eq(curves["1d"][0].open_equity, 9_990.0);
+    assert_persisted_decimal_eq(curves["1d"][0].close_equity, scoped_snapshot.equity);
 
     let isolated_config = AppConfig::from_env_pairs([
         ("ALPHAPULSE_DATABASE_URL", database_url.as_str()),
@@ -297,11 +460,11 @@ async fn default_account_loads_legacy_equity_history_after_scoping_upgrade() {
     let isolated = PersistenceLayer::connect_required(&isolated_config)
         .await
         .unwrap();
-    let isolated_history = isolated
-        .load_equity_history(&identity, paper.run_id())
+    let isolated_curves = isolated
+        .load_equity_curves(&identity, paper.run_id())
         .await
         .unwrap();
-    assert!(isolated_history.is_empty());
+    assert!(isolated_curves.is_empty());
 }
 
 #[tokio::test]
@@ -357,7 +520,14 @@ async fn failed_fill_rolls_back_intent_position_and_checkpoint() {
         .execute(&pool)
         .await
         .unwrap();
-    for table in ["order_intents", "fills", "positions", "app_state_snapshots"] {
+    for table in [
+        "order_intents",
+        "fills",
+        "positions",
+        "account_state_current",
+        "account_state_backups",
+        "equity_candles",
+    ] {
         let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
             .fetch_one(&pool)
             .await

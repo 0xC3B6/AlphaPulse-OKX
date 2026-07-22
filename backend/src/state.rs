@@ -13,8 +13,9 @@ use crate::{
     },
     domain::SymbolSnapshot,
     paper::{
-        append_equity_point, PaperAccountSnapshot, PaperEquityPoint, PaperError, PaperOrderRequest,
-        PaperSide, PaperState, SCALPING_OPTIMIZATION_SOURCE,
+        append_equity_candles, PaperAccountSnapshot, PaperEquityCandle, PaperEquityCurves,
+        PaperEquityPoint, PaperError, PaperOrderRequest, PaperSide, PaperState,
+        SCALPING_OPTIMIZATION_SOURCE,
     },
     persistence::{
         PersistedOrderIntent, PersistedTransition, PersistenceHealthSnapshot, PersistenceLayer,
@@ -80,7 +81,7 @@ struct RadarStateInner {
     last_scan_at_ms: Option<i64>,
     websocket_connected: bool,
     paper: PaperState,
-    equity_history: Vec<PaperEquityPoint>,
+    equity_curves: PaperEquityCurves,
     persistence: PersistenceHealthSnapshot,
     risk: AccountRiskState,
     risk_event_sequence: u64,
@@ -90,6 +91,16 @@ struct RadarStateInner {
 struct LatestPrice {
     price: f64,
     updated_at_ms: i64,
+}
+
+fn equity_candle_close_point(candle: &PaperEquityCandle) -> PaperEquityPoint {
+    PaperEquityPoint {
+        timestamp_ms: candle.bucket_start_ms,
+        equity: candle.close_equity,
+        realized_pnl: candle.realized_pnl,
+        unrealized_pnl: candle.unrealized_pnl,
+        open_positions_count: candle.open_positions_count,
+    }
 }
 
 impl RadarStateInner {
@@ -130,25 +141,25 @@ impl RadarStateInner {
     fn paper_snapshot(&self) -> PaperAccountSnapshot {
         let mut snapshot = self.paper.snapshot(&self.price_map());
         snapshot.persistence = self.persistence.clone();
-        let mut equity_history = self.equity_history.clone();
+        let mut equity_curves = self.equity_curves.clone();
         if let Some(timestamp_ms) = self
             .latest_prices
             .values()
             .map(|latest| latest.updated_at_ms)
             .max()
-            .filter(|timestamp_ms| {
-                equity_history
-                    .last()
-                    .map(|point| *timestamp_ms >= point.timestamp_ms)
-                    .unwrap_or(true)
-            })
         {
-            append_equity_point(
-                &mut equity_history,
+            append_equity_candles(
+                &mut equity_curves,
                 PaperEquityPoint::from_snapshot(timestamp_ms, &snapshot),
             );
         }
-        snapshot.equity_history = equity_history;
+        snapshot.equity_history = equity_curves
+            .get("all")
+            .into_iter()
+            .flatten()
+            .map(equity_candle_close_point)
+            .collect();
+        snapshot.equity_curves = equity_curves;
         snapshot
     }
 
@@ -181,27 +192,27 @@ impl RadarStateInner {
 
 impl Default for RadarState {
     fn default() -> Self {
-        Self::new(None, PaperState::default(), Vec::new())
+        Self::new(None, PaperState::default(), PaperEquityCurves::new())
     }
 }
 
 impl RadarState {
     pub fn with_persistence(persistence: PersistenceLayer, paper: PaperState) -> Self {
-        Self::new(Some(persistence), paper, Vec::new())
+        Self::new(Some(persistence), paper, PaperEquityCurves::new())
     }
 
-    pub fn with_persistence_and_equity_history(
+    pub fn with_persistence_and_equity_curves(
         persistence: PersistenceLayer,
         paper: PaperState,
-        equity_history: Vec<PaperEquityPoint>,
+        equity_curves: PaperEquityCurves,
     ) -> Self {
-        Self::new(Some(persistence), paper, equity_history)
+        Self::new(Some(persistence), paper, equity_curves)
     }
 
     fn new(
         persistence: Option<PersistenceLayer>,
         paper: PaperState,
-        equity_history: Vec<PaperEquityPoint>,
+        equity_curves: PaperEquityCurves,
     ) -> Self {
         let (events, _) = broadcast::channel(256);
         let has_positions = !paper.open_position_inst_ids().is_empty();
@@ -212,7 +223,7 @@ impl RadarState {
         Self {
             inner: Arc::new(RwLock::new(RadarStateInner {
                 paper,
-                equity_history,
+                equity_curves,
                 symbols: BTreeMap::new(),
                 latest_prices: BTreeMap::new(),
                 last_scan_at_ms: None,
@@ -670,14 +681,14 @@ impl RadarState {
             self.pause_persistence(error).await;
             return Err(PaperTransitionError::persistence(error));
         }
-        let equity_history = persistence
-            .load_equity_history(&expected, restored.run_id())
+        let equity_curves = persistence
+            .load_equity_curves(&expected, restored.run_id())
             .await
             .map_err(PaperTransitionError::persistence)?;
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.paper = restored;
-            inner.equity_history = equity_history;
+            inner.equity_curves = equity_curves;
             inner.persistence = PersistenceHealthSnapshot::healthy(Utc::now().timestamp_millis());
             inner.dashboard()
         };
@@ -715,7 +726,7 @@ impl RadarState {
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.last_scan_at_ms = Some(ts_ms);
-            append_equity_point(&mut inner.equity_history, equity_point);
+            append_equity_candles(&mut inner.equity_curves, equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
             }
@@ -926,7 +937,7 @@ impl RadarState {
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.paper = candidate;
-            append_equity_point(&mut inner.equity_history, equity_point);
+            append_equity_candles(&mut inner.equity_curves, equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
             }
@@ -1039,7 +1050,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn dashboard_exposes_equity_history_without_closed_positions() {
+    async fn dashboard_exposes_equity_curves_without_closed_positions() {
         let point = PaperEquityPoint {
             timestamp_ms: 1_000,
             equity: 10_004.0,
@@ -1047,11 +1058,14 @@ mod tests {
             unrealized_pnl: 4.0,
             open_positions_count: 1,
         };
-        let state = RadarState::new(None, PaperState::default(), vec![point.clone()]);
+        let mut curves = PaperEquityCurves::new();
+        append_equity_candles(&mut curves, point);
+        let state = RadarState::new(None, PaperState::default(), curves);
 
         let paper = state.paper_snapshot().await;
 
         assert_eq!(paper.closed_position_count, 0);
-        assert_eq!(paper.equity_history, vec![point]);
+        assert_eq!(paper.equity_curves["1d"].len(), 1);
+        assert_eq!(paper.equity_curves["1d"][0].close_equity, 10_004.0);
     }
 }
