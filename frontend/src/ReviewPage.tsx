@@ -1976,11 +1976,9 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
-  const tagLabel = strategyPositionTags(position)
-    .map((tag) => tag.label.trim())
-    .find((label) => label.length > 0);
-  if (tagLabel !== undefined) {
-    return tagLabel;
+  const primarySignal = position.primary_signal?.trim();
+  if (primarySignal) {
+    return formatPrimarySignalLabel(primarySignal);
   }
 
   const reason = `${position.reason} ${position.close_reason}`.toLowerCase();
@@ -2009,6 +2007,17 @@ function primarySignalLabel(position: PaperClosedPositionSnapshot): string {
     return position.side === "short" ? "Trend Short" : "Trend Long";
   }
   return "Scalping Signal";
+}
+
+function formatPrimarySignalLabel(primarySignal: string): string {
+  if (primarySignal === "multiday_reversal_short") {
+    return "Multiday Reversal";
+  }
+  return primarySignal
+    .split("_")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function signalConfidence(
