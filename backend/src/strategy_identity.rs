@@ -38,6 +38,9 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.version_code, STRATEGY_VERSION_CODE);
         assert_eq!(first.strategy_build_id, STRATEGY_BUILD_ID);
-        assert_eq!(first.config_hash.len(), 64);
+        assert_eq!(
+            first.config_hash,
+            "efc9cef8f04c0bdf7bcc67ccc8d2132ee5fe96e87bb99925f5ce76c7eb6bf179"
+        );
     }
 }

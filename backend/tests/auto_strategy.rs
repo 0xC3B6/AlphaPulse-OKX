@@ -221,6 +221,14 @@ fn multiday_up_extension_short_is_smaller_probe_with_tags() {
         } => {
             assert_eq!(order.side, PaperSide::Short);
             assert!((order.margin - 180.0).abs() < f64::EPSILON);
+            assert_eq!(order.leverage, 20.0);
+            assert_eq!(order.stop_loss, Some(0.25375));
+            assert_eq!(order.take_profit, Some(0.245));
+            assert_eq!(order.expire_at_ms, None);
+            assert_eq!(
+                order.primary_signal.as_deref(),
+                Some("multiday_reversal_short")
+            );
             assert!(reason.contains("multiday extension reversal short 90"));
             assert!(tags
                 .iter()
