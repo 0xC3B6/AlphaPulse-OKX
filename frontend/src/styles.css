@@ -2839,6 +2839,50 @@ input {
   outline-offset: -2px;
 }
 
+.review-strategy-table .strategy-parent-row {
+  cursor: default;
+}
+
+.review-strategy-table .strategy-parent-row td {
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%);
+  padding-block: 7px;
+}
+
+.strategy-parent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.strategy-parent-chevron {
+  width: 12px;
+  color: var(--text-muted);
+}
+
+.strategy-variant-count,
+.strategy-experiment-key {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.strategy-variant-row td:first-child {
+  padding-left: 32px;
+}
+
+.strategy-variant-name,
+.strategy-experiment-key {
+  display: block;
+}
+
+.strategy-variant-name {
+  color: var(--text-primary);
+}
+
 .strategy-version-pill,
 .strategy-status-pill,
 .confidence-pill {

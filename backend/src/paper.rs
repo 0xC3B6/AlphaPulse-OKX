@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::SymbolSnapshot;
 use crate::persistence::PersistenceHealthSnapshot;
-use crate::strategy_identity::{StrategyIdentity, INITIAL_RUN_ID};
+use crate::strategy_identity::{split_experiment_version, StrategyIdentity, INITIAL_RUN_ID};
 use crate::time_regime::TradeTag;
 
 const DEFAULT_INITIAL_BALANCE: f64 = 10_000.0;
@@ -128,6 +128,12 @@ pub struct PaperAccountSnapshot {
     pub current_strategy_name: String,
     pub current_strategy_version: String,
     pub strategy_version: String,
+    #[serde(default)]
+    pub parent_version: String,
+    #[serde(default)]
+    pub variant_id: String,
+    #[serde(default)]
+    pub experiment_key: String,
     pub strategy_build_id: String,
     pub config_hash: String,
     pub run_id: String,
@@ -297,6 +303,12 @@ fn update_equity_candle(candle: &mut PaperEquityCandle, point: &PaperEquityPoint
 pub struct PaperStrategyStats {
     pub strategy_name: String,
     pub strategy_version: String,
+    #[serde(default)]
+    pub parent_version: String,
+    #[serde(default)]
+    pub variant_id: String,
+    #[serde(default)]
+    pub experiment_key: String,
     pub total_trades: usize,
     pub closed_position_count: usize,
     pub winning_closed_position_count: usize,
@@ -603,6 +615,9 @@ impl PaperState {
             current_strategy_name: SCALPING_OPTIMIZATION_NAME.to_string(),
             current_strategy_version: SCALPING_OPTIMIZATION_VERSION.to_string(),
             strategy_version: self.strategy_identity.version_code.clone(),
+            parent_version: self.strategy_identity.parent_version.clone(),
+            variant_id: self.strategy_identity.variant_id.clone(),
+            experiment_key: self.strategy_identity.experiment_key(),
             strategy_build_id: self.strategy_identity.strategy_build_id.clone(),
             config_hash: self.strategy_identity.config_hash.clone(),
             run_id: self.run_id.clone(),
@@ -630,7 +645,11 @@ impl PaperState {
                 .filter(|position| position.realized_pnl < 0.0)
                 .map(|position| position.realized_pnl)
                 .min_by(f64::total_cmp),
-            strategy_stats: strategy_stats(&position_history, self.trades.iter()),
+            strategy_stats: strategy_stats(
+                &position_history,
+                self.trades.iter(),
+                &self.strategy_identity,
+            ),
             realized_pnl: self.realized_pnl,
             unrealized_pnl,
             equity,
@@ -718,7 +737,7 @@ impl PaperState {
         let qty = request.margin * request.leverage / execution_price;
         let notional = qty * execution_price;
         let strategy_name = strategy_name_for_source(source);
-        let strategy_version = strategy_version_for_source(source);
+        let strategy_version = strategy_version_for_source(source, &self.strategy_identity);
         let primary_signal = request.primary_signal.clone().unwrap_or_default();
         self.realized_pnl -= fee;
 
@@ -864,7 +883,7 @@ impl PaperState {
             action: PaperTradeAction::Close,
             source: source.to_string(),
             strategy_name: strategy_name_for_source(source),
-            strategy_version: strategy_version_for_source(source),
+            strategy_version: strategy_version_for_source(source, &self.strategy_identity),
             primary_signal: position.primary_signal.clone(),
             reason: reason.to_string(),
             price: execution_price,
@@ -1027,6 +1046,7 @@ fn profit_factor(gross_profit: f64, gross_loss: f64) -> Option<f64> {
 fn strategy_stats<'a>(
     position_history: &[PaperClosedPositionSnapshot],
     trades: impl Iterator<Item = &'a PaperTrade>,
+    active_identity: &StrategyIdentity,
 ) -> Vec<PaperStrategyStats> {
     let mut open_trades = BTreeMap::<(String, String), Vec<&PaperTrade>>::new();
     for trade in trades.filter(|trade| trade.action == PaperTradeAction::Open) {
@@ -1057,6 +1077,15 @@ fn strategy_stats<'a>(
     open_trades
         .into_iter()
         .map(|((strategy_name, strategy_version), trades)| {
+            let (parent_version, variant_id) = if strategy_version == active_identity.version_code {
+                (
+                    active_identity.parent_version.clone(),
+                    active_identity.variant_id.clone(),
+                )
+            } else {
+                split_experiment_version(&strategy_version)
+            };
+            let experiment_key = format!("{parent_version}/{variant_id}");
             let positions = closed_by_strategy
                 .get(&(strategy_name.clone(), strategy_version.clone()))
                 .cloned()
@@ -1088,6 +1117,9 @@ fn strategy_stats<'a>(
             PaperStrategyStats {
                 strategy_name,
                 strategy_version,
+                parent_version,
+                variant_id,
+                experiment_key,
                 total_trades: trades.len(),
                 closed_position_count: positions.len(),
                 winning_closed_position_count: winning,
@@ -1130,9 +1162,9 @@ fn strategy_name_for_source(source: &str) -> String {
     }
 }
 
-fn strategy_version_for_source(source: &str) -> String {
+fn strategy_version_for_source(source: &str, identity: &StrategyIdentity) -> String {
     if matches!(source, SCALPING_OPTIMIZATION_SOURCE | "auto" | "auto_v1") {
-        SCALPING_OPTIMIZATION_VERSION.to_string()
+        identity.version_code.clone()
     } else {
         source.to_string()
     }
@@ -1293,12 +1325,65 @@ mod tests {
             "ETH-USDT-SWAP".to_string(),
             neutral_symbol("ETH-USDT-SWAP", 985.0),
         )]));
+        assert_eq!(snapshot.parent_version, "v0.1.3");
+        assert_eq!(snapshot.variant_id, "baseline");
+        assert_eq!(snapshot.experiment_key, "v0.1.3/baseline");
+        assert_eq!(snapshot.strategy_stats[0].parent_version, "v0.1.3");
+        assert_eq!(snapshot.strategy_stats[0].variant_id, "baseline");
         assert_eq!(snapshot.position_history[0].strategy_version, "v0.1.3");
         assert_eq!(snapshot.position_history[0].primary_signal, "trend_long");
         assert_eq!(snapshot.position_history[0].stop_loss, Some(985.0));
         assert!(snapshot.position_history[0]
             .close_reason
             .contains("stop loss"));
+    }
+
+    #[test]
+    fn research_variant_identity_flows_into_trade_and_strategy_stats() {
+        let identity = StrategyIdentity::research_variant(
+            "v0.1.3",
+            "signal_context_guard",
+            "shadow-build",
+            "shadow-config",
+        );
+        let mut state = PaperState::fresh_restored_v3(identity);
+        state
+            .open(
+                PaperOrderRequest::automatic(
+                    "ETH-USDT-SWAP",
+                    PaperSide::Long,
+                    300.0,
+                    20.0,
+                    985.0,
+                    1_020.0,
+                    None,
+                    "trend_long",
+                    "research variant fixture",
+                    vec!["long".to_string()],
+                ),
+                1_000.0,
+                10_000.0,
+                1,
+            )
+            .unwrap();
+
+        let snapshot = state.snapshot(&prices("ETH-USDT-SWAP", 1_000.0));
+        assert_eq!(snapshot.strategy_version, "v0.1.3/signal_context_guard");
+        assert_eq!(snapshot.parent_version, "v0.1.3");
+        assert_eq!(snapshot.variant_id, "signal_context_guard");
+        assert_eq!(
+            snapshot.positions[0].strategy_version,
+            "v0.1.3/signal_context_guard"
+        );
+        assert_eq!(
+            snapshot.trades[0].strategy_version,
+            "v0.1.3/signal_context_guard"
+        );
+        assert_eq!(snapshot.strategy_stats[0].parent_version, "v0.1.3");
+        assert_eq!(
+            snapshot.strategy_stats[0].variant_id,
+            "signal_context_guard"
+        );
     }
 
     #[test]

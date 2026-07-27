@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -225,6 +225,7 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
         <section className="detail-section review-strategy-card">
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
+            activeVersion={paper.strategy_version}
             copy={copy}
             initialBalance={paper.initial_balance}
             onSelectVersion={setSelectedStrategyVersion}
@@ -375,6 +376,7 @@ function OverviewSection({
         <section className="detail-section review-strategy-card">
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
+            activeVersion={paper.strategy_version}
             copy={copy}
             initialBalance={paper.initial_balance}
             onSelectVersion={onSelectStrategyVersion}
@@ -450,23 +452,27 @@ function AccountEquityCurve({
 }
 
 function StrategyStatsTable({
+  activeVersion,
   copy,
   initialBalance,
   onSelectVersion,
   selectedVersion,
   stats,
 }: {
+  activeVersion: string;
   copy: Copy;
   initialBalance: number;
   onSelectVersion: (version: string) => void;
   selectedVersion: string | null;
   stats: PaperStrategyStats[];
 }) {
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(() => new Set());
+
   if (stats.length === 0) {
     return <p className="muted">{copy.review.noStrategyStats}</p>;
   }
 
-  const activeVersion = stats[0]?.strategy_version ?? null;
+  const groups = groupStrategyStats(stats);
 
   return (
     <div className="review-strategy-table-wrap" data-testid="paper-strategy-stats">
@@ -487,51 +493,163 @@ function StrategyStatsTable({
           </tr>
         </thead>
         <tbody>
-          {stats.map((item) => {
-            const isActiveVersion = activeVersion === item.strategy_version;
+          {groups.map((group) => {
+            const expanded = !collapsedParents.has(group.parentVersion);
+            const parentIsActive = group.items.some(
+              (item) => item.strategy_version === activeVersion,
+            );
             return (
-            <tr
-              aria-label={`${item.strategy_name} ${item.strategy_version}`}
-              className={selectedVersion === item.strategy_version ? "active" : ""}
-              key={`${item.strategy_name}-${item.strategy_version}`}
-              onClick={() => onSelectVersion(item.strategy_version)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectVersion(item.strategy_version);
-                }
-              }}
-              tabIndex={0}
-            >
-              <td>
-                <span className="sr-only">{item.strategy_name} </span>
-                <span className="strategy-version-pill">{item.strategy_version}</span>
-              </td>
-              <td>{formatNullableDuration(item.running_duration_ms)}</td>
-              <td>{item.closed_position_count}</td>
-              <td>{formatNullablePct(item.win_rate)}</td>
-              <td className={pnlClass(item.realized_pnl)}>{formatSignedUsdt(item.realized_pnl)}</td>
-              <td className={pnlClass(item.realized_pnl)}>
-                {formatNullablePct(strategyReturnRate(item.realized_pnl, initialBalance))}
-              </td>
-              <td className={pnlClass(item.average_position_pnl ?? 0)}>
-                {formatNullableSignedUsdt(item.average_position_pnl)}
-              </td>
-              <td>{formatNullableDuration(item.average_holding_duration_ms)}</td>
-              <td>{formatNullableRatio(item.profit_factor)}</td>
-              <td className="negative">{formatSignedUsdt(-item.total_fees)}</td>
-              <td>
-                <span className={isActiveVersion ? "strategy-status-pill active" : "strategy-status-pill"}>
-                  {isActiveVersion ? copy.paper.active : copy.paper.closed}
-                </span>
-              </td>
-            </tr>
-          );
+              <Fragment key={group.parentVersion}>
+                <tr className={parentIsActive ? "strategy-parent-row active" : "strategy-parent-row"}>
+                  <td colSpan={11}>
+                    <button
+                      aria-expanded={expanded}
+                      aria-label={`${group.parentVersion} ${copy.paper.strategyVariants}`}
+                      className="strategy-parent-toggle"
+                      onClick={() => {
+                        setCollapsedParents((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.parentVersion)) {
+                            next.delete(group.parentVersion);
+                          } else {
+                            next.add(group.parentVersion);
+                          }
+                          return next;
+                        });
+                      }}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="strategy-parent-chevron">
+                        {expanded ? "▾" : "▸"}
+                      </span>
+                      <span className="strategy-version-pill">{group.parentVersion}</span>
+                      <span className="strategy-variant-count">
+                        {group.items.length} {copy.paper.strategyVariants}
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+                {expanded
+                  ? group.items.map((item) => {
+                      const isActiveVersion = activeVersion === item.strategy_version;
+                      return (
+                        <tr
+                          aria-label={`${item.strategy_name} ${item.strategy_version} ${strategyVariantDisplayName(item)}`}
+                          className={selectedVersion === item.strategy_version ? "active strategy-variant-row" : "strategy-variant-row"}
+                          key={`${item.strategy_name}-${strategyExperimentKey(item)}`}
+                          onClick={() => onSelectVersion(item.strategy_version)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onSelectVersion(item.strategy_version);
+                            }
+                          }}
+                          tabIndex={0}
+                        >
+                          <td>
+                            <span className="sr-only">{item.strategy_name} </span>
+                            <span className="strategy-variant-name">
+                              {strategyVariantDisplayName(item)}
+                            </span>
+                            <small className="strategy-experiment-key">
+                              {strategyExperimentKey(item)}
+                            </small>
+                          </td>
+                          <td>{formatNullableDuration(item.running_duration_ms)}</td>
+                          <td>{item.closed_position_count}</td>
+                          <td>{formatNullablePct(item.win_rate)}</td>
+                          <td className={pnlClass(item.realized_pnl)}>
+                            {formatSignedUsdt(item.realized_pnl)}
+                          </td>
+                          <td className={pnlClass(item.realized_pnl)}>
+                            {formatNullablePct(strategyReturnRate(item.realized_pnl, initialBalance))}
+                          </td>
+                          <td className={pnlClass(item.average_position_pnl ?? 0)}>
+                            {formatNullableSignedUsdt(item.average_position_pnl)}
+                          </td>
+                          <td>{formatNullableDuration(item.average_holding_duration_ms)}</td>
+                          <td>{formatNullableRatio(item.profit_factor)}</td>
+                          <td className="negative">{formatSignedUsdt(-item.total_fees)}</td>
+                          <td>
+                            <span
+                              className={
+                                isActiveVersion
+                                  ? "strategy-status-pill active"
+                                  : "strategy-status-pill"
+                              }
+                            >
+                              {isActiveVersion ? copy.paper.active : copy.paper.closed}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  : null}
+              </Fragment>
+            );
           })}
         </tbody>
       </table>
     </div>
   );
+}
+
+function groupStrategyStats(stats: PaperStrategyStats[]) {
+  const groups = new Map<string, PaperStrategyStats[]>();
+  stats.forEach((item) => {
+    const parentVersion = strategyParentVersion(item);
+    groups.set(parentVersion, [...(groups.get(parentVersion) ?? []), item]);
+  });
+  return Array.from(groups.entries()).map(([parentVersion, items]) => ({
+    parentVersion,
+    items: [...items].sort((left, right) => {
+      const leftVariant = strategyVariantId(left);
+      const rightVariant = strategyVariantId(right);
+      if (leftVariant === "baseline" && rightVariant !== "baseline") {
+        return -1;
+      }
+      if (rightVariant === "baseline" && leftVariant !== "baseline") {
+        return 1;
+      }
+      return leftVariant.localeCompare(rightVariant);
+    }),
+  }));
+}
+
+function strategyParentVersion(item: PaperStrategyStats): string {
+  const explicit = item.parent_version?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  return item.strategy_version.split("/", 1)[0] || item.strategy_version;
+}
+
+function strategyVariantId(item: PaperStrategyStats): string {
+  const explicit = item.variant_id?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const [, variant] = item.strategy_version.split("/", 2);
+  return variant || "baseline";
+}
+
+function strategyExperimentKey(item: PaperStrategyStats): string {
+  return (
+    item.experiment_key?.trim() ||
+    `${strategyParentVersion(item)}/${strategyVariantId(item)}`
+  );
+}
+
+function strategyVariantDisplayName(item: PaperStrategyStats): string {
+  const parentVersion = strategyParentVersion(item);
+  const match = parentVersion.match(/^v\d+\.\d+\.(\d+)$/i);
+  const parentLabel = match ? `V${match[1]}` : parentVersion;
+  const variantLabel = strategyVariantId(item)
+    .split("_")
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+  return `${parentLabel} ${variantLabel}`;
 }
 
 function StrategyCurvePanel({

@@ -18,6 +18,9 @@ const paper: PaperAccountSnapshot = {
   mode: "paper",
   initial_balance: 10000,
   strategy_version: "v0.1.3",
+  parent_version: "v0.1.3",
+  variant_id: "baseline",
+  experiment_key: "v0.1.3/baseline",
   strategy_build_id: "legacy-v3-replay-2026-07-10",
   config_hash: "fixture-v3-config-hash",
   run_id: "v0.1.3-restored-paper-1",
@@ -1083,6 +1086,43 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(strategyDoctor).not.toHaveTextContent("US equity open risk");
     expect(strategyDoctor).not.toHaveTextContent("US data risk");
+  });
+
+  it("groups research variants under their parent strategy version", () => {
+    const baselineStats = {
+      ...(activePaper.strategy_stats ?? [])[0],
+      parent_version: "v0.1.3",
+      variant_id: "baseline",
+      experiment_key: "v0.1.3/baseline",
+    };
+    const shadowStats = {
+      ...baselineStats,
+      strategy_version: "v0.1.3/signal_context_guard",
+      variant_id: "signal_context_guard",
+      experiment_key: "v0.1.3/signal_context_guard",
+      closed_position_count: 0,
+      realized_pnl: 0,
+    };
+
+    render(
+      <ReviewPage
+        copy={translations.zh}
+        paper={{ ...activePaper, strategy_stats: [baselineStats, shadowStats] }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+
+    const table = screen.getByTestId("paper-strategy-stats");
+    expect(within(table).getByRole("button", { name: "v0.1.3 子策略" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(table).toHaveTextContent("V3 Baseline");
+    expect(table).toHaveTextContent("V3 Signal Context Guard");
+
+    fireEvent.click(within(table).getByRole("button", { name: "v0.1.3 子策略" }));
+    expect(table).not.toHaveTextContent("V3 Baseline");
+    expect(table).not.toHaveTextContent("V3 Signal Context Guard");
   });
 
   it("shows the v0.1.3 equity curve while positions are open and no trade is closed", async () => {

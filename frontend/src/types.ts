@@ -139,6 +139,9 @@ export interface PaperAccountSnapshot {
   mode: "paper";
   initial_balance: number;
   strategy_version: string;
+  parent_version: string;
+  variant_id: string;
+  experiment_key: string;
   strategy_build_id: string;
   config_hash: string;
   run_id: string;
@@ -204,6 +207,9 @@ export interface PersistenceHealthSnapshot {
 export interface PaperStrategyStats {
   strategy_name: string;
   strategy_version: string;
+  parent_version?: string;
+  variant_id?: string;
+  experiment_key?: string;
   total_trades: number;
   closed_position_count: number;
   winning_closed_position_count: number;

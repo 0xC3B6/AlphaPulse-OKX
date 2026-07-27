@@ -26,6 +26,8 @@ async fn verified_backup_precedes_single_restored_v3_reset() -> anyhow::Result<(
     let old_v3 = state_with_identity_and_run(
         StrategyIdentity {
             version_code: "v0.1.3".to_string(),
+            parent_version: "v0.1.3".to_string(),
+            variant_id: "baseline".to_string(),
             strategy_build_id: "simplified-v3".to_string(),
             config_hash: "old-v3-config".to_string(),
         },
@@ -41,6 +43,8 @@ async fn verified_backup_precedes_single_restored_v3_reset() -> anyhow::Result<(
     let old_v4 = state_with_identity_and_run(
         StrategyIdentity {
             version_code: "v0.1.4".to_string(),
+            parent_version: "v0.1.4".to_string(),
+            variant_id: "baseline".to_string(),
             strategy_build_id: "old-v4".to_string(),
             config_hash: "old-v4-config".to_string(),
         },

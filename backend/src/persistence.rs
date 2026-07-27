@@ -1499,14 +1499,22 @@ async fn insert_identity_and_run(
 ) -> anyhow::Result<()> {
     sqlx::query(
         "INSERT INTO strategy_versions \
-         (version_code, strategy_build_id, name, description, status, config_json, config_hash, created_at_ms, updated_at_ms) \
-         VALUES ($1, $2, 'Scalping Optimization Design', 'Restored automatic v3 strategy', 'active', $3, $4, $5, $5) \
-         ON CONFLICT (version_code) DO UPDATE SET strategy_build_id = EXCLUDED.strategy_build_id, \
+         (version_code, parent_version, variant_id, strategy_build_id, name, description, status, config_json, config_hash, created_at_ms, updated_at_ms) \
+         VALUES ($1, $2, $3, $4, 'Scalping Optimization Design', 'Restored automatic v3 strategy', 'active', $5, $6, $7, $7) \
+         ON CONFLICT (version_code) DO UPDATE SET parent_version = EXCLUDED.parent_version, \
+         variant_id = EXCLUDED.variant_id, strategy_build_id = EXCLUDED.strategy_build_id, \
          config_json = EXCLUDED.config_json, config_hash = EXCLUDED.config_hash, updated_at_ms = EXCLUDED.updated_at_ms",
     )
     .bind(&identity.version_code)
+    .bind(&identity.parent_version)
+    .bind(&identity.variant_id)
     .bind(&identity.strategy_build_id)
-    .bind(Json(json!({"config_hash": identity.config_hash})))
+    .bind(Json(json!({
+        "config_hash": identity.config_hash,
+        "experiment_key": identity.experiment_key(),
+        "parent_version": identity.parent_version,
+        "variant_id": identity.variant_id,
+    })))
     .bind(&identity.config_hash)
     .bind(ts_ms)
     .execute(&mut **transaction)
@@ -1521,24 +1529,27 @@ async fn insert_identity_and_run(
     let fees = snapshot.map(|value| value.total_fees).unwrap_or(0.0);
     let statement = if snapshot.is_some() {
         "INSERT INTO strategy_runs \
-         (run_id, version_code, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
+         (run_id, version_code, parent_version, variant_id, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
           realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
           fee_model, slippage_model, config_snapshot) \
-         VALUES ($1, $2, $3, $4, 'paper', $5, $6, $7, $8, $9, $10, 'running', $11, NULL, '0.05% per fill', '0.02% adverse', $12) \
-         ON CONFLICT (run_id) DO UPDATE SET current_equity = EXCLUDED.current_equity, \
+         VALUES ($1, $2, $3, $4, $5, $6, 'paper', $7, $8, $9, $10, $11, $12, 'running', $13, NULL, '0.05% per fill', '0.02% adverse', $14) \
+         ON CONFLICT (run_id) DO UPDATE SET parent_version = EXCLUDED.parent_version, \
+         variant_id = EXCLUDED.variant_id, current_equity = EXCLUDED.current_equity, \
          realized_pnl = EXCLUDED.realized_pnl, unrealized_pnl = EXCLUDED.unrealized_pnl, \
          fee_total = EXCLUDED.fee_total, max_drawdown = EXCLUDED.max_drawdown, status = 'running'"
     } else {
         "INSERT INTO strategy_runs \
-         (run_id, version_code, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
+         (run_id, version_code, parent_version, variant_id, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
           realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
           fee_model, slippage_model, config_snapshot) \
-         VALUES ($1, $2, $3, $4, 'paper', $5, $6, $7, $8, $9, $10, 'running', $11, NULL, '0.05% per fill', '0.02% adverse', $12) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'paper', $7, $8, $9, $10, $11, $12, 'running', $13, NULL, '0.05% per fill', '0.02% adverse', $14) \
          ON CONFLICT (run_id) DO NOTHING"
     };
     sqlx::query(statement)
         .bind(run_id)
         .bind(&identity.version_code)
+        .bind(&identity.parent_version)
+        .bind(&identity.variant_id)
         .bind(&identity.strategy_build_id)
         .bind(&identity.config_hash)
         .bind(decimal_or_zero(initial))
@@ -1548,7 +1559,12 @@ async fn insert_identity_and_run(
         .bind(decimal_or_zero(fees))
         .bind(decimal_or_zero((initial - equity).max(0.0)))
         .bind(ts_ms)
-        .bind(Json(json!({"config_hash": identity.config_hash})))
+        .bind(Json(json!({
+            "config_hash": identity.config_hash,
+            "experiment_key": identity.experiment_key(),
+            "parent_version": identity.parent_version,
+            "variant_id": identity.variant_id,
+        })))
         .execute(&mut **transaction)
         .await?;
     Ok(())
@@ -1593,6 +1609,8 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
         )",
         "CREATE TABLE IF NOT EXISTS strategy_versions (
             version_code TEXT PRIMARY KEY,
+            parent_version TEXT NOT NULL,
+            variant_id TEXT NOT NULL,
             strategy_build_id TEXT NOT NULL,
             name TEXT NOT NULL,
             description TEXT NOT NULL,
@@ -1603,9 +1621,21 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             updated_at_ms BIGINT NOT NULL
         )",
         "ALTER TABLE strategy_versions ADD COLUMN IF NOT EXISTS strategy_build_id TEXT",
+        "ALTER TABLE strategy_versions ADD COLUMN IF NOT EXISTS parent_version TEXT",
+        "ALTER TABLE strategy_versions ADD COLUMN IF NOT EXISTS variant_id TEXT",
+        "UPDATE strategy_versions SET parent_version = split_part(version_code, '/', 1)
+            WHERE parent_version IS NULL OR BTRIM(parent_version) = ''",
+        "UPDATE strategy_versions SET variant_id = COALESCE(NULLIF(split_part(version_code, '/', 2), ''), 'baseline')
+            WHERE variant_id IS NULL OR BTRIM(variant_id) = ''",
+        "ALTER TABLE strategy_versions ALTER COLUMN parent_version SET NOT NULL",
+        "ALTER TABLE strategy_versions ALTER COLUMN variant_id SET NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS strategy_versions_parent_variant_idx ON strategy_versions
+            (parent_version, variant_id)",
         "CREATE TABLE IF NOT EXISTS strategy_runs (
             run_id TEXT PRIMARY KEY,
             version_code TEXT NOT NULL REFERENCES strategy_versions(version_code),
+            parent_version TEXT NOT NULL,
+            variant_id TEXT NOT NULL,
             strategy_build_id TEXT NOT NULL,
             config_hash TEXT NOT NULL,
             mode TEXT NOT NULL,
@@ -1624,6 +1654,16 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
         )",
         "ALTER TABLE strategy_runs ADD COLUMN IF NOT EXISTS strategy_build_id TEXT",
         "ALTER TABLE strategy_runs ADD COLUMN IF NOT EXISTS config_hash TEXT",
+        "ALTER TABLE strategy_runs ADD COLUMN IF NOT EXISTS parent_version TEXT",
+        "ALTER TABLE strategy_runs ADD COLUMN IF NOT EXISTS variant_id TEXT",
+        "UPDATE strategy_runs SET parent_version = split_part(version_code, '/', 1)
+            WHERE parent_version IS NULL OR BTRIM(parent_version) = ''",
+        "UPDATE strategy_runs SET variant_id = COALESCE(NULLIF(split_part(version_code, '/', 2), ''), 'baseline')
+            WHERE variant_id IS NULL OR BTRIM(variant_id) = ''",
+        "ALTER TABLE strategy_runs ALTER COLUMN parent_version SET NOT NULL",
+        "ALTER TABLE strategy_runs ALTER COLUMN variant_id SET NOT NULL",
+        "CREATE INDEX IF NOT EXISTS strategy_runs_parent_variant_idx ON strategy_runs
+            (parent_version, variant_id, start_time_ms DESC)",
         "CREATE TABLE IF NOT EXISTS order_intents (
             id BIGSERIAL PRIMARY KEY,
             client_intent_id TEXT UNIQUE NOT NULL,

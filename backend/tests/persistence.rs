@@ -34,6 +34,9 @@ fn schema_persists_strategy_identity_and_protective_levels() {
     for required in [
         "strategy_build_id",
         "config_hash",
+        "parent_version",
+        "variant_id",
+        "strategy_versions_parent_variant_idx",
         "order_intents",
         "trading_accounts",
         "account_version",

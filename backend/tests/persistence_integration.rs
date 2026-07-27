@@ -58,6 +58,20 @@ async fn two_tenants_can_persist_the_same_strategy_run_without_key_collisions() 
             .await
             .unwrap();
     assert_eq!(run_count, 2);
+    let experiment_identities = sqlx::query_as::<_, (String, String)>(
+        "SELECT DISTINCT parent_version, variant_id FROM strategy_runs WHERE run_id = ANY($1)",
+    )
+    .bind(vec![
+        left.database_run_id(INITIAL_RUN_ID),
+        right.database_run_id(INITIAL_RUN_ID),
+    ])
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        experiment_identities,
+        vec![("v0.1.3".to_string(), "baseline".to_string())]
+    );
     let current_state_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM account_state_current WHERE tenant_id = ANY($1) AND account_id = 'paper'",
     )
