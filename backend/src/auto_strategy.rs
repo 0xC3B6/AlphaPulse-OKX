@@ -92,6 +92,62 @@ pub enum AutoStrategyDecision {
     },
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CandidateDisposition {
+    Selected,
+    RejectedByExistingPosition,
+    RejectedByCapacity,
+    RejectedByBalance,
+    RejectedByRisk,
+    RejectedByCost,
+    RejectedByStrategy,
+    ShadowOnly,
+}
+
+impl CandidateDisposition {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Selected => "selected",
+            Self::RejectedByExistingPosition => "rejected_by_existing_position",
+            Self::RejectedByCapacity => "rejected_by_capacity",
+            Self::RejectedByBalance => "rejected_by_balance",
+            Self::RejectedByRisk => "rejected_by_risk",
+            Self::RejectedByCost => "rejected_by_cost",
+            Self::RejectedByStrategy => "rejected_by_strategy",
+            Self::ShadowOnly => "shadow_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AutoStrategyCandidate {
+    pub side: PaperSide,
+    pub primary_signal: String,
+    pub score: u8,
+    pub reason: String,
+    pub tags: Vec<TradeTag>,
+    pub planned_margin: f64,
+    pub planned_leverage: f64,
+    pub planned_stop_loss: Option<f64>,
+    pub planned_take_profit: Option<f64>,
+    pub disposition: CandidateDisposition,
+    pub rejection_reason: Option<String>,
+}
+
+impl AutoStrategyCandidate {
+    pub fn reject_by_risk(&mut self, reason: impl Into<String>) {
+        self.disposition = CandidateDisposition::RejectedByRisk;
+        self.rejection_reason = Some(reason.into());
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoStrategyEvaluation {
+    pub decision: Option<AutoStrategyDecision>,
+    pub candidate: Option<AutoStrategyCandidate>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutoExitKind {
     StopLoss,
@@ -161,6 +217,81 @@ pub fn evaluate_auto_strategy_at(
         reason,
         tags,
     })
+}
+
+pub fn evaluate_auto_strategy_observed_at(
+    symbol: &SymbolSnapshot,
+    paper: &PaperAccountSnapshot,
+    config: AutoStrategyConfig,
+    now_ms: i64,
+) -> AutoStrategyEvaluation {
+    // Keep the execution decision on the original v0.1.3 path. The candidate
+    // probe below is pure evidence collection and must never feed back into it.
+    let decision = evaluate_auto_strategy_at(symbol, paper, config, now_ms);
+    if !config.enabled || matches!(decision, Some(AutoStrategyDecision::Close { .. })) {
+        return AutoStrategyEvaluation {
+            decision,
+            candidate: None,
+        };
+    }
+
+    let time_regime = classify_time_regime(now_ms);
+    let Some(signal) = open_signal(symbol, time_regime.score_penalty, now_ms, config) else {
+        return AutoStrategyEvaluation {
+            decision,
+            candidate: None,
+        };
+    };
+    let margin = paper.equity * config.margin_fraction * signal.margin_multiplier;
+    let mut tags = time_regime.tags;
+    tags.extend(signal.tags);
+    let reason = append_penalty_reason(signal.reason, time_regime.score_penalty, signal.penalty);
+    let (stop_loss, take_profit) =
+        automatic_trigger_prices(symbol.price, signal.side, config.default_leverage);
+    let (disposition, rejection_reason) = if paper
+        .positions
+        .iter()
+        .any(|position| position.inst_id == symbol.inst_id)
+    {
+        (
+            CandidateDisposition::RejectedByExistingPosition,
+            Some("existing_position".to_string()),
+        )
+    } else if paper.positions.len() >= config.max_positions {
+        (
+            CandidateDisposition::RejectedByCapacity,
+            Some("max_positions".to_string()),
+        )
+    } else if margin <= 0.0 || paper.available_balance < margin {
+        (
+            CandidateDisposition::RejectedByBalance,
+            Some("insufficient_balance".to_string()),
+        )
+    } else if matches!(decision, Some(AutoStrategyDecision::Open { .. })) {
+        (CandidateDisposition::Selected, None)
+    } else {
+        (
+            CandidateDisposition::RejectedByStrategy,
+            Some("strategy_rejected".to_string()),
+        )
+    };
+
+    AutoStrategyEvaluation {
+        decision,
+        candidate: Some(AutoStrategyCandidate {
+            side: signal.side,
+            primary_signal: signal.primary_signal.to_string(),
+            score: signal.score,
+            reason,
+            tags,
+            planned_margin: margin,
+            planned_leverage: config.default_leverage,
+            planned_stop_loss: Some(stop_loss),
+            planned_take_profit: Some(take_profit),
+            disposition,
+            rejection_reason,
+        }),
+    }
 }
 
 pub fn evaluate_auto_exit(
@@ -252,6 +383,7 @@ fn exit_trigger_price(position: &PaperPositionSnapshot, target_margin_pct: f64) 
 struct OpenSignal {
     side: PaperSide,
     primary_signal: &'static str,
+    score: u8,
     reason: String,
     tags: Vec<TradeTag>,
     penalty: u8,
@@ -336,6 +468,7 @@ fn multiday_extension_reversal_short(symbol: &SymbolSnapshot, now_ms: i64) -> Op
     Some(OpenSignal {
         side: PaperSide::Short,
         primary_signal: "multiday_reversal_short",
+        score: confirmation_score,
         reason: strategy_reason(format_args!(
             "multiday extension reversal short {confirmation_score}"
         )),
@@ -425,6 +558,7 @@ fn score_signal(
             ("range", PaperSide::Short) => "range_short",
             _ => "score_signal",
         },
+        score: score.value,
         reason: strategy_reason(format_args!(
             "{kind} {} {}",
             direction_label(score.direction),
@@ -477,6 +611,7 @@ fn pattern_signal(
             PaperSide::Long => "pattern_long",
             PaperSide::Short => "pattern_short",
         },
+        score: signal.trade_score,
         reason: strategy_reason(format_args!(
             "pattern {} {}",
             direction_label(signal.direction),
@@ -517,6 +652,7 @@ fn mover_signal(
             PaperSide::Long => "mover_long",
             PaperSide::Short => "mover_short",
         },
+        score: symbol.trend_score.value.max(symbol.range_score.value),
         reason: strategy_reason(format_args!("24h mover {}", direction_label(direction))),
         tags: context.tags,
         penalty: context.score_penalty,
@@ -960,4 +1096,18 @@ fn append_penalty_reason(reason: String, time_penalty: u8, context_penalty: u8) 
 
 fn strategy_reason(args: std::fmt::Arguments<'_>) -> String {
     format!("scalping {SCALPING_OPTIMIZATION_VERSION} {args}")
+}
+
+pub fn signal_score_for_primary(symbol: &SymbolSnapshot, primary_signal: &str) -> u8 {
+    match primary_signal {
+        signal if signal.starts_with("trend_") => symbol.trend_score.value,
+        signal if signal.starts_with("range_") => symbol.range_score.value,
+        signal if signal.starts_with("pattern_") => symbol
+            .pattern_signals
+            .iter()
+            .map(|pattern| pattern.trade_score)
+            .max()
+            .unwrap_or_default(),
+        _ => symbol.trend_score.value.max(symbol.range_score.value),
+    }
 }

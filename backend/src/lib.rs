@@ -5,6 +5,7 @@ pub mod domain;
 pub mod indicators;
 pub mod macro_cycle;
 pub mod market_context;
+pub mod observability;
 pub mod okx;
 pub mod paper;
 pub mod persistence;

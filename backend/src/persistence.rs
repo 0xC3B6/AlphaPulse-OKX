@@ -18,6 +18,7 @@ use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 
 use crate::{
     config::AppConfig,
+    observability::{PositionContextEvent, StrategyCandidateEvent},
     paper::{
         trim_equity_curves_for_display, EquityBucketSpec, PaperAccountSnapshot, PaperEquityCandle,
         PaperEquityCurves, PaperOrderRequest, PaperSide, PaperState, PaperTrade, PaperTradeAction,
@@ -43,6 +44,7 @@ const STRATEGY_TABLES: &[&str] = &[
     "event_log",
     "app_state_snapshots",
 ];
+const OBSERVABILITY_TABLES: &[&str] = &["strategy_candidate_events", "position_context_events"];
 
 #[derive(Clone)]
 pub struct PersistenceLayer {
@@ -225,6 +227,10 @@ impl PersistedOrderIntent {
 pub struct PersistedTransition {
     pub event_type: String,
     pub intent: Option<PersistedOrderIntent>,
+    #[serde(default)]
+    pub candidate_events: Vec<StrategyCandidateEvent>,
+    #[serde(default)]
+    pub position_context_events: Vec<PositionContextEvent>,
     pub state: PaperState,
     pub snapshot: PaperAccountSnapshot,
     pub committed_at_ms: i64,
@@ -497,6 +503,15 @@ impl PersistenceLayer {
         if let Some(intent) = &transition.intent {
             insert_intent(&mut transaction, &self.scope, &database_run_id, intent).await?;
         }
+        for event in &transition.candidate_events {
+            let event_run_id = self.database_run_id(&event.run_id);
+            upsert_candidate_event(&mut transaction, &self.scope, &event_run_id, event).await?;
+        }
+        for event in &transition.position_context_events {
+            let event_run_id = self.database_run_id(&event.run_id);
+            upsert_position_context_event(&mut transaction, &self.scope, &event_run_id, event)
+                .await?;
+        }
         persist_state_rows(
             &mut transaction,
             &identity,
@@ -705,6 +720,7 @@ impl PersistenceLayer {
             .map(|value| value.to_string())
             .collect();
         let mut tables: Vec<&str> = STRATEGY_TABLES.to_vec();
+        tables.extend_from_slice(OBSERVABILITY_TABLES);
         if self.table_exists("risk_guard_events").await? {
             tables.push("risk_guard_events");
         }
@@ -807,6 +823,7 @@ impl PersistenceLayer {
     ) -> anyhow::Result<BTreeMap<String, i64>> {
         let database_run_id = run_id.map(|value| self.database_run_id(value));
         let mut tables: Vec<&str> = STRATEGY_TABLES.to_vec();
+        tables.extend_from_slice(OBSERVABILITY_TABLES);
         if self.table_exists("risk_guard_events").await? {
             tables.push("risk_guard_events");
         }
@@ -892,6 +909,8 @@ async fn purge_strategy_data_in_transaction(
             "fills",
             "positions",
             "closed_trades",
+            "strategy_candidate_events",
+            "position_context_events",
             "equity_candles",
             "equity_snapshots",
             "ledger_entries",
@@ -951,6 +970,11 @@ fn verify_backup_manifest(path: &Path) -> anyhow::Result<StrategyBackupManifest>
         "backup manifest contains no table exports"
     );
     let expected_tables: BTreeSet<&str> = STRATEGY_TABLES.iter().copied().collect();
+    let allowed_tables: BTreeSet<&str> = STRATEGY_TABLES
+        .iter()
+        .chain(OBSERVABILITY_TABLES.iter())
+        .copied()
+        .collect();
     let exported_tables: BTreeSet<&str> = manifest
         .files
         .iter()
@@ -966,7 +990,7 @@ fn verify_backup_manifest(path: &Path) -> anyhow::Result<StrategyBackupManifest>
     );
     for file in &manifest.files {
         anyhow::ensure!(
-            expected_tables.contains(file.table.as_str()) || file.table == "risk_guard_events",
+            allowed_tables.contains(file.table.as_str()) || file.table == "risk_guard_events",
             "unexpected backup table {}",
             file.table
         );
@@ -1054,6 +1078,169 @@ async fn insert_intent(
     .bind(&intent.status)
     .bind(&intent.rejection_reason)
     .bind(intent.created_at_ms)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_candidate_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    database_run_id: &str,
+    event: &StrategyCandidateEvent,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO strategy_candidate_events \
+         (event_key, tenant_id, account_id, run_id, version_code, parent_version, variant_id, \
+          experiment_key, strategy_build_id, config_hash, bucket_start_ms, symbol, side, \
+          primary_signal, disposition, rejection_reason, ranking, first_observed_at_ms, \
+          last_observed_at_ms, observation_count, first_score, high_score, low_score, last_score, \
+          reason, planned_margin, planned_leverage, planned_stop_loss, planned_take_profit, \
+          session_context_json, event_context_json, risk_tags_json, feature_snapshot_json, \
+          market_snapshot_json) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, \
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, \
+                 $30, $31, $32, $33, $34) \
+         ON CONFLICT (tenant_id, account_id, event_key) DO UPDATE SET \
+           last_observed_at_ms = GREATEST(strategy_candidate_events.last_observed_at_ms, EXCLUDED.last_observed_at_ms), \
+           observation_count = strategy_candidate_events.observation_count + EXCLUDED.observation_count, \
+           high_score = GREATEST(strategy_candidate_events.high_score, EXCLUDED.high_score), \
+           low_score = LEAST(strategy_candidate_events.low_score, EXCLUDED.low_score), \
+           last_score = EXCLUDED.last_score, rejection_reason = EXCLUDED.rejection_reason, \
+           ranking = EXCLUDED.ranking, reason = EXCLUDED.reason, \
+           planned_margin = EXCLUDED.planned_margin, planned_leverage = EXCLUDED.planned_leverage, \
+           planned_stop_loss = EXCLUDED.planned_stop_loss, \
+           planned_take_profit = EXCLUDED.planned_take_profit, \
+           session_context_json = EXCLUDED.session_context_json, \
+           event_context_json = EXCLUDED.event_context_json, risk_tags_json = EXCLUDED.risk_tags_json, \
+           feature_snapshot_json = EXCLUDED.feature_snapshot_json, \
+           market_snapshot_json = EXCLUDED.market_snapshot_json",
+    )
+    .bind(&event.event_key)
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(database_run_id)
+    .bind(&event.identity.version_code)
+    .bind(&event.identity.parent_version)
+    .bind(&event.identity.variant_id)
+    .bind(event.identity.experiment_key())
+    .bind(&event.identity.strategy_build_id)
+    .bind(&event.identity.config_hash)
+    .bind(event.bucket_start_ms)
+    .bind(&event.symbol)
+    .bind(side_name(event.side))
+    .bind(&event.primary_signal)
+    .bind(event.disposition.as_str())
+    .bind(&event.rejection_reason)
+    .bind(event.ranking.map(i64::from))
+    .bind(event.first_observed_at_ms)
+    .bind(event.last_observed_at_ms)
+    .bind(i64::try_from(event.observation_count).unwrap_or(i64::MAX))
+    .bind(i32::from(event.first_score))
+    .bind(i32::from(event.high_score))
+    .bind(i32::from(event.low_score))
+    .bind(i32::from(event.last_score))
+    .bind(&event.reason)
+    .bind(decimal_or_zero(event.planned_margin))
+    .bind(decimal_or_zero(event.planned_leverage))
+    .bind(event.planned_stop_loss.and_then(decimal_from_f64))
+    .bind(event.planned_take_profit.and_then(decimal_from_f64))
+    .bind(Json(event.session_context.clone()))
+    .bind(Json(event.event_context.clone()))
+    .bind(Json(event.risk_tags.clone()))
+    .bind(Json(event.feature_snapshot.clone()))
+    .bind(Json(event.market_snapshot.clone()))
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_position_context_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    scope: &AccountScope,
+    database_run_id: &str,
+    event: &PositionContextEvent,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO position_context_events \
+         (event_key, position_key, tenant_id, account_id, run_id, version_code, parent_version, \
+          variant_id, experiment_key, strategy_build_id, config_hash, event_kind, bucket_start_ms, \
+          symbol, side, primary_signal, opened_at_ms, first_observed_at_ms, last_observed_at_ms, \
+          observation_count, position_age_ms, current_score, open_mark_price, high_mark_price, \
+          low_mark_price, close_mark_price, open_pnl, high_pnl, low_pnl, close_pnl, open_pnl_pct, \
+          mfe_pnl_pct, mae_pnl_pct, close_pnl_pct, mfe_observed_at_ms, mae_observed_at_ms, \
+          entry_price, margin, leverage, stop_loss, take_profit, btc_context_opposed, risk_tags_json, \
+          feature_snapshot_json, market_snapshot_json) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, \
+                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, \
+                 $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, \
+                 $44, $45) \
+         ON CONFLICT (tenant_id, account_id, event_key) DO UPDATE SET \
+           last_observed_at_ms = GREATEST(position_context_events.last_observed_at_ms, EXCLUDED.last_observed_at_ms), \
+           observation_count = position_context_events.observation_count + EXCLUDED.observation_count, \
+           position_age_ms = EXCLUDED.position_age_ms, current_score = EXCLUDED.current_score, \
+           high_mark_price = GREATEST(position_context_events.high_mark_price, EXCLUDED.high_mark_price), \
+           low_mark_price = LEAST(position_context_events.low_mark_price, EXCLUDED.low_mark_price), \
+           close_mark_price = EXCLUDED.close_mark_price, \
+           high_pnl = GREATEST(position_context_events.high_pnl, EXCLUDED.high_pnl), \
+           low_pnl = LEAST(position_context_events.low_pnl, EXCLUDED.low_pnl), \
+           close_pnl = EXCLUDED.close_pnl, \
+           mfe_observed_at_ms = CASE WHEN EXCLUDED.mfe_pnl_pct > position_context_events.mfe_pnl_pct \
+             THEN EXCLUDED.mfe_observed_at_ms ELSE position_context_events.mfe_observed_at_ms END, \
+           mae_observed_at_ms = CASE WHEN EXCLUDED.mae_pnl_pct < position_context_events.mae_pnl_pct \
+             THEN EXCLUDED.mae_observed_at_ms ELSE position_context_events.mae_observed_at_ms END, \
+           mfe_pnl_pct = GREATEST(position_context_events.mfe_pnl_pct, EXCLUDED.mfe_pnl_pct), \
+           mae_pnl_pct = LEAST(position_context_events.mae_pnl_pct, EXCLUDED.mae_pnl_pct), \
+           close_pnl_pct = EXCLUDED.close_pnl_pct, btc_context_opposed = EXCLUDED.btc_context_opposed, \
+           risk_tags_json = EXCLUDED.risk_tags_json, \
+           feature_snapshot_json = EXCLUDED.feature_snapshot_json, \
+           market_snapshot_json = EXCLUDED.market_snapshot_json",
+    )
+    .bind(&event.event_key)
+    .bind(&event.position_key)
+    .bind(&scope.tenant_id)
+    .bind(&scope.account_id)
+    .bind(database_run_id)
+    .bind(&event.identity.version_code)
+    .bind(&event.identity.parent_version)
+    .bind(&event.identity.variant_id)
+    .bind(event.identity.experiment_key())
+    .bind(&event.identity.strategy_build_id)
+    .bind(&event.identity.config_hash)
+    .bind(event.event_kind.as_str())
+    .bind(event.bucket_start_ms)
+    .bind(&event.symbol)
+    .bind(side_name(event.side))
+    .bind(&event.primary_signal)
+    .bind(event.opened_at_ms)
+    .bind(event.first_observed_at_ms)
+    .bind(event.last_observed_at_ms)
+    .bind(i64::try_from(event.observation_count).unwrap_or(i64::MAX))
+    .bind(event.position_age_ms)
+    .bind(event.current_score.map(i32::from))
+    .bind(decimal_or_zero(event.open_mark_price))
+    .bind(decimal_or_zero(event.high_mark_price))
+    .bind(decimal_or_zero(event.low_mark_price))
+    .bind(decimal_or_zero(event.close_mark_price))
+    .bind(decimal_or_zero(event.open_pnl))
+    .bind(decimal_or_zero(event.high_pnl))
+    .bind(decimal_or_zero(event.low_pnl))
+    .bind(decimal_or_zero(event.close_pnl))
+    .bind(decimal_or_zero(event.open_pnl_pct))
+    .bind(decimal_or_zero(event.mfe_pnl_pct))
+    .bind(decimal_or_zero(event.mae_pnl_pct))
+    .bind(decimal_or_zero(event.close_pnl_pct))
+    .bind(event.mfe_observed_at_ms)
+    .bind(event.mae_observed_at_ms)
+    .bind(decimal_or_zero(event.entry_price))
+    .bind(decimal_or_zero(event.margin))
+    .bind(decimal_or_zero(event.leverage))
+    .bind(event.stop_loss.and_then(decimal_from_f64))
+    .bind(event.take_profit.and_then(decimal_from_f64))
+    .bind(event.btc_context_opposed)
+    .bind(Json(event.risk_tags.clone()))
+    .bind(Json(event.feature_snapshot.clone()))
+    .bind(Json(event.market_snapshot.clone()))
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -1682,6 +1869,45 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             rejection_reason TEXT,
             created_at_ms BIGINT NOT NULL
         )",
+        "CREATE TABLE IF NOT EXISTS strategy_candidate_events (
+            event_key TEXT NOT NULL,
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            parent_version TEXT NOT NULL,
+            variant_id TEXT NOT NULL,
+            experiment_key TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            config_hash TEXT NOT NULL,
+            bucket_start_ms BIGINT NOT NULL,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            primary_signal TEXT NOT NULL,
+            disposition TEXT NOT NULL,
+            rejection_reason TEXT,
+            ranking BIGINT,
+            first_observed_at_ms BIGINT NOT NULL,
+            last_observed_at_ms BIGINT NOT NULL,
+            observation_count BIGINT NOT NULL,
+            first_score INTEGER NOT NULL,
+            high_score INTEGER NOT NULL,
+            low_score INTEGER NOT NULL,
+            last_score INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            planned_margin NUMERIC NOT NULL,
+            planned_leverage NUMERIC NOT NULL,
+            planned_stop_loss NUMERIC,
+            planned_take_profit NUMERIC,
+            session_context_json JSONB NOT NULL,
+            event_context_json JSONB NOT NULL,
+            risk_tags_json JSONB NOT NULL,
+            feature_snapshot_json JSONB NOT NULL,
+            market_snapshot_json JSONB NOT NULL,
+            PRIMARY KEY (tenant_id, account_id, event_key)
+        )",
+        "CREATE INDEX IF NOT EXISTS strategy_candidate_events_lookup_idx ON strategy_candidate_events
+            (tenant_id, account_id, experiment_key, run_id, bucket_start_ms, symbol)",
         "CREATE TABLE IF NOT EXISTS fills (
             id BIGSERIAL PRIMARY KEY,
             trade_id BIGINT NOT NULL,
@@ -1726,6 +1952,56 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             opened_at_ms BIGINT NOT NULL,
             closed_at_ms BIGINT
         )",
+        "CREATE TABLE IF NOT EXISTS position_context_events (
+            event_key TEXT NOT NULL,
+            position_key TEXT NOT NULL,
+            tenant_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            version_code TEXT NOT NULL,
+            parent_version TEXT NOT NULL,
+            variant_id TEXT NOT NULL,
+            experiment_key TEXT NOT NULL,
+            strategy_build_id TEXT NOT NULL,
+            config_hash TEXT NOT NULL,
+            event_kind TEXT NOT NULL,
+            bucket_start_ms BIGINT NOT NULL,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            primary_signal TEXT NOT NULL,
+            opened_at_ms BIGINT NOT NULL,
+            first_observed_at_ms BIGINT NOT NULL,
+            last_observed_at_ms BIGINT NOT NULL,
+            observation_count BIGINT NOT NULL,
+            position_age_ms BIGINT NOT NULL,
+            current_score INTEGER,
+            open_mark_price NUMERIC NOT NULL,
+            high_mark_price NUMERIC NOT NULL,
+            low_mark_price NUMERIC NOT NULL,
+            close_mark_price NUMERIC NOT NULL,
+            open_pnl NUMERIC NOT NULL,
+            high_pnl NUMERIC NOT NULL,
+            low_pnl NUMERIC NOT NULL,
+            close_pnl NUMERIC NOT NULL,
+            open_pnl_pct NUMERIC NOT NULL,
+            mfe_pnl_pct NUMERIC NOT NULL,
+            mae_pnl_pct NUMERIC NOT NULL,
+            close_pnl_pct NUMERIC NOT NULL,
+            mfe_observed_at_ms BIGINT NOT NULL,
+            mae_observed_at_ms BIGINT NOT NULL,
+            entry_price NUMERIC NOT NULL,
+            margin NUMERIC NOT NULL,
+            leverage NUMERIC NOT NULL,
+            stop_loss NUMERIC,
+            take_profit NUMERIC,
+            btc_context_opposed BOOLEAN,
+            risk_tags_json JSONB NOT NULL,
+            feature_snapshot_json JSONB NOT NULL,
+            market_snapshot_json JSONB NOT NULL,
+            PRIMARY KEY (tenant_id, account_id, event_key)
+        )",
+        "CREATE INDEX IF NOT EXISTS position_context_events_lookup_idx ON position_context_events
+            (tenant_id, account_id, experiment_key, run_id, position_key, bucket_start_ms)",
         "CREATE TABLE IF NOT EXISTS closed_trades (
             id BIGSERIAL PRIMARY KEY,
             closed_position_id BIGINT NOT NULL,

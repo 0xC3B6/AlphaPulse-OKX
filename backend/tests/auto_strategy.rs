@@ -1,7 +1,8 @@
 use alphapulse_okx_backend::{
     auto_strategy::{
-        evaluate_auto_exit, evaluate_auto_strategy, evaluate_auto_strategy_at, AutoExitKind,
-        AutoStrategyConfig, AutoStrategyDecision,
+        evaluate_auto_exit, evaluate_auto_strategy, evaluate_auto_strategy_at,
+        evaluate_auto_strategy_observed_at, AutoExitKind, AutoStrategyConfig, AutoStrategyDecision,
+        CandidateDisposition,
     },
     domain::{
         Direction, PatternKind, PatternLevelZone, PatternSignal, PatternStatus, ScalpingMetrics,
@@ -107,6 +108,159 @@ fn does_not_open_when_max_positions_reached() {
         ],
     );
     assert!(evaluate_auto_strategy(&symbol, &paper, AutoStrategyConfig::default()).is_none());
+}
+
+#[test]
+fn observed_evaluation_keeps_the_selected_v3_decision_unchanged() {
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(92, Direction::Long),
+        score(20, Direction::Neutral),
+        vec!["dynamic"],
+    );
+    let paper = paper_account(10_000.0, Vec::new());
+    let now_ms = ts_ms("2026-07-02T02:00:00Z");
+    let original =
+        evaluate_auto_strategy_at(&symbol, &paper, AutoStrategyConfig::default(), now_ms).unwrap();
+    let observed =
+        evaluate_auto_strategy_observed_at(&symbol, &paper, AutoStrategyConfig::default(), now_ms);
+
+    let AutoStrategyDecision::Open {
+        order: original_order,
+        reason: original_reason,
+        tags: original_tags,
+    } = original
+    else {
+        panic!("expected original open decision");
+    };
+    let AutoStrategyDecision::Open {
+        order: observed_order,
+        reason: observed_reason,
+        tags: observed_tags,
+    } = observed.decision.unwrap()
+    else {
+        panic!("expected observed open decision");
+    };
+    assert_eq!(observed_order.inst_id, original_order.inst_id);
+    assert_eq!(observed_order.side, original_order.side);
+    assert_eq!(observed_order.margin, original_order.margin);
+    assert_eq!(observed_order.leverage, original_order.leverage);
+    assert_eq!(observed_order.stop_loss, original_order.stop_loss);
+    assert_eq!(observed_order.take_profit, original_order.take_profit);
+    assert_eq!(observed_order.primary_signal, original_order.primary_signal);
+    assert_eq!(observed_order.signal_tags, original_order.signal_tags);
+    assert_eq!(observed_reason, original_reason);
+    assert_eq!(observed_tags, original_tags);
+
+    let candidate = observed.candidate.unwrap();
+    assert_eq!(candidate.disposition, CandidateDisposition::Selected);
+    assert_eq!(candidate.primary_signal, "trend_long");
+    assert_eq!(candidate.score, 92);
+    assert_eq!(candidate.planned_margin, original_order.margin);
+    assert_eq!(candidate.planned_stop_loss, original_order.stop_loss);
+    assert_eq!(candidate.planned_take_profit, original_order.take_profit);
+}
+
+#[test]
+fn observed_evaluation_records_capacity_rejection_without_opening() {
+    let symbol = symbol(
+        "NEW-USDT-SWAP",
+        2.0,
+        score(90, Direction::Short),
+        score(20, Direction::Neutral),
+        vec!["dynamic"],
+    );
+    let paper = paper_account(
+        10_000.0,
+        vec![
+            position("A-USDT-SWAP", PaperSide::Long, 0.0),
+            position("B-USDT-SWAP", PaperSide::Long, 0.0),
+            position("C-USDT-SWAP", PaperSide::Short, 0.0),
+            position("D-USDT-SWAP", PaperSide::Long, 0.0),
+            position("E-USDT-SWAP", PaperSide::Short, 0.0),
+        ],
+    );
+    let observed = evaluate_auto_strategy_observed_at(
+        &symbol,
+        &paper,
+        AutoStrategyConfig::default(),
+        ts_ms("2026-07-02T02:00:00Z"),
+    );
+
+    assert!(observed.decision.is_none());
+    let candidate = observed.candidate.unwrap();
+    assert_eq!(
+        candidate.disposition,
+        CandidateDisposition::RejectedByCapacity
+    );
+    assert_eq!(candidate.primary_signal, "trend_short");
+    assert_eq!(candidate.score, 90);
+    assert_eq!(candidate.rejection_reason.as_deref(), Some("max_positions"));
+}
+
+#[test]
+fn observed_evaluation_records_existing_position_and_risk_rejections() {
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(88, Direction::Long),
+        score(20, Direction::Neutral),
+        vec!["dynamic"],
+    );
+    let paper = paper_account(
+        10_000.0,
+        vec![position("ETH-USDT-SWAP", PaperSide::Long, 0.10)],
+    );
+    let mut observed = evaluate_auto_strategy_observed_at(
+        &symbol,
+        &paper,
+        AutoStrategyConfig::default(),
+        ts_ms("2026-07-02T02:00:00Z"),
+    );
+
+    assert!(observed.decision.is_none());
+    let candidate = observed.candidate.as_mut().unwrap();
+    assert_eq!(
+        candidate.disposition,
+        CandidateDisposition::RejectedByExistingPosition
+    );
+    candidate.reject_by_risk("account_close_only");
+    assert_eq!(candidate.disposition, CandidateDisposition::RejectedByRisk);
+    assert_eq!(
+        candidate.rejection_reason.as_deref(),
+        Some("account_close_only")
+    );
+}
+
+#[test]
+fn observed_evaluation_records_balance_rejection_without_opening() {
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(92, Direction::Long),
+        score(20, Direction::Neutral),
+        vec!["dynamic"],
+    );
+    let mut paper = paper_account(10_000.0, Vec::new());
+    paper.available_balance = 10.0;
+    let observed = evaluate_auto_strategy_observed_at(
+        &symbol,
+        &paper,
+        AutoStrategyConfig::default(),
+        ts_ms("2026-07-02T02:00:00Z"),
+    );
+
+    assert!(observed.decision.is_none());
+    let candidate = observed.candidate.unwrap();
+    assert_eq!(
+        candidate.disposition,
+        CandidateDisposition::RejectedByBalance
+    );
+    assert_eq!(
+        candidate.rejection_reason.as_deref(),
+        Some("insufficient_balance")
+    );
 }
 
 #[test]

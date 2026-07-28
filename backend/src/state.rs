@@ -9,9 +9,11 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::{
     auto_strategy::{
-        evaluate_auto_exit, evaluate_auto_strategy_at, AutoStrategyConfig, AutoStrategyDecision,
+        evaluate_auto_exit, evaluate_auto_strategy_observed_at, AutoStrategyConfig,
+        AutoStrategyDecision,
     },
     domain::SymbolSnapshot,
+    observability::{PositionContextEvent, PositionContextEventKind, StrategyCandidateEvent},
     paper::{
         append_equity_candles, PaperAccountSnapshot, PaperEquityCandle, PaperEquityCurves,
         PaperEquityPoint, PaperError, PaperOrderRequest, PaperSide, PaperState,
@@ -22,7 +24,7 @@ use crate::{
         PersistenceStatus,
     },
     risk_safety::{
-        AccountAction, AccountEvent, AccountEventEnvelope, AccountEventResult, AccountRiskSnapshot,
+        AccountEvent, AccountEventEnvelope, AccountEventResult, AccountRiskSnapshot,
         AccountRiskState,
     },
     strategy_identity::StrategyIdentity,
@@ -85,6 +87,8 @@ struct RadarStateInner {
     persistence: PersistenceHealthSnapshot,
     risk: AccountRiskState,
     risk_event_sequence: u64,
+    pending_candidate_events: BTreeMap<String, StrategyCandidateEvent>,
+    pending_position_context_events: BTreeMap<String, PositionContextEvent>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -188,6 +192,57 @@ impl RadarStateInner {
         self.risk_event_sequence = self.risk_event_sequence.saturating_add(1);
         self.risk_event_sequence
     }
+
+    fn queue_candidate_event(&mut self, event: StrategyCandidateEvent) {
+        match self.pending_candidate_events.entry(event.event_key.clone()) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().merge(event);
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(event);
+            }
+        }
+    }
+
+    fn queue_position_context_event(&mut self, event: PositionContextEvent) {
+        match self
+            .pending_position_context_events
+            .entry(event.event_key.clone())
+        {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().merge(event);
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(event);
+            }
+        }
+    }
+
+    fn take_observability_events(
+        &mut self,
+    ) -> (Vec<StrategyCandidateEvent>, Vec<PositionContextEvent>) {
+        (
+            std::mem::take(&mut self.pending_candidate_events)
+                .into_values()
+                .collect(),
+            std::mem::take(&mut self.pending_position_context_events)
+                .into_values()
+                .collect(),
+        )
+    }
+
+    fn restore_observability_events(
+        &mut self,
+        candidates: Vec<StrategyCandidateEvent>,
+        positions: Vec<PositionContextEvent>,
+    ) {
+        for event in candidates {
+            self.queue_candidate_event(event);
+        }
+        for event in positions {
+            self.queue_position_context_event(event);
+        }
+    }
 }
 
 impl Default for RadarState {
@@ -231,6 +286,8 @@ impl RadarState {
                 persistence: PersistenceHealthSnapshot::default(),
                 risk: AccountRiskState::startup(scope, has_positions),
                 risk_event_sequence: 0,
+                pending_candidate_events: BTreeMap::new(),
+                pending_position_context_events: BTreeMap::new(),
             })),
             events,
             persistence,
@@ -350,49 +407,116 @@ impl RadarState {
             if !updated_ids.contains(&inst_id) {
                 continue;
             }
-            let (decision, prices) = {
+            let (decision, prices, position_event) = {
                 let inner = self.inner.read().await;
                 let prices = inner.price_map();
                 let paper = inner.paper.snapshot(&prices);
-                (
-                    evaluate_auto_exit(&inst_id, &paper, AutoStrategyConfig::default()),
-                    prices,
-                )
+                let decision = evaluate_auto_exit(&inst_id, &paper, AutoStrategyConfig::default());
+                let position_event = decision.as_ref().and_then(|_| {
+                    let position = paper
+                        .positions
+                        .iter()
+                        .find(|position| position.inst_id == inst_id)?;
+                    let symbol = inner.symbols.get(&inst_id)?;
+                    Some(PositionContextEvent::new(
+                        inner.paper.strategy_identity(),
+                        inner.paper.run_id(),
+                        position,
+                        symbol,
+                        &paper,
+                        inner.symbols.get("BTC-USDT-SWAP"),
+                        PositionContextEventKind::ExitSignal,
+                        decision_ts_ms,
+                    ))
+                });
+                (decision, prices, position_event)
             };
             if let Some(decision) = decision {
+                self.queue_observability(None, position_event).await;
                 self.apply_strategy_decision_locked(decision, &prices, 0, decision_ts_ms)
                     .await?;
                 closed_ids.insert(inst_id);
             }
         }
 
-        if self.entry_is_allowed().await {
-            for inst_id in &updated_ids {
-                if closed_ids.contains(inst_id) {
+        let entry_block_reason = self.entry_observation_block_reason().await;
+        for inst_id in &updated_ids {
+            if closed_ids.contains(inst_id) {
+                continue;
+            }
+            let (symbol, mut evaluation, prices, paper, identity, run_id, btc) = {
+                let inner = self.inner.read().await;
+                let Some(symbol) = inner.symbols.get(inst_id).cloned() else {
                     continue;
+                };
+                let prices = inner.price_map();
+                let paper = inner.paper.snapshot(&prices);
+                let evaluation = evaluate_auto_strategy_observed_at(
+                    &symbol,
+                    &paper,
+                    AutoStrategyConfig::default(),
+                    decision_ts_ms,
+                );
+                (
+                    symbol,
+                    evaluation,
+                    prices,
+                    paper,
+                    inner.paper.strategy_identity().clone(),
+                    inner.paper.run_id().to_string(),
+                    inner.symbols.get("BTC-USDT-SWAP").cloned(),
+                )
+            };
+            if matches!(
+                evaluation.decision.as_ref(),
+                Some(AutoStrategyDecision::Open { .. })
+            ) {
+                if let (Some(candidate), Some(reason)) =
+                    (evaluation.candidate.as_mut(), entry_block_reason.as_deref())
+                {
+                    candidate.reject_by_risk(reason);
                 }
-                let (symbol, decision, prices) = {
-                    let inner = self.inner.read().await;
-                    let Some(symbol) = inner.symbols.get(inst_id).cloned() else {
-                        continue;
-                    };
-                    let prices = inner.price_map();
-                    let paper = inner.paper.snapshot(&prices);
-                    let decision = evaluate_auto_strategy_at(
+            }
+            let candidate_event = evaluation.candidate.take().map(|candidate| {
+                StrategyCandidateEvent::new(
+                    &identity,
+                    &run_id,
+                    &symbol,
+                    &paper,
+                    btc.as_ref(),
+                    candidate,
+                    decision_ts_ms,
+                )
+            });
+            let position_event = paper
+                .positions
+                .iter()
+                .find(|position| position.inst_id == symbol.inst_id)
+                .map(|position| {
+                    PositionContextEvent::new(
+                        &identity,
+                        &run_id,
+                        position,
                         &symbol,
                         &paper,
-                        AutoStrategyConfig::default(),
+                        btc.as_ref(),
+                        PositionContextEventKind::Checkpoint,
                         decision_ts_ms,
-                    );
-                    (symbol, decision, prices)
-                };
-                let Some(decision) = decision else {
-                    continue;
-                };
-                let score = decision_score(&symbol, &decision);
-                self.apply_strategy_decision_locked(decision, &prices, score, decision_ts_ms)
-                    .await?;
+                    )
+                });
+            self.queue_observability(candidate_event, position_event)
+                .await;
+
+            let Some(decision) = evaluation.decision else {
+                continue;
+            };
+            if matches!(decision, AutoStrategyDecision::Open { .. }) && entry_block_reason.is_some()
+            {
+                continue;
             }
+            let score = decision_score(&symbol, &decision);
+            self.apply_strategy_decision_locked(decision, &prices, score, decision_ts_ms)
+                .await?;
         }
 
         let paper = self.paper_snapshot().await;
@@ -634,20 +758,75 @@ impl RadarState {
         now_ms: i64,
     ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
         let _transition = self.account_event_queue.lock().await;
-        let (decision, prices) = {
+        let (mut evaluation, prices, paper, identity, run_id, btc) = {
             let mut inner = self.inner.write().await;
             inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
             let prices = inner.price_map();
             let paper = inner.paper.snapshot(&prices);
             (
-                evaluate_auto_strategy_at(symbol, &paper, config, now_ms),
+                evaluate_auto_strategy_observed_at(symbol, &paper, config, now_ms),
                 prices,
+                paper,
+                inner.paper.strategy_identity().clone(),
+                inner.paper.run_id().to_string(),
+                inner.symbols.get("BTC-USDT-SWAP").cloned(),
             )
         };
-        let Some(decision) = decision else {
+        let entry_block_reason = if matches!(
+            evaluation.decision.as_ref(),
+            Some(AutoStrategyDecision::Open { .. })
+        ) {
+            self.entry_observation_block_reason().await
+        } else {
+            None
+        };
+        if let (Some(candidate), Some(reason)) =
+            (evaluation.candidate.as_mut(), entry_block_reason.as_deref())
+        {
+            candidate.reject_by_risk(reason);
+        }
+        let candidate_event = evaluation.candidate.take().map(|candidate| {
+            StrategyCandidateEvent::new(
+                &identity,
+                &run_id,
+                symbol,
+                &paper,
+                btc.as_ref(),
+                candidate,
+                now_ms,
+            )
+        });
+        let position_event = paper
+            .positions
+            .iter()
+            .find(|position| position.inst_id == symbol.inst_id)
+            .map(|position| {
+                let kind = if matches!(
+                    evaluation.decision.as_ref(),
+                    Some(AutoStrategyDecision::Close { .. })
+                ) {
+                    PositionContextEventKind::ExitSignal
+                } else {
+                    PositionContextEventKind::Checkpoint
+                };
+                PositionContextEvent::new(
+                    &identity,
+                    &run_id,
+                    position,
+                    symbol,
+                    &paper,
+                    btc.as_ref(),
+                    kind,
+                    now_ms,
+                )
+            });
+        self.queue_observability(candidate_event, position_event)
+            .await;
+
+        let Some(decision) = evaluation.decision else {
             return Ok(None);
         };
-        if matches!(decision, AutoStrategyDecision::Open { .. }) && !self.entry_is_allowed().await {
+        if matches!(decision, AutoStrategyDecision::Open { .. }) && entry_block_reason.is_some() {
             return Ok(None);
         }
         let score = decision_score(symbol, &decision);
@@ -711,14 +890,23 @@ impl RadarState {
         }
         let equity_point = PaperEquityPoint::from_snapshot(ts_ms, &snapshot);
         if let Some(persistence) = &self.persistence {
+            let (candidate_events, position_context_events) =
+                self.take_observability_events().await;
             let transition = PersistedTransition {
                 event_type: "scan_checkpoint".to_string(),
                 intent: None,
+                candidate_events,
+                position_context_events,
                 state: paper,
                 snapshot,
                 committed_at_ms: ts_ms,
             };
             if let Err(error) = persistence.persist_transition(&transition).await {
+                self.restore_observability_events(
+                    transition.candidate_events.clone(),
+                    transition.position_context_events.clone(),
+                )
+                .await;
                 self.pause_persistence(error.to_string()).await;
                 return Err(PaperTransitionError::persistence(error));
             }
@@ -894,6 +1082,28 @@ impl RadarState {
                         return Err(self.persist_rejection(intent, error).await);
                     }
                 };
+                let opened_context = {
+                    let snapshot = candidate.snapshot(prices);
+                    let inner = self.inner.read().await;
+                    let position = snapshot
+                        .positions
+                        .iter()
+                        .find(|position| position.inst_id == order.inst_id);
+                    let symbol = inner.symbols.get(&order.inst_id);
+                    position.zip(symbol).map(|(position, symbol)| {
+                        PositionContextEvent::new(
+                            candidate.strategy_identity(),
+                            candidate.run_id(),
+                            position,
+                            symbol,
+                            &snapshot,
+                            inner.symbols.get("BTC-USDT-SWAP"),
+                            PositionContextEventKind::Opened,
+                            now_ms,
+                        )
+                    })
+                };
+                self.queue_observability(None, opened_context).await;
                 let intent = PersistedOrderIntent::accepted_open(&candidate, &order, &trade, score);
                 self.commit_paper_candidate(
                     candidate,
@@ -921,14 +1131,23 @@ impl RadarState {
         }
         let equity_point = PaperEquityPoint::from_snapshot(committed_at_ms, &snapshot);
         if let Some(persistence) = &self.persistence {
+            let (candidate_events, position_context_events) =
+                self.take_observability_events().await;
             let transition = PersistedTransition {
                 event_type: event_type.to_string(),
                 intent,
+                candidate_events,
+                position_context_events,
                 state: candidate.clone(),
                 snapshot: snapshot.clone(),
                 committed_at_ms,
             };
             if let Err(error) = persistence.persist_transition(&transition).await {
+                self.restore_observability_events(
+                    transition.candidate_events.clone(),
+                    transition.position_context_events.clone(),
+                )
+                .await;
                 self.pause_persistence(error.to_string()).await;
                 return Err(PaperTransitionError::persistence(error));
             }
@@ -965,6 +1184,51 @@ impl RadarState {
         PaperTransitionError::Paper(paper_error)
     }
 
+    async fn queue_observability(
+        &self,
+        candidate: Option<StrategyCandidateEvent>,
+        position: Option<PositionContextEvent>,
+    ) {
+        if self.persistence.is_none() {
+            return;
+        }
+        let mut inner = self.inner.write().await;
+        if let Some(candidate) = candidate {
+            inner.queue_candidate_event(candidate);
+        }
+        if let Some(position) = position {
+            inner.queue_position_context_event(position);
+        }
+    }
+
+    async fn take_observability_events(
+        &self,
+    ) -> (Vec<StrategyCandidateEvent>, Vec<PositionContextEvent>) {
+        self.inner.write().await.take_observability_events()
+    }
+
+    async fn restore_observability_events(
+        &self,
+        candidates: Vec<StrategyCandidateEvent>,
+        positions: Vec<PositionContextEvent>,
+    ) {
+        self.inner
+            .write()
+            .await
+            .restore_observability_events(candidates, positions);
+    }
+
+    async fn entry_observation_block_reason(&self) -> Option<String> {
+        let inner = self.inner.read().await;
+        if inner.persistence.status == PersistenceStatus::PersistencePaused {
+            return Some("persistence_paused".to_string());
+        }
+        inner
+            .risk
+            .entry_block_reason()
+            .map(|reason| format!("account_close_only:{reason}"))
+    }
+
     async fn ensure_entry_allowed(&self) -> Result<(), PaperTransitionError> {
         let health = self.persistence_health().await;
         if health.status == PersistenceStatus::PersistencePaused {
@@ -978,11 +1242,6 @@ impl RadarState {
             return Err(PaperTransitionError::RiskCloseOnly(reason));
         }
         Ok(())
-    }
-
-    async fn entry_is_allowed(&self) -> bool {
-        !self.persistence_is_paused().await
-            && self.inner.read().await.risk.allows(AccountAction::Open)
     }
 
     async fn persistence_is_paused(&self) -> bool {

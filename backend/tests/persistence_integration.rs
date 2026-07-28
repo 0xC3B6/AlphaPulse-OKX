@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
 use alphapulse_okx_backend::{
+    auto_strategy::{evaluate_auto_strategy_observed_at, AutoStrategyConfig},
     config::AppConfig,
     domain::{Direction, Score, SymbolSnapshot},
+    observability::{PositionContextEvent, PositionContextEventKind, StrategyCandidateEvent},
     paper::{PaperOrderRequest, PaperSide, PaperState},
     persistence::{PersistedOrderIntent, PersistedTransition, PersistenceLayer},
     server,
@@ -127,6 +129,8 @@ async fn transition_locks_account_advances_version_and_writes_ledger() {
             intent: Some(PersistedOrderIntent::accepted_open(
                 &candidate, &order, &trade, 90,
             )),
+            candidate_events: Vec::new(),
+            position_context_events: Vec::new(),
             state: candidate,
             snapshot,
             committed_at_ms: 10,
@@ -195,6 +199,8 @@ async fn scan_updates_one_current_state_and_equity_buckets_without_audit_noise()
             .persist_transition(&PersistedTransition {
                 event_type: "scan_checkpoint".to_string(),
                 intent: None,
+                candidate_events: Vec::new(),
+                position_context_events: Vec::new(),
                 state: paper.clone(),
                 snapshot: snapshot.clone(),
                 committed_at_ms,
@@ -244,6 +250,110 @@ async fn scan_updates_one_current_state_and_equity_buckets_without_audit_noise()
         .await
         .unwrap();
     assert_eq!(legacy_count, 0);
+}
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn observability_events_are_bucketed_and_keyed_by_experiment_run() {
+    let config = test_config(true);
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.4"])
+        .await
+        .unwrap();
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let identity = StrategyIdentity::restored_v3();
+    let mut observed_symbol = symbol("OBS-USDT-SWAP", 100.0);
+    observed_symbol.trend_score = Score {
+        value: 92,
+        direction: Direction::Long,
+        reasons: vec!["integration signal".to_string()],
+    };
+    let mut paper = PaperState::fresh_restored_v3(identity.clone());
+    let empty_snapshot = paper.snapshot(&BTreeMap::<String, f64>::new());
+    let candidate = evaluate_auto_strategy_observed_at(
+        &observed_symbol,
+        &empty_snapshot,
+        AutoStrategyConfig::default(),
+        600_000,
+    )
+    .candidate
+    .unwrap();
+    let candidate_event = StrategyCandidateEvent::new(
+        &identity,
+        paper.run_id(),
+        &observed_symbol,
+        &empty_snapshot,
+        None,
+        candidate,
+        600_000,
+    );
+    paper
+        .open(
+            automatic("OBS-USDT-SWAP", PaperSide::Long, 98.5, 102.0, "trend_long"),
+            100.0,
+            10_000.0,
+            590_000,
+        )
+        .unwrap();
+    let prices = BTreeMap::from([("OBS-USDT-SWAP".to_string(), 101.0)]);
+    let snapshot = paper.snapshot(&prices);
+    let position_event = PositionContextEvent::new(
+        &identity,
+        paper.run_id(),
+        &snapshot.positions[0],
+        &observed_symbol,
+        &snapshot,
+        None,
+        PositionContextEventKind::Checkpoint,
+        600_000,
+    );
+
+    for committed_at_ms in [600_000, 601_000] {
+        persistence
+            .persist_transition(&PersistedTransition {
+                event_type: "scan_checkpoint".to_string(),
+                intent: None,
+                candidate_events: vec![candidate_event.clone()],
+                position_context_events: vec![position_event.clone()],
+                state: paper.clone(),
+                snapshot: snapshot.clone(),
+                committed_at_ms,
+            })
+            .await
+            .unwrap();
+    }
+
+    let database_run_id = persistence.database_run_id(INITIAL_RUN_ID);
+    let candidate_row: (i64, String, String, String) = sqlx::query_as(
+        "SELECT observation_count, disposition, experiment_key, run_id \
+         FROM strategy_candidate_events WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(candidate_row.0, 2);
+    assert_eq!(candidate_row.1, "selected");
+    assert_eq!(candidate_row.2, "v0.1.3/baseline");
+    assert_eq!(candidate_row.3, database_run_id);
+
+    let position_row: (i64, String, String) = sqlx::query_as(
+        "SELECT observation_count, event_kind, experiment_key \
+         FROM position_context_events WHERE tenant_id = $1 AND account_id = $2",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(position_row.0, 2);
+    assert_eq!(position_row.1, "checkpoint");
+    assert_eq!(position_row.2, "v0.1.3/baseline");
 }
 
 #[tokio::test]
@@ -520,6 +630,8 @@ async fn failed_fill_rolls_back_intent_position_and_checkpoint() {
         intent: Some(PersistedOrderIntent::accepted_open(
             &candidate, &order, &trade, 90,
         )),
+        candidate_events: Vec::new(),
+        position_context_events: Vec::new(),
         state: candidate,
         snapshot,
         committed_at_ms: 10,
