@@ -267,7 +267,8 @@ impl From<PaperError> for ApiError {
             PaperError::PriceUnavailable(_) | PaperError::PositionNotFound(_) => {
                 StatusCode::NOT_FOUND
             }
-            PaperError::EmptyInstrument
+            PaperError::EmptyRunId
+            | PaperError::EmptyInstrument
             | PaperError::InvalidMargin
             | PaperError::InvalidLeverage
             | PaperError::InsufficientBalance
@@ -293,6 +294,10 @@ impl From<PaperTransitionError> for ApiError {
             PaperTransitionError::RiskCloseOnly(message) => Self {
                 status: StatusCode::CONFLICT,
                 message,
+            },
+            PaperTransitionError::StrategyRuntime(error) => Self {
+                status: StatusCode::CONFLICT,
+                message: error.to_string(),
             },
         }
     }

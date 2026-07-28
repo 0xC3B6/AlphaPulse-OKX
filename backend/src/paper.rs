@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::SymbolSnapshot;
 use crate::persistence::PersistenceHealthSnapshot;
-use crate::strategy_identity::{split_experiment_version, StrategyIdentity, INITIAL_RUN_ID};
+use crate::strategy_identity::{
+    split_experiment_version, StrategyIdentity, StrategyRunMode, INITIAL_RUN_ID,
+};
 use crate::time_regime::TradeTag;
 
 const DEFAULT_INITIAL_BALANCE: f64 = 10_000.0;
@@ -434,6 +436,8 @@ pub struct PaperTrade {
 
 #[derive(Debug, thiserror::Error)]
 pub enum PaperError {
+    #[error("strategy run id is required")]
+    EmptyRunId,
     #[error("instrument is required")]
     EmptyInstrument,
     #[error("price unavailable for {0}")]
@@ -456,6 +460,8 @@ pub struct PaperState {
     strategy_identity: StrategyIdentity,
     #[serde(default = "default_run_id")]
     run_id: String,
+    #[serde(default)]
+    run_mode: StrategyRunMode,
     #[serde(default = "default_initial_balance")]
     initial_balance: f64,
     #[serde(default)]
@@ -513,6 +519,7 @@ impl Default for PaperState {
         Self {
             strategy_identity: StrategyIdentity::restored_v3(),
             run_id: INITIAL_RUN_ID.to_string(),
+            run_mode: StrategyRunMode::ActivePaper,
             initial_balance: DEFAULT_INITIAL_BALANCE,
             realized_pnl: 0.0,
             fee_rate: DEFAULT_FEE_RATE,
@@ -533,12 +540,33 @@ impl PaperState {
         }
     }
 
+    pub fn fresh_isolated(
+        strategy_identity: StrategyIdentity,
+        run_id: impl Into<String>,
+        run_mode: StrategyRunMode,
+    ) -> Result<Self, PaperError> {
+        let run_id = run_id.into();
+        if run_id.trim().is_empty() {
+            return Err(PaperError::EmptyRunId);
+        }
+        Ok(Self {
+            strategy_identity,
+            run_id,
+            run_mode,
+            ..Self::default()
+        })
+    }
+
     pub fn strategy_identity(&self) -> &StrategyIdentity {
         &self.strategy_identity
     }
 
     pub fn run_id(&self) -> &str {
         &self.run_id
+    }
+
+    pub fn run_mode(&self) -> StrategyRunMode {
+        self.run_mode
     }
 
     pub fn next_trade_id(&self) -> u64 {
@@ -609,7 +637,7 @@ impl PaperState {
             .sum::<f64>();
 
         PaperAccountSnapshot {
-            mode: "paper".to_string(),
+            mode: self.run_mode.as_str().to_string(),
             initial_balance: self.initial_balance,
             current_strategy_source: SCALPING_OPTIMIZATION_SOURCE.to_string(),
             current_strategy_name: SCALPING_OPTIMIZATION_NAME.to_string(),
@@ -1014,14 +1042,28 @@ impl PaperState {
 }
 
 pub fn automatic_trigger_prices(entry_price: f64, side: PaperSide, leverage: f64) -> (f64, f64) {
+    automatic_trigger_prices_for_returns(
+        entry_price,
+        side,
+        leverage,
+        DEFAULT_AUTO_STOP_LOSS_MARGIN_RETURN,
+        DEFAULT_AUTO_TAKE_PROFIT_MARGIN_RETURN,
+    )
+}
+
+pub fn automatic_trigger_prices_for_returns(
+    entry_price: f64,
+    side: PaperSide,
+    leverage: f64,
+    stop_loss_margin_return: f64,
+    take_profit_margin_return: f64,
+) -> (f64, f64) {
     let direction = match side {
         PaperSide::Long => 1.0,
         PaperSide::Short => -1.0,
     };
-    let stop_loss =
-        entry_price * (1.0 + direction * DEFAULT_AUTO_STOP_LOSS_MARGIN_RETURN / leverage);
-    let take_profit =
-        entry_price * (1.0 + direction * DEFAULT_AUTO_TAKE_PROFIT_MARGIN_RETURN / leverage);
+    let stop_loss = entry_price * (1.0 + direction * stop_loss_margin_return / leverage);
+    let take_profit = entry_price * (1.0 + direction * take_profit_margin_return / leverage);
     (stop_loss, take_profit)
 }
 

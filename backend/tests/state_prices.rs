@@ -4,6 +4,7 @@ use alphapulse_okx_backend::{
     paper::{PaperOrderRequest, PaperSide},
     risk_safety::{AccountEvent, AccountEventEnvelope, RiskMode},
     state::{PaperTransitionError, RadarState},
+    strategy_identity::StrategyIdentity,
 };
 
 #[tokio::test]
@@ -353,6 +354,76 @@ async fn direct_auto_run_preserves_v3_trade_metadata_and_tags() {
     assert_eq!(paper.positions[0].strategy_version, "v0.1.3");
     assert_eq!(paper.positions[0].primary_signal, "trend_long");
     assert!(!paper.positions[0].tags.is_empty());
+}
+
+#[tokio::test]
+async fn baseline_and_shadow_open_the_same_signal_in_isolated_accounts() {
+    let state = ready_state().await;
+    let active_config = AutoStrategyConfig::default();
+    let shadow_config = AutoStrategyConfig {
+        take_profit_margin_pct: 0.80,
+        ..AutoStrategyConfig::default()
+    };
+    let shadow_run_id = "v0.1.3-session-guard-shadow-1";
+    state
+        .register_shadow_strategy(
+            StrategyIdentity::research_variant_from_config(
+                "v0.1.3",
+                "session_execution_guard",
+                "session-guard-test-build",
+                &shadow_config,
+            ),
+            shadow_run_id,
+            shadow_config,
+        )
+        .await
+        .unwrap();
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(100, Direction::Long),
+        score(0, Direction::Neutral),
+    );
+    state.upsert_symbol(symbol.clone()).await;
+    state
+        .run_auto_strategy_for_symbol_at(
+            &symbol,
+            active_config,
+            chrono::DateTime::parse_from_rfc3339("2026-07-02T13:35:00Z")
+                .unwrap()
+                .timestamp_millis(),
+        )
+        .await
+        .unwrap();
+
+    let runs = state.strategy_run_snapshots().await;
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].variant_id, "baseline");
+    assert_eq!(runs[0].mode, "paper");
+    assert_eq!(runs[1].variant_id, "session_execution_guard");
+    assert_eq!(runs[1].mode, "shadow");
+    assert_eq!(runs[0].positions.len(), 1);
+    assert_eq!(runs[1].positions.len(), 1);
+    assert_eq!(runs[0].trades[0].id, 1);
+    assert_eq!(runs[1].trades[0].id, 1);
+    assert_ne!(runs[0].run_id, runs[1].run_id);
+    assert_ne!(runs[0].experiment_key, runs[1].experiment_key);
+
+    let active = state.paper_snapshot().await;
+    assert_eq!(active.variant_id, "baseline");
+    assert_eq!(active.positions.len(), 1);
+    let shadow = state.strategy_run_snapshot(shadow_run_id).await.unwrap();
+    assert_eq!(shadow.positions.len(), 1);
+
+    state
+        .update_latest_prices(vec![("ETH-USDT-SWAP".to_string(), 1_640.0, 2)])
+        .await;
+    let active = state.paper_snapshot().await;
+    let shadow = state.strategy_run_snapshot(shadow_run_id).await.unwrap();
+    assert!(active.positions.is_empty());
+    assert_eq!(active.position_history.len(), 1);
+    assert_eq!(shadow.positions.len(), 1);
+    assert!(shadow.position_history.is_empty());
 }
 
 async fn seeded_state_with_long(

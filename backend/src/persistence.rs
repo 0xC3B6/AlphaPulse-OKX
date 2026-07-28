@@ -319,7 +319,8 @@ impl PersistenceLayer {
         let current = sqlx::query_as::<_, (Json<serde_json::Value>,)>(
             "SELECT payload_json FROM account_state_current \
              WHERE version_code = $1 AND strategy_build_id = $2 AND config_hash = $3 \
-               AND tenant_id = $4 AND account_id = $5",
+               AND tenant_id = $4 AND account_id = $5 \
+             ORDER BY updated_at_ms DESC LIMIT 1",
         )
         .bind(&identity.version_code)
         .bind(&identity.strategy_build_id)
@@ -352,6 +353,31 @@ impl PersistenceLayer {
         .await?;
         row.map(|(payload,)| {
             serde_json::from_value(payload.0).context("failed to decode persisted paper state")
+        })
+        .transpose()
+    }
+
+    pub async fn load_paper_state_for_run(
+        &self,
+        identity: &StrategyIdentity,
+        run_id: &str,
+    ) -> anyhow::Result<Option<PaperState>> {
+        let database_run_id = self.database_run_id(run_id);
+        let row = sqlx::query_as::<_, (Json<serde_json::Value>,)>(
+            "SELECT payload_json FROM account_state_current \
+             WHERE tenant_id = $1 AND account_id = $2 AND run_id = $3 \
+               AND version_code = $4 AND strategy_build_id = $5 AND config_hash = $6",
+        )
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .bind(database_run_id)
+        .bind(&identity.version_code)
+        .bind(&identity.strategy_build_id)
+        .bind(&identity.config_hash)
+        .fetch_optional(&self.postgres)
+        .await?;
+        row.map(|(payload,)| {
+            serde_json::from_value(payload.0).context("failed to decode strategy run state")
         })
         .transpose()
     }
@@ -1462,8 +1488,8 @@ async fn upsert_account_state_current(
          (tenant_id, account_id, run_id, version_code, strategy_build_id, config_hash, \
           account_version, payload_json, updated_at_ms) \
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
-         ON CONFLICT (tenant_id, account_id) DO UPDATE SET \
-           run_id = EXCLUDED.run_id, version_code = EXCLUDED.version_code, \
+         ON CONFLICT (tenant_id, account_id, run_id) DO UPDATE SET \
+           version_code = EXCLUDED.version_code, \
            strategy_build_id = EXCLUDED.strategy_build_id, config_hash = EXCLUDED.config_hash, \
            account_version = EXCLUDED.account_version, payload_json = EXCLUDED.payload_json, \
            updated_at_ms = EXCLUDED.updated_at_ms",
@@ -1714,31 +1740,38 @@ async fn insert_identity_and_run(
     let realized = snapshot.map(|value| value.realized_pnl).unwrap_or(0.0);
     let unrealized = snapshot.map(|value| value.unrealized_pnl).unwrap_or(0.0);
     let fees = snapshot.map(|value| value.total_fees).unwrap_or(0.0);
+    let mode = snapshot.map(|value| value.mode.as_str()).unwrap_or("paper");
     let statement = if snapshot.is_some() {
         "INSERT INTO strategy_runs \
          (run_id, version_code, parent_version, variant_id, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
           realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
           fee_model, slippage_model, config_snapshot) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'paper', $7, $8, $9, $10, $11, $12, 'running', $13, NULL, '0.05% per fill', '0.02% adverse', $14) \
-         ON CONFLICT (run_id) DO UPDATE SET parent_version = EXCLUDED.parent_version, \
-         variant_id = EXCLUDED.variant_id, current_equity = EXCLUDED.current_equity, \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'running', $14, NULL, '0.05% per fill', '0.02% adverse', $15) \
+         ON CONFLICT (run_id) DO UPDATE SET mode = EXCLUDED.mode, current_equity = EXCLUDED.current_equity, \
          realized_pnl = EXCLUDED.realized_pnl, unrealized_pnl = EXCLUDED.unrealized_pnl, \
-         fee_total = EXCLUDED.fee_total, max_drawdown = EXCLUDED.max_drawdown, status = 'running'"
+         fee_total = EXCLUDED.fee_total, max_drawdown = EXCLUDED.max_drawdown, status = 'running' \
+         WHERE strategy_runs.version_code = EXCLUDED.version_code \
+           AND strategy_runs.strategy_build_id = EXCLUDED.strategy_build_id \
+           AND strategy_runs.config_hash = EXCLUDED.config_hash"
     } else {
         "INSERT INTO strategy_runs \
          (run_id, version_code, parent_version, variant_id, strategy_build_id, config_hash, mode, initial_equity, current_equity, \
           realized_pnl, unrealized_pnl, fee_total, max_drawdown, status, start_time_ms, end_time_ms, \
           fee_model, slippage_model, config_snapshot) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'paper', $7, $8, $9, $10, $11, $12, 'running', $13, NULL, '0.05% per fill', '0.02% adverse', $14) \
-         ON CONFLICT (run_id) DO NOTHING"
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'running', $14, NULL, '0.05% per fill', '0.02% adverse', $15) \
+         ON CONFLICT (run_id) DO UPDATE SET status = strategy_runs.status \
+         WHERE strategy_runs.version_code = EXCLUDED.version_code \
+           AND strategy_runs.strategy_build_id = EXCLUDED.strategy_build_id \
+           AND strategy_runs.config_hash = EXCLUDED.config_hash"
     };
-    sqlx::query(statement)
+    let result = sqlx::query(statement)
         .bind(run_id)
         .bind(&identity.version_code)
         .bind(&identity.parent_version)
         .bind(&identity.variant_id)
         .bind(&identity.strategy_build_id)
         .bind(&identity.config_hash)
+        .bind(mode)
         .bind(decimal_or_zero(initial))
         .bind(decimal_or_zero(equity))
         .bind(decimal_or_zero(realized))
@@ -1754,6 +1787,10 @@ async fn insert_identity_and_run(
         })))
         .execute(&mut **transaction)
         .await?;
+    anyhow::ensure!(
+        result.rows_affected() == 1,
+        "strategy run id {run_id} is already bound to another experiment"
+    );
     Ok(())
 }
 
@@ -2125,8 +2162,13 @@ pub fn postgres_schema_statements() -> Vec<&'static str> {
             account_version BIGINT NOT NULL,
             payload_json JSONB NOT NULL,
             updated_at_ms BIGINT NOT NULL,
-            PRIMARY KEY (tenant_id, account_id)
+            PRIMARY KEY (tenant_id, account_id, run_id)
         )",
+        "ALTER TABLE account_state_current DROP CONSTRAINT IF EXISTS account_state_current_pkey",
+        "CREATE UNIQUE INDEX IF NOT EXISTS account_state_current_scope_run_idx ON account_state_current
+            (tenant_id, account_id, run_id)",
+        "CREATE INDEX IF NOT EXISTS account_state_current_identity_idx ON account_state_current
+            (tenant_id, account_id, version_code, strategy_build_id, config_hash, updated_at_ms DESC)",
         "CREATE TABLE IF NOT EXISTS account_state_backups (
             id BIGSERIAL PRIMARY KEY,
             tenant_id TEXT NOT NULL,

@@ -9,9 +9,98 @@ use alphapulse_okx_backend::{
     persistence::{PersistedOrderIntent, PersistedTransition, PersistenceLayer},
     server,
     state::RadarState,
-    strategy_identity::{StrategyIdentity, INITIAL_RUN_ID},
+    strategy_identity::{StrategyIdentity, StrategyRunMode, INITIAL_RUN_ID},
 };
 use redis::AsyncCommands;
+
+#[tokio::test]
+#[ignore = "requires docker compose PostgreSQL and Redis"]
+async fn baseline_and_shadow_keep_independent_restart_checkpoints() {
+    let config = test_config(false);
+    let persistence = PersistenceLayer::connect_required(&config).await.unwrap();
+    persistence.initialize().await.unwrap();
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.3/session_execution_guard"])
+        .await
+        .unwrap();
+
+    let baseline = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
+    let shadow_config = AutoStrategyConfig::default();
+    let shadow_identity = StrategyIdentity::research_variant_from_config(
+        "v0.1.3",
+        "session_execution_guard",
+        "session-guard-integration-build",
+        &shadow_config,
+    );
+    let shadow_run_id = "v0.1.3-session-guard-integration-1";
+    let mut shadow = PaperState::fresh_isolated(
+        shadow_identity.clone(),
+        shadow_run_id,
+        StrategyRunMode::ShadowPaper,
+    )
+    .unwrap();
+    shadow
+        .open(
+            PaperOrderRequest::manual("ETH-USDT-SWAP", PaperSide::Long, 100.0, 1.0),
+            1_000.0,
+            10_000.0,
+            10,
+        )
+        .unwrap();
+
+    persistence
+        .persist_checkpoint(
+            &baseline,
+            &baseline.snapshot(&BTreeMap::<String, f64>::new()),
+            10,
+        )
+        .await
+        .unwrap();
+    persistence
+        .persist_checkpoint(
+            &shadow,
+            &shadow.snapshot(&BTreeMap::from([("ETH-USDT-SWAP".to_string(), 1_000.0)])),
+            11,
+        )
+        .await
+        .unwrap();
+
+    let restored_baseline = persistence
+        .load_paper_state_for_run(&StrategyIdentity::restored_v3(), baseline.run_id())
+        .await
+        .unwrap()
+        .expect("baseline checkpoint");
+    let restored_shadow = persistence
+        .load_paper_state_for_run(&shadow_identity, shadow_run_id)
+        .await
+        .unwrap()
+        .expect("shadow checkpoint");
+    assert_eq!(restored_baseline.run_mode(), StrategyRunMode::ActivePaper);
+    assert!(restored_baseline.open_position_inst_ids().is_empty());
+    assert_eq!(restored_shadow.run_mode(), StrategyRunMode::ShadowPaper);
+    assert_eq!(
+        restored_shadow.open_position_inst_ids(),
+        vec!["ETH-USDT-SWAP"]
+    );
+
+    let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
+        .await
+        .unwrap();
+    let current_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM account_state_current \
+         WHERE tenant_id = $1 AND account_id = $2 AND run_id = ANY($3)",
+    )
+    .bind(&persistence.account_scope().tenant_id)
+    .bind(&persistence.account_scope().account_id)
+    .bind(vec![
+        persistence.database_run_id(baseline.run_id()),
+        persistence.database_run_id(shadow_run_id),
+    ])
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(current_count, 2);
+}
 
 #[tokio::test]
 #[ignore = "requires docker compose PostgreSQL and Redis"]

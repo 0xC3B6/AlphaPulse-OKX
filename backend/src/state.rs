@@ -27,7 +27,8 @@ use crate::{
         AccountEvent, AccountEventEnvelope, AccountEventResult, AccountRiskSnapshot,
         AccountRiskState,
     },
-    strategy_identity::StrategyIdentity,
+    strategy_identity::{StrategyIdentity, StrategyRunMode},
+    strategy_runtime::{StrategyRuntime, StrategyRuntimeContainer, StrategyRuntimeError},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +59,8 @@ pub enum PaperTransitionError {
     Persistence(String),
     #[error("account is close-only: {0}")]
     RiskCloseOnly(String),
+    #[error(transparent)]
+    StrategyRuntime(#[from] StrategyRuntimeError),
 }
 
 impl PaperTransitionError {
@@ -82,13 +85,10 @@ struct RadarStateInner {
     latest_prices: BTreeMap<String, LatestPrice>,
     last_scan_at_ms: Option<i64>,
     websocket_connected: bool,
-    paper: PaperState,
-    equity_curves: PaperEquityCurves,
+    strategy_runs: StrategyRuntimeContainer,
     persistence: PersistenceHealthSnapshot,
     risk: AccountRiskState,
     risk_event_sequence: u64,
-    pending_candidate_events: BTreeMap<String, StrategyCandidateEvent>,
-    pending_position_context_events: BTreeMap<String, PositionContextEvent>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -143,9 +143,15 @@ impl RadarStateInner {
     }
 
     fn paper_snapshot(&self) -> PaperAccountSnapshot {
-        let mut snapshot = self.paper.snapshot(&self.price_map());
+        self.paper_snapshot_for_run(self.strategy_runs.active_run_id())
+            .expect("active strategy runtime exists")
+    }
+
+    fn paper_snapshot_for_run(&self, run_id: &str) -> Option<PaperAccountSnapshot> {
+        let runtime = self.strategy_runs.get(run_id).ok()?;
+        let mut snapshot = runtime.paper().snapshot(&self.price_map());
         snapshot.persistence = self.persistence.clone();
-        let mut equity_curves = self.equity_curves.clone();
+        let mut equity_curves = runtime.equity_curves().clone();
         if let Some(timestamp_ms) = self
             .latest_prices
             .values()
@@ -164,7 +170,7 @@ impl RadarStateInner {
             .map(equity_candle_close_point)
             .collect();
         snapshot.equity_curves = equity_curves;
-        snapshot
+        Some(snapshot)
     }
 
     fn set_latest_price(&mut self, inst_id: &str, price: f64, updated_at_ms: i64) -> bool {
@@ -192,57 +198,6 @@ impl RadarStateInner {
         self.risk_event_sequence = self.risk_event_sequence.saturating_add(1);
         self.risk_event_sequence
     }
-
-    fn queue_candidate_event(&mut self, event: StrategyCandidateEvent) {
-        match self.pending_candidate_events.entry(event.event_key.clone()) {
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
-                entry.get_mut().merge(event);
-            }
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(event);
-            }
-        }
-    }
-
-    fn queue_position_context_event(&mut self, event: PositionContextEvent) {
-        match self
-            .pending_position_context_events
-            .entry(event.event_key.clone())
-        {
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
-                entry.get_mut().merge(event);
-            }
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(event);
-            }
-        }
-    }
-
-    fn take_observability_events(
-        &mut self,
-    ) -> (Vec<StrategyCandidateEvent>, Vec<PositionContextEvent>) {
-        (
-            std::mem::take(&mut self.pending_candidate_events)
-                .into_values()
-                .collect(),
-            std::mem::take(&mut self.pending_position_context_events)
-                .into_values()
-                .collect(),
-        )
-    }
-
-    fn restore_observability_events(
-        &mut self,
-        candidates: Vec<StrategyCandidateEvent>,
-        positions: Vec<PositionContextEvent>,
-    ) {
-        for event in candidates {
-            self.queue_candidate_event(event);
-        }
-        for event in positions {
-            self.queue_position_context_event(event);
-        }
-    }
 }
 
 impl Default for RadarState {
@@ -264,21 +219,43 @@ impl RadarState {
         Self::new(Some(persistence), paper, equity_curves)
     }
 
+    pub fn with_persistence_and_strategy_runs(
+        persistence: PersistenceLayer,
+        strategy_runs: StrategyRuntimeContainer,
+    ) -> Self {
+        Self::new_with_strategy_runs(Some(persistence), strategy_runs)
+    }
+
     fn new(
         persistence: Option<PersistenceLayer>,
         paper: PaperState,
         equity_curves: PaperEquityCurves,
     ) -> Self {
+        let active_runtime =
+            StrategyRuntime::new(paper, AutoStrategyConfig::default(), equity_curves)
+                .expect("active strategy identity matches restored V3 config");
+        let strategy_runs = StrategyRuntimeContainer::new(active_runtime)
+            .expect("restored V3 is the active strategy runtime");
+        Self::new_with_strategy_runs(persistence, strategy_runs)
+    }
+
+    fn new_with_strategy_runs(
+        persistence: Option<PersistenceLayer>,
+        strategy_runs: StrategyRuntimeContainer,
+    ) -> Self {
         let (events, _) = broadcast::channel(256);
-        let has_positions = !paper.open_position_inst_ids().is_empty();
+        let has_positions = !strategy_runs
+            .active()
+            .paper()
+            .open_position_inst_ids()
+            .is_empty();
         let scope = persistence
             .as_ref()
             .map(|layer| layer.account_scope().clone())
             .unwrap_or_default();
         Self {
             inner: Arc::new(RwLock::new(RadarStateInner {
-                paper,
-                equity_curves,
+                strategy_runs,
                 symbols: BTreeMap::new(),
                 latest_prices: BTreeMap::new(),
                 last_scan_at_ms: None,
@@ -286,8 +263,6 @@ impl RadarState {
                 persistence: PersistenceHealthSnapshot::default(),
                 risk: AccountRiskState::startup(scope, has_positions),
                 risk_event_sequence: 0,
-                pending_candidate_events: BTreeMap::new(),
-                pending_position_context_events: BTreeMap::new(),
             })),
             events,
             persistence,
@@ -301,6 +276,62 @@ impl RadarState {
 
     pub async fn paper_snapshot(&self) -> PaperAccountSnapshot {
         self.inner.read().await.paper_snapshot()
+    }
+
+    pub async fn strategy_run_snapshot(
+        &self,
+        run_id: &str,
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        self.inner
+            .read()
+            .await
+            .paper_snapshot_for_run(run_id)
+            .ok_or_else(|| StrategyRuntimeError::RunNotFound(run_id.to_string()).into())
+    }
+
+    pub async fn strategy_run_snapshots(&self) -> Vec<PaperAccountSnapshot> {
+        let inner = self.inner.read().await;
+        inner
+            .strategy_runs
+            .ordered_run_ids()
+            .iter()
+            .filter_map(|run_id| inner.paper_snapshot_for_run(run_id))
+            .collect()
+    }
+
+    pub async fn register_shadow_strategy(
+        &self,
+        identity: StrategyIdentity,
+        run_id: impl Into<String>,
+        config: AutoStrategyConfig,
+    ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
+        let _transition = self.account_event_queue.lock().await;
+        let paper = PaperState::fresh_isolated(identity, run_id, StrategyRunMode::ShadowPaper)?;
+        let runtime = StrategyRuntime::new(paper.clone(), config, PaperEquityCurves::new())?;
+        {
+            self.inner
+                .read()
+                .await
+                .strategy_runs
+                .validate_shadow(&runtime)?;
+        }
+        let prices = self.inner.read().await.price_map();
+        let snapshot = paper.snapshot(&prices);
+        if let Some(persistence) = &self.persistence {
+            if let Err(error) = persistence
+                .persist_checkpoint(&paper, &snapshot, Utc::now().timestamp_millis())
+                .await
+            {
+                self.pause_persistence(error.to_string()).await;
+                return Err(PaperTransitionError::persistence(error));
+            }
+        }
+        let run_id = paper.run_id().to_string();
+        let mut inner = self.inner.write().await;
+        inner.strategy_runs.register_shadow(runtime)?;
+        inner
+            .paper_snapshot_for_run(&run_id)
+            .ok_or_else(|| StrategyRuntimeError::RunNotFound(run_id).into())
     }
 
     pub async fn persistence_health(&self) -> PersistenceHealthSnapshot {
@@ -401,8 +432,47 @@ impl RadarState {
             });
         }
 
+        let (active_run_id, run_ids) = {
+            let inner = self.inner.read().await;
+            (
+                inner.strategy_runs.active_run_id().to_string(),
+                inner.strategy_runs.ordered_run_ids(),
+            )
+        };
+        for run_id in run_ids {
+            let result = self
+                .process_updated_prices_for_run(&run_id, &updated_ids, decision_ts_ms)
+                .await;
+            match result {
+                Ok(()) => {}
+                Err(error) if run_id == active_run_id => return Err(error),
+                Err(error) => {
+                    tracing::warn!(%run_id, ?error, "shadow strategy price processing failed")
+                }
+            }
+        }
+
+        let paper = self.paper_snapshot().await;
+        if !paper.positions.is_empty() {
+            let _ = self.events.send(BackendEvent::PaperUpdated {
+                data: Box::new(paper),
+            });
+        }
+        Ok(())
+    }
+
+    async fn process_updated_prices_for_run(
+        &self,
+        strategy_run_id: &str,
+        updated_ids: &BTreeSet<String>,
+        decision_ts_ms: i64,
+    ) -> Result<(), PaperTransitionError> {
+        let (config, open_ids) = {
+            let inner = self.inner.read().await;
+            let runtime = inner.strategy_runs.get(strategy_run_id)?;
+            (runtime.config(), runtime.paper().open_position_inst_ids())
+        };
         let mut closed_ids = BTreeSet::new();
-        let open_ids = self.inner.read().await.paper.open_position_inst_ids();
         for inst_id in open_ids {
             if !updated_ids.contains(&inst_id) {
                 continue;
@@ -410,8 +480,9 @@ impl RadarState {
             let (decision, prices, position_event) = {
                 let inner = self.inner.read().await;
                 let prices = inner.price_map();
-                let paper = inner.paper.snapshot(&prices);
-                let decision = evaluate_auto_exit(&inst_id, &paper, AutoStrategyConfig::default());
+                let runtime = inner.strategy_runs.get(strategy_run_id)?;
+                let paper = runtime.paper().snapshot(&prices);
+                let decision = evaluate_auto_exit(&inst_id, &paper, config);
                 let position_event = decision.as_ref().and_then(|_| {
                     let position = paper
                         .positions
@@ -419,8 +490,8 @@ impl RadarState {
                         .find(|position| position.inst_id == inst_id)?;
                     let symbol = inner.symbols.get(&inst_id)?;
                     Some(PositionContextEvent::new(
-                        inner.paper.strategy_identity(),
-                        inner.paper.run_id(),
+                        runtime.paper().strategy_identity(),
+                        runtime.paper().run_id(),
                         position,
                         symbol,
                         &paper,
@@ -432,15 +503,22 @@ impl RadarState {
                 (decision, prices, position_event)
             };
             if let Some(decision) = decision {
-                self.queue_observability(None, position_event).await;
-                self.apply_strategy_decision_locked(decision, &prices, 0, decision_ts_ms)
-                    .await?;
+                self.queue_observability(strategy_run_id, None, position_event)
+                    .await;
+                self.apply_strategy_decision_locked(
+                    strategy_run_id,
+                    decision,
+                    &prices,
+                    0,
+                    decision_ts_ms,
+                )
+                .await?;
                 closed_ids.insert(inst_id);
             }
         }
 
         let entry_block_reason = self.entry_observation_block_reason().await;
-        for inst_id in &updated_ids {
+        for inst_id in updated_ids {
             if closed_ids.contains(inst_id) {
                 continue;
             }
@@ -450,20 +528,17 @@ impl RadarState {
                     continue;
                 };
                 let prices = inner.price_map();
-                let paper = inner.paper.snapshot(&prices);
-                let evaluation = evaluate_auto_strategy_observed_at(
-                    &symbol,
-                    &paper,
-                    AutoStrategyConfig::default(),
-                    decision_ts_ms,
-                );
+                let runtime = inner.strategy_runs.get(strategy_run_id)?;
+                let paper = runtime.paper().snapshot(&prices);
+                let evaluation =
+                    evaluate_auto_strategy_observed_at(&symbol, &paper, config, decision_ts_ms);
                 (
                     symbol,
                     evaluation,
                     prices,
                     paper,
-                    inner.paper.strategy_identity().clone(),
-                    inner.paper.run_id().to_string(),
+                    runtime.paper().strategy_identity().clone(),
+                    runtime.paper().run_id().to_string(),
                     inner.symbols.get("BTC-USDT-SWAP").cloned(),
                 )
             };
@@ -504,7 +579,7 @@ impl RadarState {
                         decision_ts_ms,
                     )
                 });
-            self.queue_observability(candidate_event, position_event)
+            self.queue_observability(strategy_run_id, candidate_event, position_event)
                 .await;
 
             let Some(decision) = evaluation.decision else {
@@ -515,15 +590,14 @@ impl RadarState {
                 continue;
             }
             let score = decision_score(&symbol, &decision);
-            self.apply_strategy_decision_locked(decision, &prices, score, decision_ts_ms)
-                .await?;
-        }
-
-        let paper = self.paper_snapshot().await;
-        if !paper.positions.is_empty() {
-            let _ = self.events.send(BackendEvent::PaperUpdated {
-                data: Box::new(paper),
-            });
+            self.apply_strategy_decision_locked(
+                strategy_run_id,
+                decision,
+                &prices,
+                score,
+                decision_ts_ms,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -540,7 +614,9 @@ impl RadarState {
         let positions_match = {
             let inner = self.inner.read().await;
             inner
-                .paper
+                .strategy_runs
+                .active()
+                .paper()
                 .open_position_inst_ids()
                 .iter()
                 .all(|inst_id| observed_ids.contains(inst_id.as_str()))
@@ -602,7 +678,7 @@ impl RadarState {
         let inner = self.inner.read().await;
         let mut ids = BTreeSet::new();
         ids.extend(fixed_watchlist.iter().cloned());
-        ids.extend(inner.paper.open_position_inst_ids());
+        ids.extend(inner.strategy_runs.open_position_inst_ids());
         ids.into_iter().collect()
     }
 
@@ -624,10 +700,11 @@ impl RadarState {
         let _transition = self.account_event_queue.lock().await;
         self.ensure_entry_allowed().await?;
         let committed_at_ms = Utc::now().timestamp_millis();
-        let (mut candidate, prices, price) = {
+        let (active_run_id, mut candidate, prices, price) = {
             let inner = self.inner.read().await;
             (
-                inner.paper.clone(),
+                inner.strategy_runs.active_run_id().to_string(),
+                inner.strategy_runs.active().paper().clone(),
                 inner.price_map(),
                 inner.price_for(&order.inst_id),
             )
@@ -659,6 +736,7 @@ impl RadarState {
         };
         let intent = PersistedOrderIntent::accepted_open(&candidate, &order, &trade, 0);
         self.commit_paper_candidate(
+            &active_run_id,
             candidate,
             &prices,
             "paper_open",
@@ -674,17 +752,25 @@ impl RadarState {
     ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
         let _transition = self.account_event_queue.lock().await;
         let committed_at_ms = Utc::now().timestamp_millis();
-        let (mut candidate, prices, price, prior) = {
+        let (active_run_id, mut candidate, prices, price, prior) = {
             let inner = self.inner.read().await;
             let prices = inner.price_map();
             let prior = inner
-                .paper
+                .strategy_runs
+                .active()
+                .paper()
                 .snapshot(&prices)
                 .positions
                 .into_iter()
                 .find(|position| position.inst_id == inst_id);
             let price = inner.price_for(inst_id);
-            (inner.paper.clone(), prices, price, prior)
+            (
+                inner.strategy_runs.active_run_id().to_string(),
+                inner.strategy_runs.active().paper().clone(),
+                prices,
+                price,
+                prior,
+            )
         };
         let Some(price) = price else {
             let error = PaperError::PriceUnavailable(inst_id.to_string());
@@ -733,6 +819,7 @@ impl RadarState {
         };
         let intent = PersistedOrderIntent::accepted_close(&candidate, &trade, 0);
         self.commit_paper_candidate(
+            &active_run_id,
             candidate,
             &prices,
             "paper_close",
@@ -754,21 +841,65 @@ impl RadarState {
     pub async fn run_auto_strategy_for_symbol_at(
         &self,
         symbol: &SymbolSnapshot,
-        config: AutoStrategyConfig,
+        active_config: AutoStrategyConfig,
         now_ms: i64,
     ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
         let _transition = self.account_event_queue.lock().await;
-        let (mut evaluation, prices, paper, identity, run_id, btc) = {
+        let (active_run_id, run_ids) = {
             let mut inner = self.inner.write().await;
+            let active = inner.strategy_runs.active();
+            if active.config() != active_config {
+                return Err(StrategyRuntimeError::ConfigHashMismatch(
+                    active.paper().strategy_identity().experiment_key(),
+                )
+                .into());
+            }
             inner.set_latest_price(&symbol.inst_id, symbol.price, symbol.updated_at_ms);
+            (
+                inner.strategy_runs.active_run_id().to_string(),
+                inner.strategy_runs.ordered_run_ids(),
+            )
+        };
+        let mut active_result = None;
+        for run_id in run_ids {
+            let config = if run_id == active_run_id {
+                active_config
+            } else {
+                self.inner.read().await.strategy_runs.get(&run_id)?.config()
+            };
+            match self
+                .run_auto_strategy_for_run_at(&run_id, symbol, config, now_ms)
+                .await
+            {
+                Ok(result) if run_id == active_run_id => active_result = result,
+                Ok(_) => {}
+                Err(error) if run_id == active_run_id => return Err(error),
+                Err(error) => {
+                    tracing::warn!(%run_id, ?error, "shadow strategy evaluation failed")
+                }
+            }
+        }
+        Ok(active_result)
+    }
+
+    async fn run_auto_strategy_for_run_at(
+        &self,
+        run_id: &str,
+        symbol: &SymbolSnapshot,
+        config: AutoStrategyConfig,
+        now_ms: i64,
+    ) -> Result<Option<PaperAccountSnapshot>, PaperTransitionError> {
+        let (mut evaluation, prices, paper, identity, run_id, btc) = {
+            let inner = self.inner.read().await;
             let prices = inner.price_map();
-            let paper = inner.paper.snapshot(&prices);
+            let runtime = inner.strategy_runs.get(run_id)?;
+            let paper = runtime.paper().snapshot(&prices);
             (
                 evaluate_auto_strategy_observed_at(symbol, &paper, config, now_ms),
                 prices,
                 paper,
-                inner.paper.strategy_identity().clone(),
-                inner.paper.run_id().to_string(),
+                runtime.paper().strategy_identity().clone(),
+                runtime.paper().run_id().to_string(),
                 inner.symbols.get("BTC-USDT-SWAP").cloned(),
             )
         };
@@ -820,7 +951,7 @@ impl RadarState {
                     now_ms,
                 )
             });
-        self.queue_observability(candidate_event, position_event)
+        self.queue_observability(&run_id, candidate_event, position_event)
             .await;
 
         let Some(decision) = evaluation.decision else {
@@ -830,7 +961,7 @@ impl RadarState {
             return Ok(None);
         }
         let score = decision_score(symbol, &decision);
-        self.apply_strategy_decision_locked(decision, &prices, score, now_ms)
+        self.apply_strategy_decision_locked(&run_id, decision, &prices, score, now_ms)
             .await
             .map(Some)
     }
@@ -849,25 +980,46 @@ impl RadarState {
             return Ok(());
         }
 
-        let expected = StrategyIdentity::restored_v3();
-        let restored = persistence
-            .load_paper_state(&expected)
-            .await
-            .map_err(|error| PaperTransitionError::persistence(&error))?
-            .ok_or_else(|| PaperTransitionError::persistence("missing restored v3 checkpoint"))?;
-        if restored.strategy_identity() != &expected {
-            let error = "restored checkpoint identity mismatch";
-            self.pause_persistence(error).await;
-            return Err(PaperTransitionError::persistence(error));
+        let expected_runs = {
+            let inner = self.inner.read().await;
+            inner
+                .strategy_runs
+                .ordered_run_ids()
+                .into_iter()
+                .map(|run_id| {
+                    let runtime = inner
+                        .strategy_runs
+                        .get(&run_id)
+                        .expect("registered strategy runtime exists");
+                    (run_id, runtime.paper().strategy_identity().clone())
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut restored_runs = Vec::with_capacity(expected_runs.len());
+        for (run_id, identity) in expected_runs {
+            let restored = persistence
+                .load_paper_state_for_run(&identity, &run_id)
+                .await
+                .map_err(|error| PaperTransitionError::persistence(&error))?
+                .ok_or_else(|| {
+                    PaperTransitionError::persistence(format!(
+                        "missing strategy checkpoint for {run_id}"
+                    ))
+                })?;
+            let equity_curves = persistence
+                .load_equity_curves(&identity, &run_id)
+                .await
+                .map_err(PaperTransitionError::persistence)?;
+            restored_runs.push((run_id, restored, equity_curves));
         }
-        let equity_curves = persistence
-            .load_equity_curves(&expected, restored.run_id())
-            .await
-            .map_err(PaperTransitionError::persistence)?;
         let dashboard = {
             let mut inner = self.inner.write().await;
-            inner.paper = restored;
-            inner.equity_curves = equity_curves;
+            for (run_id, restored, equity_curves) in restored_runs {
+                inner
+                    .strategy_runs
+                    .get_mut(&run_id)?
+                    .replace_persisted_state(restored, equity_curves)?;
+            }
             inner.persistence = PersistenceHealthSnapshot::healthy(Utc::now().timestamp_millis());
             inner.dashboard()
         };
@@ -880,41 +1032,60 @@ impl RadarState {
 
     pub async fn mark_scan(&self, ts_ms: i64) -> Result<(), PaperTransitionError> {
         let _transition = self.account_event_queue.lock().await;
-        let (paper, prices) = {
+        let (run_ids, prices) = {
             let inner = self.inner.read().await;
-            (inner.paper.clone(), inner.price_map())
+            (inner.strategy_runs.ordered_run_ids(), inner.price_map())
         };
-        let mut snapshot = paper.snapshot(&prices);
-        if self.persistence.is_some() {
-            snapshot.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
-        }
-        let equity_point = PaperEquityPoint::from_snapshot(ts_ms, &snapshot);
-        if let Some(persistence) = &self.persistence {
-            let (candidate_events, position_context_events) =
-                self.take_observability_events().await;
-            let transition = PersistedTransition {
-                event_type: "scan_checkpoint".to_string(),
-                intent: None,
-                candidate_events,
-                position_context_events,
-                state: paper,
-                snapshot,
-                committed_at_ms: ts_ms,
-            };
-            if let Err(error) = persistence.persist_transition(&transition).await {
-                self.restore_observability_events(
-                    transition.candidate_events.clone(),
-                    transition.position_context_events.clone(),
-                )
-                .await;
-                self.pause_persistence(error.to_string()).await;
-                return Err(PaperTransitionError::persistence(error));
+        for run_id in run_ids {
+            let paper = self
+                .inner
+                .read()
+                .await
+                .strategy_runs
+                .get(&run_id)?
+                .paper()
+                .clone();
+            let mut snapshot = paper.snapshot(&prices);
+            if self.persistence.is_some() {
+                snapshot.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
             }
+            let equity_point = PaperEquityPoint::from_snapshot(ts_ms, &snapshot);
+            if let Some(persistence) = &self.persistence {
+                let (candidate_events, position_context_events) =
+                    self.take_observability_events(&run_id).await?;
+                let transition = PersistedTransition {
+                    event_type: "scan_checkpoint".to_string(),
+                    intent: None,
+                    candidate_events,
+                    position_context_events,
+                    state: paper,
+                    snapshot,
+                    committed_at_ms: ts_ms,
+                };
+                if let Err(error) = persistence.persist_transition(&transition).await {
+                    self.restore_observability_events(
+                        &run_id,
+                        transition.candidate_events.clone(),
+                        transition.position_context_events.clone(),
+                    )
+                    .await;
+                    self.pause_persistence(error.to_string()).await;
+                    return Err(PaperTransitionError::persistence(error));
+                }
+            }
+            append_equity_candles(
+                self.inner
+                    .write()
+                    .await
+                    .strategy_runs
+                    .get_mut(&run_id)?
+                    .equity_curves_mut(),
+                equity_point,
+            );
         }
         let dashboard = {
             let mut inner = self.inner.write().await;
             inner.last_scan_at_ms = Some(ts_ms);
-            append_equity_candles(&mut inner.equity_curves, equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(ts_ms);
             }
@@ -949,12 +1120,20 @@ impl RadarState {
 
     async fn apply_strategy_decision_locked(
         &self,
+        strategy_run_id: &str,
         decision: AutoStrategyDecision,
         prices: &BTreeMap<String, f64>,
         score: u8,
         now_ms: i64,
     ) -> Result<PaperAccountSnapshot, PaperTransitionError> {
-        let mut candidate = self.inner.read().await.paper.clone();
+        let mut candidate = self
+            .inner
+            .read()
+            .await
+            .strategy_runs
+            .get(strategy_run_id)?
+            .paper()
+            .clone();
         match decision {
             AutoStrategyDecision::Close {
                 inst_id,
@@ -1031,6 +1210,7 @@ impl RadarState {
                 };
                 let intent = PersistedOrderIntent::accepted_close(&candidate, &trade, score);
                 self.commit_paper_candidate(
+                    strategy_run_id,
                     candidate,
                     prices,
                     "automatic_close",
@@ -1103,9 +1283,11 @@ impl RadarState {
                         )
                     })
                 };
-                self.queue_observability(None, opened_context).await;
+                self.queue_observability(strategy_run_id, None, opened_context)
+                    .await;
                 let intent = PersistedOrderIntent::accepted_open(&candidate, &order, &trade, score);
                 self.commit_paper_candidate(
+                    strategy_run_id,
                     candidate,
                     prices,
                     "automatic_open",
@@ -1119,6 +1301,7 @@ impl RadarState {
 
     async fn commit_paper_candidate(
         &self,
+        strategy_run_id: &str,
         candidate: PaperState,
         prices: &BTreeMap<String, f64>,
         event_type: &str,
@@ -1132,7 +1315,7 @@ impl RadarState {
         let equity_point = PaperEquityPoint::from_snapshot(committed_at_ms, &snapshot);
         if let Some(persistence) = &self.persistence {
             let (candidate_events, position_context_events) =
-                self.take_observability_events().await;
+                self.take_observability_events(strategy_run_id).await?;
             let transition = PersistedTransition {
                 event_type: event_type.to_string(),
                 intent,
@@ -1144,6 +1327,7 @@ impl RadarState {
             };
             if let Err(error) = persistence.persist_transition(&transition).await {
                 self.restore_observability_events(
+                    strategy_run_id,
                     transition.candidate_events.clone(),
                     transition.position_context_events.clone(),
                 )
@@ -1153,21 +1337,28 @@ impl RadarState {
             }
         }
 
-        let dashboard = {
+        let (run_snapshot, active_dashboard) = {
             let mut inner = self.inner.write().await;
-            inner.paper = candidate;
-            append_equity_candles(&mut inner.equity_curves, equity_point);
+            let is_active = strategy_run_id == inner.strategy_runs.active_run_id();
+            let runtime = inner.strategy_runs.get_mut(strategy_run_id)?;
+            *runtime.paper_mut() = candidate;
+            append_equity_candles(runtime.equity_curves_mut(), equity_point);
             if self.persistence.is_some() {
                 inner.persistence = PersistenceHealthSnapshot::healthy(committed_at_ms);
             }
-            inner.dashboard()
+            let run_snapshot = inner
+                .paper_snapshot_for_run(strategy_run_id)
+                .ok_or_else(|| StrategyRuntimeError::RunNotFound(strategy_run_id.to_string()))?;
+            let dashboard = is_active.then(|| inner.dashboard());
+            (run_snapshot, dashboard)
         };
-        let snapshot = dashboard.paper.clone();
-        let _ = self.events.send(BackendEvent::PaperUpdated {
-            data: Box::new(snapshot.clone()),
-        });
-        self.rebuild_cache_after_commit(&dashboard).await;
-        Ok(snapshot)
+        if let Some(dashboard) = active_dashboard {
+            let _ = self.events.send(BackendEvent::PaperUpdated {
+                data: Box::new(run_snapshot.clone()),
+            });
+            self.rebuild_cache_after_commit(&dashboard).await;
+        }
+        Ok(run_snapshot)
     }
 
     async fn persist_rejection(
@@ -1186,6 +1377,7 @@ impl RadarState {
 
     async fn queue_observability(
         &self,
+        strategy_run_id: &str,
         candidate: Option<StrategyCandidateEvent>,
         position: Option<PositionContextEvent>,
     ) {
@@ -1193,29 +1385,47 @@ impl RadarState {
             return;
         }
         let mut inner = self.inner.write().await;
+        let Ok(runtime) = inner.strategy_runs.get_mut(strategy_run_id) else {
+            tracing::warn!(%strategy_run_id, "dropping observability for missing strategy runtime");
+            return;
+        };
         if let Some(candidate) = candidate {
-            inner.queue_candidate_event(candidate);
+            runtime.queue_candidate_event(candidate);
         }
         if let Some(position) = position {
-            inner.queue_position_context_event(position);
+            runtime.queue_position_context_event(position);
         }
     }
 
     async fn take_observability_events(
         &self,
-    ) -> (Vec<StrategyCandidateEvent>, Vec<PositionContextEvent>) {
-        self.inner.write().await.take_observability_events()
+        strategy_run_id: &str,
+    ) -> Result<(Vec<StrategyCandidateEvent>, Vec<PositionContextEvent>), StrategyRuntimeError>
+    {
+        Ok(self
+            .inner
+            .write()
+            .await
+            .strategy_runs
+            .get_mut(strategy_run_id)?
+            .take_observability_events())
     }
 
     async fn restore_observability_events(
         &self,
+        strategy_run_id: &str,
         candidates: Vec<StrategyCandidateEvent>,
         positions: Vec<PositionContextEvent>,
     ) {
-        self.inner
+        if let Ok(runtime) = self
+            .inner
             .write()
             .await
-            .restore_observability_events(candidates, positions);
+            .strategy_runs
+            .get_mut(strategy_run_id)
+        {
+            runtime.restore_observability_events(candidates, positions);
+        }
     }
 
     async fn entry_observation_block_reason(&self) -> Option<String> {

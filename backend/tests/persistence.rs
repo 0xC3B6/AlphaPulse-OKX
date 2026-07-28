@@ -63,6 +63,7 @@ fn schema_persists_strategy_identity_and_protective_levels() {
         "event_log",
         "app_state_snapshots",
         "account_state_current",
+        "account_state_current_scope_run_idx",
         "account_state_backups",
     ] {
         assert!(schema.contains(required), "missing {required}");

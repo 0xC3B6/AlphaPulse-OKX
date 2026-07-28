@@ -16,6 +16,7 @@ pub mod scoring;
 pub mod server;
 pub mod state;
 pub mod strategy_identity;
+pub mod strategy_runtime;
 pub mod time_regime;
 pub mod universe;
 pub mod valuation;

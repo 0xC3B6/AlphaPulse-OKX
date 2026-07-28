@@ -7,8 +7,8 @@ use crate::{
         INTRADAY_DOWN_EXTREME, INTRADAY_UP_EXTREME, MULTIDAY_DOWN_EXTREME, MULTIDAY_UP_EXTREME,
     },
     paper::{
-        automatic_trigger_prices, PaperAccountSnapshot, PaperOrderRequest, PaperPositionSnapshot,
-        PaperSide, SCALPING_OPTIMIZATION_VERSION,
+        automatic_trigger_prices_for_returns, PaperAccountSnapshot, PaperOrderRequest,
+        PaperPositionSnapshot, PaperSide, SCALPING_OPTIMIZATION_VERSION,
     },
     time_regime::{classify_time_regime, TradeTag, TradeTagKind},
 };
@@ -195,8 +195,13 @@ pub fn evaluate_auto_strategy_at(
     let mut tags = time_regime.tags;
     tags.extend(signal.tags);
     let reason = append_penalty_reason(signal.reason, time_regime.score_penalty, signal.penalty);
-    let (stop_loss, take_profit) =
-        automatic_trigger_prices(symbol.price, signal.side, config.default_leverage);
+    let (stop_loss, take_profit) = automatic_trigger_prices_for_returns(
+        symbol.price,
+        signal.side,
+        config.default_leverage,
+        config.stop_loss_margin_pct,
+        config.take_profit_margin_pct,
+    );
     let signal_tags = std::iter::once(signal.primary_signal.to_string())
         .chain(tags.iter().map(|tag| tag.label.clone()))
         .collect();
@@ -246,8 +251,13 @@ pub fn evaluate_auto_strategy_observed_at(
     let mut tags = time_regime.tags;
     tags.extend(signal.tags);
     let reason = append_penalty_reason(signal.reason, time_regime.score_penalty, signal.penalty);
-    let (stop_loss, take_profit) =
-        automatic_trigger_prices(symbol.price, signal.side, config.default_leverage);
+    let (stop_loss, take_profit) = automatic_trigger_prices_for_returns(
+        symbol.price,
+        signal.side,
+        config.default_leverage,
+        config.stop_loss_margin_pct,
+        config.take_profit_margin_pct,
+    );
     let (disposition, rejection_reason) = if paper
         .positions
         .iter()

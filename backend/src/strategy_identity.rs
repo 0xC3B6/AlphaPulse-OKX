@@ -8,6 +8,27 @@ pub const STRATEGY_BUILD_ID: &str = "legacy-v3-replay-2026-07-10";
 pub const INITIAL_RUN_ID: &str = "v0.1.3-restored-paper-1";
 pub const BASELINE_VARIANT_ID: &str = "baseline";
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StrategyRunMode {
+    #[default]
+    ActivePaper,
+    ShadowPaper,
+}
+
+impl StrategyRunMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ActivePaper => "paper",
+            Self::ShadowPaper => "shadow",
+        }
+    }
+
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::ActivePaper)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct StrategyIdentity {
     pub version_code: String,
@@ -47,9 +68,7 @@ impl<'de> Deserialize<'de> for StrategyIdentity {
 
 impl StrategyIdentity {
     pub fn restored_v3() -> Self {
-        let config = serde_json::to_vec(&AutoStrategyConfig::default())
-            .expect("serialize restored v3 strategy config");
-        let config_hash = format!("{:x}", Sha256::digest(config));
+        let config_hash = strategy_config_hash(&AutoStrategyConfig::default());
         Self {
             version_code: STRATEGY_VERSION_CODE.to_string(),
             parent_version: STRATEGY_VERSION_CODE.to_string(),
@@ -81,9 +100,28 @@ impl StrategyIdentity {
         }
     }
 
+    pub fn research_variant_from_config(
+        parent_version: impl Into<String>,
+        variant_id: impl Into<String>,
+        strategy_build_id: impl Into<String>,
+        config: &AutoStrategyConfig,
+    ) -> Self {
+        Self::research_variant(
+            parent_version,
+            variant_id,
+            strategy_build_id,
+            strategy_config_hash(config),
+        )
+    }
+
     pub fn experiment_key(&self) -> String {
         format!("{}/{}", self.parent_version, self.variant_id)
     }
+}
+
+pub fn strategy_config_hash(config: &AutoStrategyConfig) -> String {
+    let config = serde_json::to_vec(config).expect("serialize strategy config");
+    format!("{:x}", Sha256::digest(config))
 }
 
 pub fn split_experiment_version(version_code: &str) -> (String, String) {
@@ -154,5 +192,25 @@ mod tests {
         assert_eq!(identity.parent_version, "v0.1.3");
         assert_eq!(identity.variant_id, "signal_context_guard");
         assert_eq!(identity.experiment_key(), "v0.1.3/signal_context_guard");
+    }
+
+    #[test]
+    fn research_variant_from_config_binds_identity_to_exact_config() {
+        let config = AutoStrategyConfig {
+            max_positions: 3,
+            ..AutoStrategyConfig::default()
+        };
+        let identity = StrategyIdentity::research_variant_from_config(
+            "v0.1.3",
+            "session_execution_guard",
+            "session-guard-build",
+            &config,
+        );
+
+        assert_eq!(identity.config_hash, strategy_config_hash(&config));
+        assert_ne!(
+            identity.config_hash,
+            StrategyIdentity::restored_v3().config_hash
+        );
     }
 }
