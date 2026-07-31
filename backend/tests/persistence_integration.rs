@@ -120,6 +120,11 @@ async fn baseline_and_shadow_keep_independent_restart_checkpoints() {
     .await
     .unwrap();
     assert_eq!(current_count, 2);
+
+    persistence
+        .purge_strategy_data(&["v0.1.3", "v0.1.3/session_execution_guard"])
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
