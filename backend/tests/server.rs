@@ -4,7 +4,7 @@ use alphapulse_okx_backend::{
 };
 use axum::{
     body::{to_bytes, Body},
-    http::{Request, StatusCode},
+    http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use tower::ServiceExt;
 
@@ -124,5 +124,83 @@ async fn strategy_run_routes_require_experiment_and_run_identity() {
         )
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn session_execution_guard_shadow_creation_is_idempotent() {
+    let router = build_router(AppConfig::default(), RadarState::default());
+    let request_body = r#"{"variant_id":"session_execution_guard"}"#;
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/strategy/runs")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(request_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let created: PaperAccountSnapshot = serde_json::from_slice(&body).unwrap();
+    assert_eq!(created.experiment_key, "v0.1.3/session_execution_guard");
+    assert_eq!(created.variant_id, "session_execution_guard");
+    assert_eq!(created.mode, "shadow");
+    assert_eq!(created.initial_balance, 10_000.0);
+    assert!(created.positions.is_empty());
+    assert!(created.trades.is_empty());
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/strategy/runs")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(request_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let existing: PaperAccountSnapshot = serde_json::from_slice(&body).unwrap();
+    assert_eq!(existing.run_id, created.run_id);
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/strategy/runs")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let runs: Vec<PaperAccountSnapshot> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(runs.len(), 2);
+}
+
+#[tokio::test]
+async fn shadow_creation_rejects_unregistered_variants() {
+    let router = build_router(AppConfig::default(), RadarState::default());
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/strategy/runs")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"variant_id":"arbitrary_strategy"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

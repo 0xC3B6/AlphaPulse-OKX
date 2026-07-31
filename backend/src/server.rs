@@ -26,10 +26,13 @@ use crate::{
     persistence::PersistenceLayer,
     runtime,
     state::{BackendEvent, PaperTransitionError, RadarState},
-    strategy_identity::StrategyIdentity,
+    strategy_identity::{StrategyIdentity, STRATEGY_VERSION_CODE},
     strategy_runtime::{StrategyRuntime, StrategyRuntimeContainer},
     valuation::CoinglassValuationClient,
 };
+
+const SESSION_EXECUTION_GUARD_VARIANT_ID: &str = "session_execution_guard";
+const SESSION_EXECUTION_GUARD_BUILD_ID: &str = "session-execution-guard-shadow-v1";
 
 #[derive(Clone)]
 struct AppCtx {
@@ -55,7 +58,10 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
         .route("/api/symbols/:inst_id/chart", get(symbol_chart))
         .route("/api/paper", get(paper))
         .route("/api/paper/orders", post(open_paper_order))
-        .route("/api/strategy/runs", get(strategy_runs))
+        .route(
+            "/api/strategy/runs",
+            get(strategy_runs).post(create_strategy_run),
+        )
         .route("/api/strategy/runs/:run_id", get(strategy_run))
         .route(
             "/api/paper/positions/:inst_id/close",
@@ -215,6 +221,46 @@ async fn strategy_runs(State(ctx): State<AppCtx>) -> impl IntoResponse {
     Json(ctx.state.strategy_run_snapshots().await)
 }
 
+async fn create_strategy_run(
+    State(ctx): State<AppCtx>,
+    Json(request): Json<CreateStrategyRunRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let variant_id = request.variant_id.trim();
+    if variant_id != SESSION_EXECUTION_GUARD_VARIANT_ID {
+        return Err(ApiError::bad_request(format!(
+            "unsupported shadow strategy variant: {variant_id}"
+        )));
+    }
+
+    let experiment_key = format!("{STRATEGY_VERSION_CODE}/{variant_id}");
+    if let Some(existing) = ctx
+        .state
+        .strategy_run_snapshots()
+        .await
+        .into_iter()
+        .find(|snapshot| snapshot.experiment_key == experiment_key)
+    {
+        return Ok((StatusCode::OK, Json(existing)));
+    }
+
+    let config = AutoStrategyConfig::default();
+    let identity = StrategyIdentity::research_variant_from_config(
+        STRATEGY_VERSION_CODE,
+        variant_id,
+        SESSION_EXECUTION_GUARD_BUILD_ID,
+        &config,
+    );
+    let run_id = format!(
+        "{STRATEGY_VERSION_CODE}-session-execution-guard-shadow-{}",
+        Utc::now().timestamp_millis()
+    );
+    let snapshot = ctx
+        .state
+        .register_shadow_strategy(identity, run_id, config)
+        .await?;
+    Ok((StatusCode::CREATED, Json(snapshot)))
+}
+
 async fn strategy_run(
     State(ctx): State<AppCtx>,
     Path(run_id): Path<String>,
@@ -299,6 +345,12 @@ struct StrategyRunQuery {
     experiment_key: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateStrategyRunRequest {
+    variant_id: String,
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -306,6 +358,13 @@ struct ApiError {
 }
 
 impl ApiError {
+    fn bad_request(message: String) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            message,
+        }
+    }
+
     fn not_found(message: String) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
