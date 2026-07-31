@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -122,7 +122,15 @@ const DEFAULT_HISTORY_SEARCH_FILTERS: HistorySearchFilters = {
   version: "all",
 };
 
-export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSnapshot }) {
+export function ReviewPage({
+  copy,
+  paper,
+  strategyRuns,
+}: {
+  copy: Copy;
+  paper: PaperAccountSnapshot;
+  strategyRuns?: PaperAccountSnapshot[];
+}) {
   const [activeSection, setActiveSection] = useState<ReviewSection>("overview");
   const [historyDraftFilters, setHistoryDraftFilters] = useState<HistorySearchFilters>(
     DEFAULT_HISTORY_SEARCH_FILTERS,
@@ -131,28 +139,73 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     DEFAULT_HISTORY_SEARCH_FILTERS,
   );
   const [historyPage, setHistoryPage] = useState(0);
-  const [selectedStrategyVersion, setSelectedStrategyVersion] = useState<string | null>(null);
+  const [selectedStrategyKey, setSelectedStrategyKey] = useState<string | null>(null);
 
-  const summary = summarizePaperReview(paper);
-  const positionHistory = paper.position_history ?? [];
+  const availableRuns = useMemo(
+    () => uniqueStrategyRuns([paper, ...(strategyRuns ?? [])]),
+    [paper, strategyRuns],
+  );
   const strategyStats = useMemo(
-    () =>
-      sortStrategyStats(
+    () => {
+      if (strategyRuns !== undefined) {
+        return sortStrategyStats(availableRuns.map(strategyStatsForRun));
+      }
+      const positionHistory = paper.position_history ?? [];
+      return sortStrategyStats(
         paper.strategy_stats && paper.strategy_stats.length > 0
           ? paper.strategy_stats
           : buildStrategyStats(positionHistory),
-      ),
-    [paper.strategy_stats, positionHistory],
+      );
+    },
+    [availableRuns, paper, strategyRuns],
   );
+  const activeStats = strategyStats.find(
+    (stats) => stats.strategy_version === paper.strategy_version,
+  );
+  const activeStrategyKey =
+    strategyRuns === undefined && activeStats
+      ? strategyStatsKey(activeStats)
+      : paperStrategyRunKey(paper);
+  const effectiveSelectedStrategyKey =
+    selectedStrategyKey &&
+    (availableRuns.some((run) => paperStrategyRunKey(run) === selectedStrategyKey) ||
+      strategyStats.some((stats) => strategyStatsKey(stats) === selectedStrategyKey))
+      ? selectedStrategyKey
+      : activeStrategyKey;
+  const selectedRun =
+    availableRuns.find(
+      (run) => paperStrategyRunKey(run) === effectiveSelectedStrategyKey,
+    ) ?? null;
+  const selectedStats =
+    strategyStats.find(
+      (stats) => strategyStatsKey(stats) === effectiveSelectedStrategyKey,
+    ) ?? null;
+  const selectedPaper = selectedRun ?? paper;
+  const summary = summarizePaperReview(selectedPaper);
+  const positionHistory = selectedPaper.position_history ?? [];
   const activeStrategyVersion =
-    selectedStrategyVersion ?? paper.strategy_version ?? strategyStats[0]?.strategy_version ?? null;
-  const activeStrategyCurve =
-    activeStrategyVersion === null
-      ? null
-      : buildStrategyCurve(
-          activeStrategyVersion === paper.strategy_version ? (paper.equity_history ?? []) : [],
-          paper.initial_balance,
-        );
+    selectedStats?.strategy_version ??
+    selectedPaper.strategy_version ??
+    strategyStats[0]?.strategy_version ??
+    null;
+  const activeStrategyCurve = useMemo(
+    () =>
+      activeStrategyVersion === null
+        ? null
+        : buildStrategyCurve(
+            selectedRun || activeStrategyVersion === paper.strategy_version
+              ? (selectedPaper.equity_history ?? [])
+              : [],
+            selectedPaper.initial_balance,
+          ),
+    [
+      activeStrategyVersion,
+      paper.strategy_version,
+      selectedPaper.equity_history,
+      selectedPaper.initial_balance,
+      selectedRun,
+    ],
+  );
   const activeSignalAttribution = useMemo(
     () =>
       activeStrategyVersion === null
@@ -161,8 +214,8 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     [activeStrategyVersion, positionHistory],
   );
   const historyVersionOptions = useMemo(
-    () => strategyVersionOptions(positionHistory, strategyStats, paper.trades),
-    [paper.trades, positionHistory, strategyStats],
+    () => strategyVersionOptions(positionHistory, strategyStats, selectedPaper.trades),
+    [positionHistory, selectedPaper.trades, strategyStats],
   );
   const filteredHistory = useMemo(
     () =>
@@ -180,11 +233,11 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
     (safeHistoryPage + 1) * HISTORY_PAGE_SIZE,
   );
   const profitFactor =
-    paper.profit_factor === undefined
+    selectedPaper.profit_factor === undefined
       ? summary.profitFactor === null
         ? "-"
         : summary.profitFactor.toFixed(2)
-      : formatNullableRatio(paper.profit_factor);
+      : formatNullableRatio(selectedPaper.profit_factor);
 
   const tabs: Array<[ReviewSection, string]> = [
     ["overview", copy.review.performance],
@@ -211,11 +264,12 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
 
       {activeSection === "overview" ? (
         <OverviewSection
-          activeStrategyVersion={activeStrategyVersion}
+          activeStrategyKey={activeStrategyKey}
           copy={copy}
-          onSelectStrategyVersion={setSelectedStrategyVersion}
-          paper={paper}
+          onSelectStrategy={(stats) => setSelectedStrategyKey(strategyStatsKey(stats))}
+          paper={selectedPaper}
           profitFactor={profitFactor}
+          selectedStrategyKey={effectiveSelectedStrategyKey}
           strategyStats={strategyStats}
           summary={summary}
         />
@@ -225,21 +279,19 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
         <section className="detail-section review-strategy-card">
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
-            activeVersion={paper.strategy_version}
+            activeStrategyKey={activeStrategyKey}
             copy={copy}
-            initialBalance={paper.initial_balance}
-            onSelectVersion={setSelectedStrategyVersion}
-            selectedVersion={activeStrategyVersion}
+            initialBalance={selectedPaper.initial_balance}
+            onSelectStrategy={(stats) => setSelectedStrategyKey(strategyStatsKey(stats))}
+            selectedStrategyKey={effectiveSelectedStrategyKey}
             stats={strategyStats}
           />
           {activeStrategyVersion === null || activeStrategyCurve === null ? null : (
             <StrategyCurvePanel
               copy={copy}
               curve={activeStrategyCurve}
-              equityCurves={
-                activeStrategyVersion === paper.strategy_version ? paper.equity_curves : undefined
-              }
-              initialBalance={paper.initial_balance}
+              equityCurves={selectedRun?.equity_curves}
+              initialBalance={selectedPaper.initial_balance}
               version={activeStrategyVersion}
             />
           )}
@@ -278,26 +330,28 @@ export function ReviewPage({ copy, paper }: { copy: Copy; paper: PaperAccountSna
       ) : null}
 
       {activeSection === "trades" ? (
-        <TradeRecordsSection copy={copy} trades={paper.trades} />
+        <TradeRecordsSection copy={copy} trades={selectedPaper.trades} />
       ) : null}
     </section>
   );
 }
 
 function OverviewSection({
-  activeStrategyVersion,
+  activeStrategyKey,
   copy,
-  onSelectStrategyVersion,
+  onSelectStrategy,
   paper,
   profitFactor,
+  selectedStrategyKey,
   strategyStats,
   summary,
 }: {
-  activeStrategyVersion: string | null;
+  activeStrategyKey: string;
   copy: Copy;
-  onSelectStrategyVersion: (version: string) => void;
+  onSelectStrategy: (stats: PaperStrategyStats) => void;
   paper: PaperAccountSnapshot;
   profitFactor: string;
+  selectedStrategyKey: string;
   strategyStats: PaperStrategyStats[];
   summary: ReturnType<typeof summarizePaperReview>;
 }) {
@@ -376,15 +430,16 @@ function OverviewSection({
         <section className="detail-section review-strategy-card">
           <h2>{copy.paper.strategyComparison}</h2>
           <StrategyStatsTable
-            activeVersion={paper.strategy_version}
+            activeStrategyKey={activeStrategyKey}
             copy={copy}
             initialBalance={paper.initial_balance}
-            onSelectVersion={onSelectStrategyVersion}
-            selectedVersion={activeStrategyVersion}
+            onSelectStrategy={onSelectStrategy}
+            selectedStrategyKey={selectedStrategyKey}
             stats={strategyStats}
           />
         </section>
       </section>
+      <ReviewOpenPositions copy={copy} paper={paper} />
     </>
   );
 }
@@ -451,19 +506,75 @@ function AccountEquityCurve({
   );
 }
 
+function ReviewOpenPositions({
+  copy,
+  paper,
+}: {
+  copy: Copy;
+  paper: PaperAccountSnapshot;
+}) {
+  return (
+    <section
+      className="table-panel review-open-positions"
+      data-testid="review-open-positions"
+    >
+      <header className="panel-heading">
+        <div>
+          <h2>{copy.paper.openPositions}</h2>
+          <p>
+            {paper.positions.length} {copy.trade.currentPositions}
+          </p>
+        </div>
+      </header>
+      {paper.positions.length === 0 ? (
+        <p className="muted panel-empty">{copy.paper.noOpenPositions}</p>
+      ) : (
+        <table className="trade-table">
+          <thead>
+            <tr>
+              <th>{copy.table.symbol}</th>
+              <th>{copy.paper.side}</th>
+              <th>{copy.paper.leverage}</th>
+              <th>{copy.paper.margin}</th>
+              <th>{copy.paper.pnl}</th>
+              <th>{copy.paper.mark}</th>
+              <th>{copy.trade.signal}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paper.positions.map((position) => (
+              <tr key={position.inst_id}>
+                <td>{position.inst_id}</td>
+                <td>{copy.directions[position.side]}</td>
+                <td>{position.leverage.toFixed(1)}x</td>
+                <td>{formatUsdt(position.margin)}</td>
+                <td className={pnlClass(position.unrealized_pnl)}>
+                  {formatSignedUsdt(position.unrealized_pnl)} / {formatPct(position.pnl_pct)}
+                </td>
+                <td>{formatPrice(position.mark_price)}</td>
+                <td>{position.primary_signal || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
 function StrategyStatsTable({
-  activeVersion,
+  activeStrategyKey,
   copy,
   initialBalance,
-  onSelectVersion,
-  selectedVersion,
+  onSelectStrategy,
+  selectedStrategyKey,
   stats,
 }: {
-  activeVersion: string;
+  activeStrategyKey: string;
   copy: Copy;
   initialBalance: number;
-  onSelectVersion: (version: string) => void;
-  selectedVersion: string | null;
+  onSelectStrategy: (stats: PaperStrategyStats) => void;
+  selectedStrategyKey: string;
   stats: PaperStrategyStats[];
 }) {
   const [collapsedParents, setCollapsedParents] = useState<Set<string>>(() => new Set());
@@ -496,7 +607,7 @@ function StrategyStatsTable({
           {groups.map((group) => {
             const expanded = !collapsedParents.has(group.parentVersion);
             const parentIsActive = group.items.some(
-              (item) => item.strategy_version === activeVersion,
+              (item) => strategyStatsKey(item) === activeStrategyKey,
             );
             return (
               <Fragment key={group.parentVersion}>
@@ -531,17 +642,24 @@ function StrategyStatsTable({
                 </tr>
                 {expanded
                   ? group.items.map((item) => {
-                      const isActiveVersion = activeVersion === item.strategy_version;
+                      const itemKey = strategyStatsKey(item);
+                      const isActiveVersion = activeStrategyKey === itemKey;
+                      const status =
+                        item.mode === "shadow"
+                          ? copy.paper.shadow
+                          : isActiveVersion
+                            ? copy.paper.active
+                            : copy.paper.closed;
                       return (
                         <tr
                           aria-label={`${item.strategy_name} ${item.strategy_version} ${strategyVariantDisplayName(item)}`}
-                          className={selectedVersion === item.strategy_version ? "active strategy-variant-row" : "strategy-variant-row"}
-                          key={`${item.strategy_name}-${strategyExperimentKey(item)}`}
-                          onClick={() => onSelectVersion(item.strategy_version)}
+                          className={selectedStrategyKey === itemKey ? "active strategy-variant-row" : "strategy-variant-row"}
+                          key={`${item.strategy_name}-${itemKey}`}
+                          onClick={() => onSelectStrategy(item)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              onSelectVersion(item.strategy_version);
+                              onSelectStrategy(item);
                             }
                           }}
                           tabIndex={0}
@@ -578,7 +696,7 @@ function StrategyStatsTable({
                                   : "strategy-status-pill"
                               }
                             >
-                              {isActiveVersion ? copy.paper.active : copy.paper.closed}
+                              {status}
                             </span>
                           </td>
                         </tr>
@@ -1012,7 +1130,7 @@ function StrategyDoctorSample({
   );
 }
 
-function StrategyCurveChart({
+const StrategyCurveChart = memo(function StrategyCurveChart({
   ariaLabel,
   copy,
   curve,
@@ -1151,7 +1269,7 @@ function StrategyCurveChart({
       </div>
     </div>
   );
-}
+});
 
 function StrategyCurveTooltip({
   active,
@@ -1736,6 +1854,91 @@ function matchesHistoryDetailFilters(
     return false;
   }
   return true;
+}
+
+function paperStrategyRunKey(paper: PaperAccountSnapshot): string {
+  return `${paper.experiment_key}\u0000${paper.run_id}`;
+}
+
+function strategyStatsKey(stats: PaperStrategyStats): string {
+  if (stats.run_id) {
+    return `${strategyExperimentKey(stats)}\u0000${stats.run_id}`;
+  }
+  return `legacy\u0000${strategyExperimentKey(stats)}\u0000${stats.strategy_version}`;
+}
+
+function uniqueStrategyRuns(runs: PaperAccountSnapshot[]): PaperAccountSnapshot[] {
+  const unique = new Map<string, PaperAccountSnapshot>();
+  runs.forEach((run) => unique.set(paperStrategyRunKey(run), run));
+  return Array.from(unique.values());
+}
+
+function strategyStatsForRun(run: PaperAccountSnapshot): PaperStrategyStats {
+  const exactStats = run.strategy_stats?.find(
+    (stats) => strategyExperimentKey(stats) === run.experiment_key,
+  );
+  if (exactStats) {
+    return {
+      ...exactStats,
+      experiment_key: run.experiment_key,
+      mode: run.mode,
+      parent_version: run.parent_version,
+      run_id: run.run_id,
+      strategy_version: run.strategy_version,
+      variant_id: run.variant_id,
+    };
+  }
+
+  const summary = summarizePaperReview(run);
+  const positionHistory = run.position_history ?? [];
+  const winningPositions = positionHistory.filter(
+    (position) => position.realized_pnl > 0,
+  );
+  const losingPositions = positionHistory.filter(
+    (position) => position.realized_pnl < 0,
+  );
+  const timestamps = [
+    ...run.trades.map((trade) => trade.ts_ms),
+    ...positionHistory.flatMap((position) => [
+      position.opened_at_ms,
+      position.closed_at_ms,
+    ]),
+  ];
+  const firstTradeTs = minNumber(timestamps);
+  const lastTradeTs = maxNumber(timestamps);
+  return {
+    average_holding_duration_ms:
+      run.average_holding_duration_ms ??
+      averageNumber(positionHistory.map((position) => position.duration_ms)),
+    average_position_pnl:
+      run.average_closed_position_pnl ?? summary.averageClosedPnl,
+    closed_position_count: run.closed_position_count ?? summary.closedCount,
+    experiment_key: run.experiment_key,
+    first_trade_ts_ms: firstTradeTs,
+    largest_losing_pnl: run.largest_losing_pnl ?? summary.maxLoss,
+    largest_winning_pnl: run.largest_winning_pnl ?? summary.maxWin,
+    last_trade_ts_ms: lastTradeTs,
+    losing_closed_position_count:
+      run.losing_closed_position_count ?? losingPositions.length,
+    mode: run.mode,
+    parent_version: run.parent_version,
+    profit_factor: run.profit_factor ?? summary.profitFactor,
+    realized_pnl: run.realized_pnl,
+    run_id: run.run_id,
+    running_duration_ms:
+      firstTradeTs === null || lastTradeTs === null
+        ? null
+        : lastTradeTs - firstTradeTs,
+    strategy_name:
+      run.strategy_stats?.[0]?.strategy_name ?? "Scalping Optimization Design",
+    strategy_version: run.strategy_version,
+    total_fees: run.total_fees ?? 0,
+    total_trades: run.total_trades ?? run.trades.length,
+    variant_id: run.variant_id,
+    win_rate: run.win_rate ?? summary.winRate,
+    winning_closed_position_count:
+      run.winning_closed_position_count ?? winningPositions.length,
+  };
 }
 
 function buildStrategyStats(positions: PaperClosedPositionSnapshot[]): PaperStrategyStats[] {

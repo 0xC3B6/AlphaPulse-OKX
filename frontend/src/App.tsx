@@ -4,6 +4,7 @@ import {
   connectEvents,
   fetchBtcMacro,
   fetchSnapshot,
+  fetchStrategyRuns,
   openPaperOrder,
 } from "./api";
 import { ConsoleShell } from "./ConsoleShell";
@@ -73,6 +74,9 @@ const emptySnapshot: DashboardSnapshot = {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
+  const [strategyRuns, setStrategyRuns] = useState<PaperAccountSnapshot[]>([
+    emptyPaperAccount,
+  ]);
   const [macroSnapshot, setMacroSnapshot] = useState<BtcMacroSnapshot | null>(null);
   const [macroLoading, setMacroLoading] = useState(false);
   const [macroError, setMacroError] = useState<string | null>(null);
@@ -140,6 +144,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    setStrategyRuns((current) => upsertStrategyRun(current, snapshot.paper));
+  }, [snapshot.paper]);
+
+  useEffect(() => {
+    if (viewMode !== "review") {
+      return;
+    }
+    let active = true;
+    fetchStrategyRuns()
+      .then((runs) => {
+        if (active) {
+          setStrategyRuns(uniqueStrategyRuns([snapshot.paper, ...runs]));
+        }
+      })
+      .catch(() => {
+        // Keep the active Baseline snapshot when an older backend lacks run listing.
+      });
+    return () => {
+      active = false;
+    };
+  }, [viewMode]);
+
+  useEffect(() => {
     void loadMacro();
   }, []);
 
@@ -179,6 +206,10 @@ export default function App() {
         }
         if (event.type === "paper_updated") {
           setSnapshot((current) => ({ ...current, paper: event.data }));
+          return;
+        }
+        if (event.type === "strategy_run_updated") {
+          setStrategyRuns((current) => upsertStrategyRun(current, event.data));
           return;
         }
 
@@ -369,7 +400,7 @@ export default function App() {
           symbols={sortedSymbols}
         />
       ) : viewMode === "review" ? (
-        <ReviewPage copy={copy} paper={snapshot.paper} />
+        <ReviewPage copy={copy} paper={snapshot.paper} strategyRuns={strategyRuns} />
       ) : (
         <MonitorPage
           btcSymbol={snapshot.symbols.find((symbol) => symbol.inst_id === "BTC-USDT-SWAP") ?? null}
@@ -399,6 +430,23 @@ export default function App() {
       ) : null}
     </ConsoleShell>
   );
+}
+
+function strategyRunKey(paper: PaperAccountSnapshot): string {
+  return `${paper.experiment_key}\u0000${paper.run_id}`;
+}
+
+function uniqueStrategyRuns(runs: PaperAccountSnapshot[]): PaperAccountSnapshot[] {
+  const unique = new Map<string, PaperAccountSnapshot>();
+  runs.forEach((run) => unique.set(strategyRunKey(run), run));
+  return Array.from(unique.values());
+}
+
+function upsertStrategyRun(
+  runs: PaperAccountSnapshot[],
+  paper: PaperAccountSnapshot,
+): PaperAccountSnapshot[] {
+  return uniqueStrategyRuns([...runs, paper]);
 }
 
 function readStoredTheme(): ThemeMode {

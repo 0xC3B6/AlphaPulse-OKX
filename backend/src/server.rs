@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
+    auto_strategy::AutoStrategyConfig,
     config::AppConfig,
     domain::{ChartSnapshot, Timeframe},
     indicators::{fvg::detect_fvgs, patterns::detect_patterns},
@@ -26,6 +27,7 @@ use crate::{
     runtime,
     state::{BackendEvent, PaperTransitionError, RadarState},
     strategy_identity::StrategyIdentity,
+    strategy_runtime::{StrategyRuntime, StrategyRuntimeContainer},
     valuation::CoinglassValuationClient,
 };
 
@@ -53,6 +55,8 @@ pub fn build_router(config: AppConfig, state: RadarState) -> Router {
         .route("/api/symbols/:inst_id/chart", get(symbol_chart))
         .route("/api/paper", get(paper))
         .route("/api/paper/orders", post(open_paper_order))
+        .route("/api/strategy/runs", get(strategy_runs))
+        .route("/api/strategy/runs/:run_id", get(strategy_run))
         .route(
             "/api/paper/positions/:inst_id/close",
             post(close_paper_position),
@@ -85,6 +89,7 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
     let persistence = PersistenceLayer::connect_required(config).await?;
     persistence.initialize().await?;
     let identity = StrategyIdentity::restored_v3();
+    let active_config = AutoStrategyConfig::default();
     let paper = match persistence.load_paper_state(&identity).await? {
         Some(state) => {
             anyhow::ensure!(
@@ -99,9 +104,10 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
         None => {
             let state = PaperState::fresh_restored_v3(identity.clone());
             persistence
-                .persist_checkpoint(
+                .persist_strategy_run_registration(
                     &state,
                     &state.snapshot(&BTreeMap::<String, f64>::new()),
+                    &active_config,
                     Utc::now().timestamp_millis(),
                 )
                 .await?;
@@ -111,10 +117,31 @@ pub async fn initialize_state(config: &AppConfig) -> anyhow::Result<RadarState> 
     let equity_curves = persistence
         .load_equity_curves(&identity, paper.run_id())
         .await?;
-    Ok(RadarState::with_persistence_and_equity_curves(
+    let active = StrategyRuntime::new(paper, active_config, equity_curves)?;
+    let mut strategy_runs = StrategyRuntimeContainer::new(active)?;
+    for persisted in persistence.load_shadow_strategy_runs().await? {
+        persistence
+            .persist_recovery_point(
+                &persisted.state,
+                "service_start",
+                Utc::now().timestamp_millis(),
+            )
+            .await?;
+        let equity_curves = persistence
+            .load_equity_curves(
+                persisted.state.strategy_identity(),
+                persisted.state.run_id(),
+            )
+            .await?;
+        strategy_runs.register_shadow(StrategyRuntime::new(
+            persisted.state,
+            persisted.config,
+            equity_curves,
+        )?)?;
+    }
+    Ok(RadarState::with_persistence_and_strategy_runs(
         persistence,
-        paper,
-        equity_curves,
+        strategy_runs,
     ))
 }
 
@@ -184,6 +211,34 @@ async fn paper(State(ctx): State<AppCtx>) -> impl IntoResponse {
     Json(ctx.state.paper_snapshot().await)
 }
 
+async fn strategy_runs(State(ctx): State<AppCtx>) -> impl IntoResponse {
+    Json(ctx.state.strategy_run_snapshots().await)
+}
+
+async fn strategy_run(
+    State(ctx): State<AppCtx>,
+    Path(run_id): Path<String>,
+    Query(query): Query<StrategyRunQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let paper = ctx
+        .state
+        .strategy_run_snapshot(&run_id)
+        .await
+        .map_err(|_| {
+            ApiError::not_found(format!(
+                "strategy runtime not found for experiment {} and run {}",
+                query.experiment_key, run_id
+            ))
+        })?;
+    if paper.experiment_key != query.experiment_key {
+        return Err(ApiError::not_found(format!(
+            "strategy runtime not found for experiment {} and run {}",
+            query.experiment_key, run_id
+        )));
+    }
+    Ok(Json(paper))
+}
+
 async fn open_paper_order(
     State(ctx): State<AppCtx>,
     Json(order): Json<PaperOrderRequest>,
@@ -237,6 +292,11 @@ struct ChartQuery {
     timeframe: Option<Timeframe>,
     limit: Option<usize>,
     filled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StrategyRunQuery {
+    experiment_key: String,
 }
 
 #[derive(Debug)]

@@ -25,7 +25,10 @@ async fn baseline_and_shadow_keep_independent_restart_checkpoints() {
         .unwrap();
 
     let baseline = PaperState::fresh_restored_v3(StrategyIdentity::restored_v3());
-    let shadow_config = AutoStrategyConfig::default();
+    let shadow_config = AutoStrategyConfig {
+        take_profit_margin_pct: 0.80,
+        ..AutoStrategyConfig::default()
+    };
     let shadow_identity = StrategyIdentity::research_variant_from_config(
         "v0.1.3",
         "session_execution_guard",
@@ -57,9 +60,10 @@ async fn baseline_and_shadow_keep_independent_restart_checkpoints() {
         .await
         .unwrap();
     persistence
-        .persist_checkpoint(
+        .persist_strategy_run_registration(
             &shadow,
             &shadow.snapshot(&BTreeMap::from([("ETH-USDT-SWAP".to_string(), 1_000.0)])),
+            &shadow_config,
             11,
         )
         .await
@@ -82,6 +86,22 @@ async fn baseline_and_shadow_keep_independent_restart_checkpoints() {
         restored_shadow.open_position_inst_ids(),
         vec!["ETH-USDT-SWAP"]
     );
+    let restored_runs = persistence.load_shadow_strategy_runs().await.unwrap();
+    assert_eq!(restored_runs.len(), 1);
+    assert_eq!(restored_runs[0].state.run_id(), shadow_run_id);
+    assert_eq!(restored_runs[0].config, shadow_config);
+
+    let restarted = server::initialize_state(&config).await.unwrap();
+    let restarted_runs = restarted.strategy_run_snapshots().await;
+    assert_eq!(restarted_runs.len(), 2);
+    assert_eq!(restarted_runs[0].experiment_key, "v0.1.3/baseline");
+    assert!(restarted_runs[0].positions.is_empty());
+    assert_eq!(
+        restarted_runs[1].experiment_key,
+        "v0.1.3/session_execution_guard"
+    );
+    assert_eq!(restarted_runs[1].run_id, shadow_run_id);
+    assert_eq!(restarted_runs[1].positions.len(), 1);
 
     let pool = sqlx::PgPool::connect(config.database_url.as_deref().unwrap())
         .await

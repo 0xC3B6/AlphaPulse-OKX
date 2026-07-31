@@ -48,6 +48,20 @@ export async function fetchPaperAccount(): Promise<PaperAccountSnapshot> {
   return requestJson<PaperAccountSnapshot>("/api/paper");
 }
 
+export async function fetchStrategyRuns(): Promise<PaperAccountSnapshot[]> {
+  return requestJson<PaperAccountSnapshot[]>("/api/strategy/runs");
+}
+
+export async function fetchStrategyRun(
+  experimentKey: string,
+  runId: string,
+): Promise<PaperAccountSnapshot> {
+  const params = new URLSearchParams({ experiment_key: experimentKey });
+  return requestJson<PaperAccountSnapshot>(
+    `/api/strategy/runs/${encodeURIComponent(runId)}?${params.toString()}`,
+  );
+}
+
 export async function fetchSymbolChart(
   instId: string,
   timeframe: ChartSnapshot["timeframe"],

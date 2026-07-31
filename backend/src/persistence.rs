@@ -17,6 +17,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Postgres, Transaction};
 
 use crate::{
+    auto_strategy::AutoStrategyConfig,
     config::AppConfig,
     observability::{PositionContextEvent, StrategyCandidateEvent},
     paper::{
@@ -26,7 +27,7 @@ use crate::{
     },
     risk_safety::{AccountScope, DEFAULT_ACCOUNT_ID, DEFAULT_TENANT_ID},
     state::DashboardSnapshot,
-    strategy_identity::StrategyIdentity,
+    strategy_identity::{strategy_config_hash, StrategyIdentity, StrategyRunMode},
 };
 
 static REJECTED_INTENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -52,6 +53,12 @@ pub struct PersistenceLayer {
     redis: Option<redis::Client>,
     redis_ttl_secs: u64,
     scope: AccountScope,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistedStrategyRun {
+    pub state: PaperState,
+    pub config: AutoStrategyConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -382,6 +389,42 @@ impl PersistenceLayer {
         .transpose()
     }
 
+    pub async fn load_shadow_strategy_runs(&self) -> anyhow::Result<Vec<PersistedStrategyRun>> {
+        let rows = sqlx::query_as::<_, (String, Json<serde_json::Value>, Json<serde_json::Value>)>(
+            "SELECT runs.run_id, current.payload_json, runs.config_snapshot \
+             FROM strategy_runs runs \
+             JOIN account_state_current current ON current.run_id = runs.run_id \
+             WHERE current.tenant_id = $1 AND current.account_id = $2 \
+               AND runs.mode = 'shadow' AND runs.status = 'running' \
+             ORDER BY runs.start_time_ms, runs.run_id",
+        )
+        .bind(&self.scope.tenant_id)
+        .bind(&self.scope.account_id)
+        .fetch_all(&self.postgres)
+        .await?;
+
+        rows.into_iter()
+            .map(|(database_run_id, payload, config_snapshot)| {
+                let state: PaperState = serde_json::from_value(payload.0)
+                    .context("failed to decode persisted shadow strategy state")?;
+                anyhow::ensure!(
+                    state.run_mode() == StrategyRunMode::ShadowPaper,
+                    "persisted shadow strategy {} has non-shadow paper mode",
+                    state.run_id()
+                );
+                anyhow::ensure!(
+                    self.database_run_id(state.run_id()) == database_run_id,
+                    "persisted shadow strategy run id does not match its account scope"
+                );
+                let config = auto_strategy_config_from_snapshot(
+                    config_snapshot.0,
+                    state.strategy_identity(),
+                )?;
+                Ok(PersistedStrategyRun { state, config })
+            })
+            .collect()
+    }
+
     pub async fn load_equity_curves(
         &self,
         identity: &StrategyIdentity,
@@ -615,6 +658,45 @@ impl PersistenceLayer {
             ts_ms,
             &self.scope,
             account_version,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn persist_strategy_run_registration(
+        &self,
+        state: &PaperState,
+        snapshot: &PaperAccountSnapshot,
+        config: &AutoStrategyConfig,
+        ts_ms: i64,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            state.strategy_identity().config_hash == strategy_config_hash(config),
+            "strategy config does not match the registered runtime identity"
+        );
+        let identity = state.strategy_identity();
+        let database_run_id = self.database_run_id(state.run_id());
+        let mut transaction = self.postgres.begin().await?;
+        let account_version = lock_account_row(&mut transaction, &self.scope, ts_ms).await?;
+        persist_state_rows(
+            &mut transaction,
+            identity,
+            &database_run_id,
+            state,
+            snapshot,
+            "strategy_run_registered",
+            ts_ms,
+            &self.scope,
+            account_version,
+        )
+        .await?;
+        persist_strategy_run_config(
+            &mut transaction,
+            identity,
+            &database_run_id,
+            state.run_mode(),
+            config,
         )
         .await?;
         transaction.commit().await?;
@@ -1792,6 +1874,58 @@ async fn insert_identity_and_run(
         "strategy run id {run_id} is already bound to another experiment"
     );
     Ok(())
+}
+
+async fn persist_strategy_run_config(
+    transaction: &mut Transaction<'_, Postgres>,
+    identity: &StrategyIdentity,
+    run_id: &str,
+    mode: StrategyRunMode,
+    config: &AutoStrategyConfig,
+) -> anyhow::Result<()> {
+    let config_snapshot = Json(json!({
+        "auto_strategy": config,
+        "config_hash": identity.config_hash,
+        "experiment_key": identity.experiment_key(),
+        "mode": mode.as_str(),
+        "parent_version": identity.parent_version,
+        "variant_id": identity.variant_id,
+    }));
+    let result = sqlx::query(
+        "UPDATE strategy_runs SET config_snapshot = $1 \
+         WHERE run_id = $2 AND version_code = $3 \
+           AND strategy_build_id = $4 AND config_hash = $5",
+    )
+    .bind(config_snapshot)
+    .bind(run_id)
+    .bind(&identity.version_code)
+    .bind(&identity.strategy_build_id)
+    .bind(&identity.config_hash)
+    .execute(&mut **transaction)
+    .await?;
+    anyhow::ensure!(
+        result.rows_affected() == 1,
+        "strategy runtime config could not be bound to run {run_id}"
+    );
+    Ok(())
+}
+
+fn auto_strategy_config_from_snapshot(
+    snapshot: serde_json::Value,
+    identity: &StrategyIdentity,
+) -> anyhow::Result<AutoStrategyConfig> {
+    if let Some(config) = snapshot.get("auto_strategy") {
+        return serde_json::from_value(config.clone())
+            .context("failed to decode persisted automatic strategy config");
+    }
+
+    let default = AutoStrategyConfig::default();
+    anyhow::ensure!(
+        identity.config_hash == strategy_config_hash(&default),
+        "persisted strategy run {} is missing its exact automatic strategy config",
+        identity.experiment_key()
+    );
+    Ok(default)
 }
 
 pub fn decimal_from_f64(value: f64) -> Option<Decimal> {

@@ -11,6 +11,7 @@ import type {
   FvgZone,
   PaperAccountSnapshot,
   PaperClosedPositionSnapshot,
+  PaperTrade,
   SymbolSnapshot,
 } from "./types";
 
@@ -637,6 +638,9 @@ function mockSnapshot(data: DashboardSnapshot = snapshot) {
         if (String(input).includes("/macro/btc")) {
           return macro;
         }
+        if (String(input).includes("/api/strategy/runs")) {
+          return [data.paper];
+        }
         return data;
       },
     })),
@@ -1123,6 +1127,129 @@ describe("App", () => {
     fireEvent.click(within(table).getByRole("button", { name: "v0.1.3 子策略" }));
     expect(table).not.toHaveTextContent("V3 Baseline");
     expect(table).not.toHaveTextContent("V3 Signal Context Guard");
+  });
+
+  it("switches every review dataset by experiment key and run id", () => {
+    const baselineHistory = activePaper.position_history ?? [];
+    const baselineTrades = activePaper.trades;
+    const shadowTrade: PaperTrade = {
+      ...baselineTrades[0],
+      id: 1,
+      inst_id: "SHADOW-USDT-SWAP",
+      strategy_version: "v0.1.3/session_execution_guard",
+      realized_pnl: -500,
+    };
+    const shadowPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      mode: "shadow",
+      strategy_version: "v0.1.3/session_execution_guard",
+      parent_version: "v0.1.3",
+      variant_id: "session_execution_guard",
+      experiment_key: "v0.1.3/session_execution_guard",
+      strategy_build_id: "session-guard-review-test-build",
+      config_hash: "session-guard-review-test-config",
+      run_id: "v0.1.3-session-guard-shadow-1",
+      realized_pnl: -500,
+      unrealized_pnl: -25,
+      equity: 9475,
+      used_margin: 400,
+      available_balance: 9075,
+      total_fees: 7.5,
+      total_trades: 1,
+      closed_position_count: 1,
+      winning_closed_position_count: 0,
+      losing_closed_position_count: 1,
+      win_rate: 0,
+      average_closed_position_pnl: -500,
+      largest_winning_pnl: null,
+      largest_losing_pnl: -500,
+      positions: [
+        {
+          ...activePaper.positions[0],
+          inst_id: "SHADOW-OPEN-USDT-SWAP",
+          unrealized_pnl: -25,
+        },
+      ],
+      position_history: [
+        {
+          ...baselineHistory[0],
+          id: 1,
+          inst_id: "SHADOW-CLOSED-USDT-SWAP",
+          strategy_version: "v0.1.3/session_execution_guard",
+          primary_signal: "shadow_session_guard",
+          realized_pnl: -500,
+        },
+      ],
+      trades: [shadowTrade],
+      equity_history: [
+        {
+          timestamp_ms: 1782392800000,
+          equity: 10000,
+          realized_pnl: 0,
+          unrealized_pnl: 0,
+          open_positions_count: 0,
+        },
+        {
+          timestamp_ms: 1782400000000,
+          equity: 9475,
+          realized_pnl: -500,
+          unrealized_pnl: -25,
+          open_positions_count: 1,
+        },
+      ],
+      equity_curves: undefined,
+      strategy_stats: [
+        {
+          ...(activePaper.strategy_stats ?? [])[0],
+          strategy_version: "v0.1.3/session_execution_guard",
+          parent_version: "v0.1.3",
+          variant_id: "session_execution_guard",
+          experiment_key: "v0.1.3/session_execution_guard",
+          total_trades: 1,
+          closed_position_count: 1,
+          winning_closed_position_count: 0,
+          losing_closed_position_count: 1,
+          win_rate: 0,
+          realized_pnl: -500,
+          total_fees: 7.5,
+          average_position_pnl: -500,
+          largest_winning_pnl: null,
+          largest_losing_pnl: -500,
+        },
+      ],
+    };
+
+    render(
+      <ReviewPage
+        copy={translations.zh}
+        paper={activePaper}
+        strategyRuns={[activePaper, shadowPaper]}
+      />,
+    );
+
+    const table = screen.getByTestId("paper-strategy-stats");
+    fireEvent.click(within(table).getByText("V3 Session Execution Guard").closest("tr")!);
+
+    const reviewPage = screen.getByTestId("review-page");
+    expect(reviewPage).toHaveTextContent("9,475.00 USDT");
+    expect(screen.getByTestId("review-open-positions")).toHaveTextContent(
+      "SHADOW-OPEN-USDT-SWAP",
+    );
+    expect(screen.getByTestId("review-equity-curve")).toHaveTextContent("9,475.00 USDT");
+
+    fireEvent.click(screen.getByRole("button", { name: "策略版本对比" }));
+    expect(screen.getByTestId("paper-strategy-curve")).toHaveTextContent("9,475.00 USDT");
+    expect(screen.getByTestId("paper-strategy-doctor")).toHaveTextContent(
+      "Shadow Session Guard",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "历史持仓" }));
+    expect(reviewPage).toHaveTextContent("SHADOW-CLOSED-USDT-SWAP");
+    expect(reviewPage).not.toHaveTextContent("BREV-USDT-SWAP");
+
+    fireEvent.click(screen.getByRole("button", { name: "成交记录" }));
+    expect(reviewPage).toHaveTextContent("SHADOW-USDT-SWAP");
+    expect(reviewPage).not.toHaveTextContent("LAB-USDT-SWAP");
   });
 
   it("shows the v0.1.3 equity curve while positions are open and no trade is closed", async () => {

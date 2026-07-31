@@ -122,7 +122,8 @@ export interface AccountRiskSnapshot {
 export type BackendEvent =
   | { type: "snapshot"; data: DashboardSnapshot }
   | { type: "symbol_updated"; data: SymbolSnapshot }
-  | { type: "paper_updated"; data: PaperAccountSnapshot };
+  | { type: "paper_updated"; data: PaperAccountSnapshot }
+  | { type: "strategy_run_updated"; data: PaperAccountSnapshot };
 
 export type PaperSide = "long" | "short";
 
@@ -136,7 +137,7 @@ export interface PaperOrderRequest {
 }
 
 export interface PaperAccountSnapshot {
-  mode: "paper";
+  mode: "paper" | "shadow";
   initial_balance: number;
   strategy_version: string;
   parent_version: string;
@@ -210,6 +211,8 @@ export interface PaperStrategyStats {
   parent_version?: string;
   variant_id?: string;
   experiment_key?: string;
+  run_id?: string;
+  mode?: PaperAccountSnapshot["mode"];
   total_trades: number;
   closed_position_count: number;
   winning_closed_position_count: number;

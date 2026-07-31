@@ -47,6 +47,7 @@ pub enum BackendEvent {
     Snapshot { data: Box<DashboardSnapshot> },
     SymbolUpdated { data: Box<SymbolSnapshot> },
     PaperUpdated { data: Box<PaperAccountSnapshot> },
+    StrategyRunUpdated { data: Box<PaperAccountSnapshot> },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -319,7 +320,12 @@ impl RadarState {
         let snapshot = paper.snapshot(&prices);
         if let Some(persistence) = &self.persistence {
             if let Err(error) = persistence
-                .persist_checkpoint(&paper, &snapshot, Utc::now().timestamp_millis())
+                .persist_strategy_run_registration(
+                    &paper,
+                    &snapshot,
+                    &config,
+                    Utc::now().timestamp_millis(),
+                )
                 .await
             {
                 self.pause_persistence(error.to_string()).await;
@@ -457,6 +463,13 @@ impl RadarState {
             let _ = self.events.send(BackendEvent::PaperUpdated {
                 data: Box::new(paper),
             });
+        }
+        for snapshot in self.strategy_run_snapshots().await {
+            if snapshot.mode == StrategyRunMode::ShadowPaper.as_str() {
+                let _ = self.events.send(BackendEvent::StrategyRunUpdated {
+                    data: Box::new(snapshot),
+                });
+            }
         }
         Ok(())
     }
@@ -1091,6 +1104,13 @@ impl RadarState {
             }
             inner.dashboard()
         };
+        for snapshot in self.strategy_run_snapshots().await {
+            if snapshot.mode == StrategyRunMode::ShadowPaper.as_str() {
+                let _ = self.events.send(BackendEvent::StrategyRunUpdated {
+                    data: Box::new(snapshot),
+                });
+            }
+        }
         self.rebuild_cache_after_commit(&dashboard).await;
         Ok(())
     }
@@ -1357,6 +1377,10 @@ impl RadarState {
                 data: Box::new(run_snapshot.clone()),
             });
             self.rebuild_cache_after_commit(&dashboard).await;
+        } else {
+            let _ = self.events.send(BackendEvent::StrategyRunUpdated {
+                data: Box::new(run_snapshot.clone()),
+            });
         }
         Ok(run_snapshot)
     }

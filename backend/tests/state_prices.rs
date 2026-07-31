@@ -3,7 +3,7 @@ use alphapulse_okx_backend::{
     domain::{Direction, Score, SymbolSnapshot},
     paper::{PaperOrderRequest, PaperSide},
     risk_safety::{AccountEvent, AccountEventEnvelope, RiskMode},
-    state::{PaperTransitionError, RadarState},
+    state::{BackendEvent, PaperTransitionError, RadarState},
     strategy_identity::StrategyIdentity,
 };
 
@@ -359,6 +359,7 @@ async fn direct_auto_run_preserves_v3_trade_metadata_and_tags() {
 #[tokio::test]
 async fn baseline_and_shadow_open_the_same_signal_in_isolated_accounts() {
     let state = ready_state().await;
+    let mut events = state.subscribe();
     let active_config = AutoStrategyConfig::default();
     let shadow_config = AutoStrategyConfig {
         take_profit_margin_pct: 0.80,
@@ -408,6 +409,17 @@ async fn baseline_and_shadow_open_the_same_signal_in_isolated_accounts() {
     assert_eq!(runs[1].trades[0].id, 1);
     assert_ne!(runs[0].run_id, runs[1].run_id);
     assert_ne!(runs[0].experiment_key, runs[1].experiment_key);
+    let mut saw_shadow_update = false;
+    while let Ok(event) = events.try_recv() {
+        if matches!(
+            event,
+            BackendEvent::StrategyRunUpdated { data }
+                if data.run_id == shadow_run_id
+        ) {
+            saw_shadow_update = true;
+        }
+    }
+    assert!(saw_shadow_update);
 
     let active = state.paper_snapshot().await;
     assert_eq!(active.variant_id, "baseline");
@@ -424,6 +436,131 @@ async fn baseline_and_shadow_open_the_same_signal_in_isolated_accounts() {
     assert_eq!(active.position_history.len(), 1);
     assert_eq!(shadow.positions.len(), 1);
     assert!(shadow.position_history.is_empty());
+}
+
+#[tokio::test]
+async fn shadow_open_and_close_do_not_change_baseline_account() {
+    let state = ready_state().await;
+    let active_config = AutoStrategyConfig::default();
+    let shadow_config = AutoStrategyConfig {
+        trend_threshold: 70,
+        ..AutoStrategyConfig::default()
+    };
+    let shadow_run_id = "v0.1.3-shadow-only-position-1";
+    state
+        .register_shadow_strategy(
+            StrategyIdentity::research_variant_from_config(
+                "v0.1.3",
+                "lower_trend_threshold",
+                "lower-trend-threshold-test-build",
+                &shadow_config,
+            ),
+            shadow_run_id,
+            shadow_config,
+        )
+        .await
+        .unwrap();
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(75, Direction::Long),
+        score(0, Direction::Neutral),
+    );
+    state.upsert_symbol(symbol.clone()).await;
+    state
+        .run_auto_strategy_for_symbol_at(
+            &symbol,
+            active_config,
+            chrono::DateTime::parse_from_rfc3339("2026-07-02T02:00:00Z")
+                .unwrap()
+                .timestamp_millis(),
+        )
+        .await
+        .unwrap();
+
+    let baseline_before_close = state.paper_snapshot().await;
+    let shadow_before_close = state.strategy_run_snapshot(shadow_run_id).await.unwrap();
+    assert!(baseline_before_close.positions.is_empty());
+    assert!(baseline_before_close.trades.is_empty());
+    assert_eq!(
+        baseline_before_close.available_balance,
+        baseline_before_close.initial_balance
+    );
+    assert_eq!(shadow_before_close.positions.len(), 1);
+    assert_eq!(shadow_before_close.trades.len(), 1);
+
+    state
+        .update_latest_prices(vec![("ETH-USDT-SWAP".to_string(), 1_640.0, 2)])
+        .await;
+
+    let baseline_after_close = state.paper_snapshot().await;
+    let shadow_after_close = state.strategy_run_snapshot(shadow_run_id).await.unwrap();
+    assert!(baseline_after_close.positions.is_empty());
+    assert!(baseline_after_close.trades.is_empty());
+    assert!(baseline_after_close.position_history.is_empty());
+    assert_eq!(
+        baseline_after_close.available_balance,
+        baseline_before_close.available_balance
+    );
+    assert_eq!(
+        baseline_after_close.realized_pnl,
+        baseline_before_close.realized_pnl
+    );
+    assert!(shadow_after_close.positions.is_empty());
+    assert_eq!(shadow_after_close.trades.len(), 2);
+    assert_eq!(shadow_after_close.position_history.len(), 1);
+    assert!(shadow_after_close.realized_pnl > 0.0);
+}
+
+#[tokio::test]
+async fn shadow_capacity_rejection_does_not_change_baseline_account() {
+    let state = ready_state().await;
+    let active_config = AutoStrategyConfig::default();
+    let shadow_config = AutoStrategyConfig {
+        max_positions: 0,
+        ..AutoStrategyConfig::default()
+    };
+    let shadow_run_id = "v0.1.3-capacity-shadow-1";
+    state
+        .register_shadow_strategy(
+            StrategyIdentity::research_variant_from_config(
+                "v0.1.3",
+                "capacity_guard",
+                "capacity-guard-test-build",
+                &shadow_config,
+            ),
+            shadow_run_id,
+            shadow_config,
+        )
+        .await
+        .unwrap();
+    let symbol = symbol(
+        "ETH-USDT-SWAP",
+        1_600.0,
+        score(100, Direction::Long),
+        score(0, Direction::Neutral),
+    );
+    state.upsert_symbol(symbol.clone()).await;
+    state
+        .run_auto_strategy_for_symbol_at(
+            &symbol,
+            active_config,
+            chrono::DateTime::parse_from_rfc3339("2026-07-02T13:35:00Z")
+                .unwrap()
+                .timestamp_millis(),
+        )
+        .await
+        .unwrap();
+
+    let baseline = state.paper_snapshot().await;
+    let shadow = state.strategy_run_snapshot(shadow_run_id).await.unwrap();
+    assert_eq!(baseline.positions.len(), 1);
+    assert_eq!(baseline.trades.len(), 1);
+    assert!(baseline.available_balance < baseline.initial_balance);
+    assert!(shadow.positions.is_empty());
+    assert!(shadow.trades.is_empty());
+    assert_eq!(shadow.available_balance, shadow.initial_balance);
+    assert_eq!(shadow.realized_pnl, 0.0);
 }
 
 async fn seeded_state_with_long(
