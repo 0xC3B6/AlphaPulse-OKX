@@ -50,6 +50,7 @@ export function TradePage({
   tradeError: string | null;
 }) {
   const knownSymbolIds = symbols.map((symbol) => symbol.inst_id);
+  const shadowReadOnly = paper.mode === "shadow";
   const [reasonPosition, setReasonPosition] = useState<PaperPositionSnapshot | null>(null);
 
   return (
@@ -63,6 +64,12 @@ export function TradePage({
         <div>
           <span>{copy.trade.restoredStrategy}</span>
           <strong>{paper.strategy_version}</strong>
+        </div>
+        <div>
+          <span>{copy.trade.mode}</span>
+          <strong className={shadowReadOnly ? "shadow-mode" : ""}>
+            {shadowReadOnly ? copy.trade.shadowMode : copy.trade.activeMode}
+          </strong>
         </div>
         <div>
           <span>{copy.trade.build}</span>
@@ -184,11 +191,17 @@ export function TradePage({
         <aside className="trade-side-panel">
           <section className="detail-section">
             <h2>{copy.trade.quickOrder}</h2>
+            {shadowReadOnly ? (
+              <p className="trade-shadow-note" role="status">
+                {copy.trade.shadowReadOnly}
+              </p>
+            ) : null}
             <div className="paper-order trade-order">
               <label>
                 <span>{copy.trade.orderInstrument}</span>
                 <input
                   aria-label={copy.trade.orderInstrument}
+                  disabled={shadowReadOnly}
                   list="trade-symbols"
                   onChange={(event) => onInstrumentChange(event.target.value)}
                   value={orderInstrument}
@@ -202,6 +215,7 @@ export function TradePage({
               <label>
                 <span>{copy.paper.margin}</span>
                 <input
+                  disabled={shadowReadOnly}
                   min="1"
                   onChange={(event) => onMarginChange(event.target.value)}
                   step="1"
@@ -212,6 +226,7 @@ export function TradePage({
               <label>
                 <span>{copy.paper.leverage}</span>
                 <input
+                  disabled={shadowReadOnly}
                   max="50"
                   min="1"
                   onChange={(event) => onLeverageChange(event.target.value)}
@@ -224,7 +239,9 @@ export function TradePage({
             <div className="paper-actions">
               <button
                 className="buy-button"
-                disabled={tradeBusy || orderInstrument.trim().length === 0}
+                disabled={
+                  shadowReadOnly || tradeBusy || orderInstrument.trim().length === 0
+                }
                 onClick={() => onOpenPaper("long", orderInstrument)}
                 type="button"
               >
@@ -232,7 +249,9 @@ export function TradePage({
               </button>
               <button
                 className="sell-button"
-                disabled={tradeBusy || orderInstrument.trim().length === 0}
+                disabled={
+                  shadowReadOnly || tradeBusy || orderInstrument.trim().length === 0
+                }
                 onClick={() => onOpenPaper("short", orderInstrument)}
                 type="button"
               >
@@ -304,7 +323,7 @@ export function TradePage({
                 </dl>
                 <button
                   className="close-button"
-                  disabled={tradeBusy}
+                  disabled={shadowReadOnly || tradeBusy}
                   onClick={() => onClosePaper(selectedPosition.inst_id)}
                   type="button"
                 >

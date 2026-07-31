@@ -36,6 +36,7 @@ export function ConsoleShell({
   onViewModeChange,
   activeSignalCount,
   positionCount,
+  strategyVersion,
   streamState,
   symbolCount,
   tickerSymbols,
@@ -55,6 +56,7 @@ export function ConsoleShell({
   onThemeModeChange: (themeMode: ThemeMode) => void;
   onViewModeChange: (viewMode: ViewMode) => void;
   positionCount: number;
+  strategyVersion: string;
   streamState: "connected" | "idle";
   symbolCount: number;
   tickerSymbols: SymbolSnapshot[];
@@ -185,7 +187,7 @@ export function ConsoleShell({
             <small>{lastScanLabel}</small>
           </div>
           <p>BTC {hotTicker ? formatPrice(hotTicker.price) : "-"}</p>
-          <p>Strategy v0.1.3</p>
+          <p>Strategy {strategyVersion}</p>
           <div className="task-rail-footer-actions">
             <button aria-label={copy.actions.enableNotifications} onClick={onRequestNotifications} type="button">
               <Bell size={11} aria-hidden="true" />

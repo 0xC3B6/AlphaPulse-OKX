@@ -81,13 +81,16 @@ export function toTerminalSymbol(
   };
 }
 
-export function buildTerminalOverview(snapshot: DashboardSnapshot): TerminalOverview {
-  const symbols = snapshot.symbols.map((symbol) => toTerminalSymbol(symbol, snapshot.paper));
+export function buildTerminalOverview(
+  snapshot: DashboardSnapshot,
+  paper: PaperAccountSnapshot = snapshot.paper,
+): TerminalOverview {
+  const symbols = snapshot.symbols.map((symbol) => toTerminalSymbol(symbol, paper));
   return {
     activeSignalCount: symbols.filter((symbol) => symbol.signal !== "FLAT").length,
-    positionCount: snapshot.paper.positions.length,
+    positionCount: paper.positions.length,
     symbols,
-    unrealizedPnl: snapshot.paper.unrealized_pnl,
+    unrealizedPnl: paper.unrealized_pnl,
   };
 }
 

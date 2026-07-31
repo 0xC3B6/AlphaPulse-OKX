@@ -88,6 +88,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
+  const [selectedStrategyKey, setSelectedStrategyKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tradingViewSymbol, setTradingViewSymbol] = useState<SymbolSnapshot | null>(null);
   const [orderInstrument, setOrderInstrument] = useState("");
@@ -233,20 +234,32 @@ export default function App() {
     [snapshot.symbols],
   );
 
+  const selectedStrategyPaper = useMemo(
+    () =>
+      strategyRuns.find((run) => strategyRunKey(run) === selectedStrategyKey) ??
+      snapshot.paper,
+    [selectedStrategyKey, snapshot.paper, strategyRuns],
+  );
+
   const filteredSymbols = useMemo(
-    () => sortedSymbols.filter((symbol) => matchesFilter(symbol, filter, snapshot.paper)),
-    [filter, snapshot.paper, sortedSymbols],
+    () =>
+      sortedSymbols.filter((symbol) =>
+        matchesFilter(symbol, filter, selectedStrategyPaper),
+      ),
+    [filter, selectedStrategyPaper, sortedSymbols],
   );
   const terminalOverview = useMemo(
-    () => buildTerminalOverview(snapshot),
-    [snapshot],
+    () => buildTerminalOverview(snapshot, selectedStrategyPaper),
+    [selectedStrategyPaper, snapshot],
   );
   const selected =
     filteredSymbols.find((symbol) => symbol.inst_id === selectedId) ??
     null;
   const selectedTradePosition =
-    snapshot.paper.positions.find((position) => position.inst_id === orderInstrument) ??
-    snapshot.paper.positions[0] ??
+    selectedStrategyPaper.positions.find(
+      (position) => position.inst_id === orderInstrument,
+    ) ??
+    selectedStrategyPaper.positions[0] ??
     null;
 
   async function requestNotifications() {
@@ -289,6 +302,10 @@ export default function App() {
   }
 
   async function submitPaperOrder(side: PaperSide, instId = orderInstrument || selected?.inst_id) {
+    if (selectedStrategyPaper.mode === "shadow") {
+      setTradeError(copy.trade.shadowReadOnly);
+      return;
+    }
     const target =
       snapshot.symbols.find((symbol) => symbol.inst_id === instId) ??
       selected ??
@@ -317,6 +334,10 @@ export default function App() {
   }
 
   async function submitPaperClose(instId = selectedTradePosition?.inst_id ?? selected?.inst_id) {
+    if (selectedStrategyPaper.mode === "shadow") {
+      setTradeError(copy.trade.shadowReadOnly);
+      return;
+    }
     if (!instId) {
       return;
     }
@@ -356,6 +377,7 @@ export default function App() {
       onThemeModeChange={setThemeMode}
       onViewModeChange={setViewMode}
       positionCount={terminalOverview.positionCount}
+      strategyVersion={selectedStrategyPaper.strategy_version}
       streamState={streamState}
       symbolCount={snapshot.symbols.length}
       tickerSymbols={sortedSymbols}
@@ -386,7 +408,7 @@ export default function App() {
           orderInstrument={orderInstrument}
           orderLeverage={orderLeverage}
           orderMargin={orderMargin}
-          paper={snapshot.paper}
+          paper={selectedStrategyPaper}
           selectedPosition={selectedTradePosition}
           symbols={snapshot.symbols}
           tradeBusy={tradeBusy}
@@ -396,11 +418,17 @@ export default function App() {
         <StrategyPage
           copy={copy}
           lastScanAt={snapshot.last_scan_at_ms}
-          paper={snapshot.paper}
+          paper={selectedStrategyPaper}
           symbols={sortedSymbols}
         />
       ) : viewMode === "review" ? (
-        <ReviewPage copy={copy} paper={snapshot.paper} strategyRuns={strategyRuns} />
+        <ReviewPage
+          copy={copy}
+          onSelectedStrategyKeyChange={setSelectedStrategyKey}
+          paper={snapshot.paper}
+          selectedStrategyKey={selectedStrategyKey}
+          strategyRuns={strategyRuns}
+        />
       ) : (
         <MonitorPage
           btcSymbol={snapshot.symbols.find((symbol) => symbol.inst_id === "BTC-USDT-SWAP") ?? null}
@@ -414,7 +442,7 @@ export default function App() {
           onOpenTradingView={openTradingView}
           onSelectSymbol={setSelectedId}
           onTradeSymbol={tradeSymbol}
-          paper={snapshot.paper}
+          paper={selectedStrategyPaper}
           selected={selected}
           themeMode={themeMode}
         />

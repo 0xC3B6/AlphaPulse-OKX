@@ -2495,6 +2495,17 @@ input {
   color: var(--positive);
 }
 
+.trade-strategy-identity .shadow-mode,
+.trade-shadow-note {
+  color: var(--warning);
+}
+
+.trade-shadow-note {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .trade-strategy-identity .persistence-paused,
 .trade-persistence-error {
   color: var(--negative);

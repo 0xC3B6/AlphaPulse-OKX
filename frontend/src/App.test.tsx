@@ -626,7 +626,10 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
 
-function mockSnapshot(data: DashboardSnapshot = snapshot) {
+function mockSnapshot(
+  data: DashboardSnapshot = snapshot,
+  strategyRuns: PaperAccountSnapshot[] = [data.paper],
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => ({
@@ -639,7 +642,7 @@ function mockSnapshot(data: DashboardSnapshot = snapshot) {
           return macro;
         }
         if (String(input).includes("/api/strategy/runs")) {
-          return [data.paper];
+          return strategyRuns;
         }
         return data;
       },
@@ -843,6 +846,79 @@ describe("App", () => {
     expect(screen.getByLabelText("交易合约")).toHaveValue("DOGE-USDT-SWAP");
     expect(screen.getByText("全部当前持仓")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeInTheDocument();
+  });
+
+  it("keeps the selected shadow account across Review and Trade without exposing Baseline orders", async () => {
+    const shadowPaper: PaperAccountSnapshot = {
+      ...activePaper,
+      mode: "shadow",
+      strategy_version: "v0.1.3/session_execution_guard",
+      parent_version: "v0.1.3",
+      variant_id: "session_execution_guard",
+      experiment_key: "v0.1.3/session_execution_guard",
+      strategy_build_id: "session-execution-guard-shadow-v1",
+      config_hash: "shadow-config-hash",
+      run_id: "v0.1.3-session-execution-guard-shadow-1",
+      realized_pnl: -5,
+      unrealized_pnl: -25,
+      equity: 9970,
+      used_margin: 300,
+      available_balance: 9670,
+      positions: [
+        {
+          ...activePaper.positions[0],
+          inst_id: "SHADOW-OPEN-USDT-SWAP",
+          margin: 300,
+          unrealized_pnl: -25,
+        },
+      ],
+      trades: [
+        {
+          ...activePaper.trades[0],
+          id: 1,
+          inst_id: "SHADOW-OPEN-USDT-SWAP",
+          strategy_version: "v0.1.3/session_execution_guard",
+        },
+      ],
+      position_history: [],
+      strategy_stats: [],
+    };
+    mockSnapshot(
+      { ...snapshot, paper: activePaper },
+      [activePaper, shadowPaper],
+    );
+
+    render(<App />);
+    await screen.findAllByText("LAB-USDT-SWAP");
+    fireEvent.click(screen.getByRole("button", { name: "复盘" }));
+
+    const strategyTable = await screen.findByTestId("paper-strategy-stats");
+    fireEvent.click(
+      within(strategyTable)
+        .getByText("V3 Session Execution Guard")
+        .closest("tr")!,
+    );
+    expect(screen.getByTestId("review-open-positions")).toHaveTextContent(
+      "SHADOW-OPEN-USDT-SWAP",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "交易" }));
+
+    const tradePage = screen.getByTestId("trade-page");
+    expect(tradePage).toHaveTextContent(
+      "v0.1.3-session-execution-guard-shadow-1",
+    );
+    expect(tradePage).toHaveTextContent("SHADOW-OPEN-USDT-SWAP");
+    expect(tradePage).not.toHaveTextContent("legacy-v3-replay-2026-07-10");
+    expect(tradePage).toHaveTextContent("Shadow 只读");
+    expect(tradePage).toHaveTextContent("手动开仓和平仓不会写入 Baseline");
+    expect(screen.getByTestId("terminal-quick-stats")).toHaveTextContent("持仓 1");
+    expect(screen.getByTestId("terminal-quick-stats")).toHaveTextContent(
+      "浮盈 -25.00 USDT",
+    );
+    expect(screen.getByRole("button", { name: "模拟买入 / 开多" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "模拟卖出 / 开空" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "模拟平仓" })).toBeDisabled();
   });
 
   it("opens the full decision reason from the current-position table", async () => {

@@ -384,6 +384,10 @@ const baseTranslations = {
     trade: {
       accountSummary: "账户摘要",
       restoredStrategy: "已恢复自动策略",
+      mode: "运行模式",
+      activeMode: "Baseline 模拟盘",
+      shadowMode: "Shadow 只读",
+      shadowReadOnly: "该子策略为 shadow-only；这里只查看独立账户，手动开仓和平仓不会写入 Baseline。",
       build: "构建",
       run: "运行实例",
       config: "配置指纹",
@@ -837,6 +841,11 @@ const baseTranslations = {
     trade: {
       accountSummary: "Account summary",
       restoredStrategy: "Restored automatic strategy",
+      mode: "Run mode",
+      activeMode: "Baseline paper",
+      shadowMode: "Shadow read-only",
+      shadowReadOnly:
+        "This child strategy is shadow-only. Its isolated account is view-only, so manual orders cannot write to Baseline.",
       build: "Build",
       run: "Run",
       config: "Config hash",
@@ -1296,6 +1305,11 @@ const japanese: Copy = {
   trade: {
     accountSummary: "口座概要",
     restoredStrategy: "復元済み自動戦略",
+    mode: "実行モード",
+    activeMode: "Baseline ペーパー",
+    shadowMode: "Shadow 読み取り専用",
+    shadowReadOnly:
+      "この子戦略は shadow-only です。分離口座は閲覧専用で、手動注文が Baseline に書き込まれることはありません。",
     build: "ビルド",
     run: "実行インスタンス",
     config: "設定ハッシュ",

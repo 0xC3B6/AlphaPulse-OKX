@@ -124,11 +124,15 @@ const DEFAULT_HISTORY_SEARCH_FILTERS: HistorySearchFilters = {
 
 export function ReviewPage({
   copy,
+  onSelectedStrategyKeyChange,
   paper,
+  selectedStrategyKey: controlledSelectedStrategyKey,
   strategyRuns,
 }: {
   copy: Copy;
+  onSelectedStrategyKeyChange?: (strategyKey: string) => void;
   paper: PaperAccountSnapshot;
+  selectedStrategyKey?: string | null;
   strategyRuns?: PaperAccountSnapshot[];
 }) {
   const [activeSection, setActiveSection] = useState<ReviewSection>("overview");
@@ -139,7 +143,19 @@ export function ReviewPage({
     DEFAULT_HISTORY_SEARCH_FILTERS,
   );
   const [historyPage, setHistoryPage] = useState(0);
-  const [selectedStrategyKey, setSelectedStrategyKey] = useState<string | null>(null);
+  const [localSelectedStrategyKey, setLocalSelectedStrategyKey] = useState<string | null>(
+    null,
+  );
+  const selectedStrategyKey =
+    controlledSelectedStrategyKey === undefined
+      ? localSelectedStrategyKey
+      : controlledSelectedStrategyKey;
+  const selectStrategyKey = (strategyKey: string) => {
+    if (controlledSelectedStrategyKey === undefined) {
+      setLocalSelectedStrategyKey(strategyKey);
+    }
+    onSelectedStrategyKeyChange?.(strategyKey);
+  };
 
   const availableRuns = useMemo(
     () => uniqueStrategyRuns([paper, ...(strategyRuns ?? [])]),
@@ -266,7 +282,7 @@ export function ReviewPage({
         <OverviewSection
           activeStrategyKey={activeStrategyKey}
           copy={copy}
-          onSelectStrategy={(stats) => setSelectedStrategyKey(strategyStatsKey(stats))}
+          onSelectStrategy={(stats) => selectStrategyKey(strategyStatsKey(stats))}
           paper={selectedPaper}
           profitFactor={profitFactor}
           selectedStrategyKey={effectiveSelectedStrategyKey}
@@ -282,7 +298,7 @@ export function ReviewPage({
             activeStrategyKey={activeStrategyKey}
             copy={copy}
             initialBalance={selectedPaper.initial_balance}
-            onSelectStrategy={(stats) => setSelectedStrategyKey(strategyStatsKey(stats))}
+            onSelectStrategy={(stats) => selectStrategyKey(strategyStatsKey(stats))}
             selectedStrategyKey={effectiveSelectedStrategyKey}
             stats={strategyStats}
           />
